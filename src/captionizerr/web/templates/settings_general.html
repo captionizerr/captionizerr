@@ -4,8 +4,8 @@
   <section class="card">
     <h2>Languages</h2>
     <div class="fields">
-      <label class="f">Translate into <input type="text" name="languages" value="{{ v.languages|join(', ') }}" required placeholder="ru">
-        <span class="h">ISO codes, comma-separated (ru, uk, de). Each series can override this.</span></label>
+      <label class="f">Translate into <input type="text" name="languages" value="{{ v.languages|join(', ') }}" required placeholder="e.g. de">
+        <span class="h">ISO codes, comma-separated, e.g. de, or es, fr. Each series can override this.</span></label>
       <label class="f">Translate from <input type="text" name="source_langs" value="{{ v.source_langs|join(', ') }}" placeholder="en">
         <span class="h">Preferred source languages, in order. The video's own subtitle track beats a file next to it.</span></label>
       <label class="f check"><input type="checkbox" name="any_source" value="1" {{ 'checked' if v.any_source }}>

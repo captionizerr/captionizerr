@@ -178,7 +178,7 @@ def main(argv=None) -> int:
 
     t = sub.add_parser("translate", help="translate a subtitle file or a video's subtitle track")
     t.add_argument("input", help="a .srt/.ass file or a video file")
-    t.add_argument("--lang", default="ru", help="target language (ISO 639-1)")
+    t.add_argument("--lang", required=True, help="target language (ISO 639-1), e.g. de")
     t.add_argument("--source-lang", default="en")
     add_provider_args(t)
     t.add_argument("--tone", default="faithful", choices=["faithful", "softened", "family"])

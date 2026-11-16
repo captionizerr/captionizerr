@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **CLI:** `captionizerr translate` now requires `--lang` instead of silently defaulting to Russian.
+- Examples on the website, in the README and in the UI no longer assume Russian.
+
 ## 0.2.2
 
 Documentation release: **the application is unchanged from 0.2.1** apart from the version number. No need to upgrade for fixes.

@@ -115,7 +115,7 @@ Everything, including keys, can be set in the web UI. Environment variables and 
 ```bash
 captionizerr probe "Show - S01E01.mkv"
 captionizerr translate "Show - S01E01.mkv" --lang de --write
-captionizerr translate episode.en.srt --lang ru --context notes.md --out episode.ru.srt --report run.json
+captionizerr translate episode.en.srt --lang es --context notes.md --out episode.es.srt --report run.json
 captionizerr serve --port 8095
 
 # quality check-set (private: cases contain copyrighted dialogue)
