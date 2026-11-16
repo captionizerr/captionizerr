@@ -67,7 +67,7 @@
 
   <section class="card">
     <h2>OpenSubtitles <span class="pill">Optional</span></h2>
-    <p class="small muted">For the <b>Share on OpenSubtitles</b> button in the editor. Nothing is ever shared automatically.</p>
+    <p class="small muted">For the <b>Share on OpenSubtitles</b> button in the editor. Nothing is ever shared automatically. Use an <b>opensubtitles.org</b> account (the classic site, whose upload API Captionizerr uses); opensubtitles.com accounts appear to be separate.</p>
     <div class="fields">
       <label class="f">Username <input type="text" name="opensubtitles_user" value="{{ v.opensubtitles_user }}" autocomplete="off"></label>
       {{ secret('opensubtitles_password', secrets, label='Password', next='/settings/connections') }}

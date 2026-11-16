@@ -90,7 +90,17 @@ class Client:
         self.token = ""
 
     def login(self) -> str:
-        r = _ok(self.rpc.LogIn(self.user, self.password, "en", self.ua), "login")
+        r = self.rpc.LogIn(self.user, self.password, "en", self.ua)
+        status = str((r or {}).get("status", ""))
+        if status.startswith("401"):
+            raise OpenSubtitlesError(
+                "login refused (401). Uploads use the classic site's API, so this needs an opensubtitles.org "
+                "account. Accounts from opensubtitles.com appear to be separate; check the username and password "
+                "work at https://www.opensubtitles.org/en/login")
+        if status.startswith(("414", "415")):
+            raise OpenSubtitlesError(f"OpenSubtitles doesn't accept this client name ({status}); set "
+                                     "CAPTIONIZERR_OPENSUBTITLES_USER_AGENT to one they assigned you")
+        _ok(r, "login")
         self.token = r.get("token") or ""
         if not self.token:
             raise OpenSubtitlesError("login returned no token")

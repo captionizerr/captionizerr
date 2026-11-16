@@ -635,3 +635,16 @@ def test_openai_error_message_is_readable():
     with pytest.raises(ProviderError) as e:
         OpenAICompatProvider("https://api.openai.com/v1", "m", "bad", client=httpx.Client(transport=t)).complete("", "", "x")
     assert str(e.value) == "401: Incorrect API key provided."
+
+
+def test_opensubtitles_login_errors_explain_themselves():
+    from captionizerr.opensubtitles import Client, OpenSubtitlesError
+
+    class R:
+        def __init__(self, status): self.status = status
+        def LogIn(self, *a): return {"status": self.status, "token": "t"}
+    with pytest.raises(OpenSubtitlesError, match="opensubtitles.org"):
+        Client("u", "p", "ua", proxy=R("401 Unauthorized")).login()
+    with pytest.raises(OpenSubtitlesError, match="USER_AGENT"):
+        Client("u", "p", "ua", proxy=R("414 Unknown User Agent")).login()
+    assert Client("u", "p", "ua", proxy=R("200 OK")).login() == "t"
