@@ -71,6 +71,7 @@ Each job's page (click its title on the dashboard) also has:
 - **Re-translate**, to run the whole episode again, e.g. after switching model. It replaces the file; the old version stays in the editor's history.
 - **Download**, to save the file under its own name.
 - **Share…**, to upload it to OpenSubtitles.
+- **History of this file**, listing every translation, re-sync and editor change for that episode.
 - **Re-sync to speech** (with Whisper connected), to fix the timing of the existing file against what is actually said. Nothing is re-translated and it costs nothing; the old timing stays in the editor's history.
 
 ## Optional: sync to speech (Whisper)
