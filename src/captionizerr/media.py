@@ -95,21 +95,98 @@ def sidecars(video: Path) -> list[tuple[Path, str, bool]]:
     return sorted(out, key=lambda x: (x[2], x[0].suffix != ".srt", x[0].name))
 
 
+LONG_CUE_MS = 60_000        # no real subtitle line stays on screen this long
+MIN_TAIL_GAP_MS = 600_000   # 10 min without a single line at the end...
+TAIL_GAP_SHARE = 0.25       # ...and over a quarter of the video: the track was cut short
+
+
+def clock(ms: float) -> str:
+    """50:41 or 1:01:16."""
+    s = int(ms // 1000)
+    return f"{s // 3600}:{s // 60 % 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
+
+
+def _dialogue(cues) -> list:
+    return [c for c in cues if not c.is_tag_only and c.text.strip()]
+
+
+def cut_off(cues, duration_s: float | None) -> int | None:
+    """Where a full subtitle track stops early (ms), or None when it looks complete.
+
+    Two shapes seen in real releases: the last line stretched to the end of the video
+    (one cue lasting many minutes), and a track that simply stops long before the video does.
+    Short tracks (forced, signs) are never judged."""
+    dialog = _dialogue(cues)
+    if len(dialog) < 20:
+        return None
+    last = dialog[-1]
+    if last.end_ms - last.start_ms > LONG_CUE_MS:
+        return last.start_ms
+    if duration_s:
+        tail = duration_s * 1000 - last.end_ms
+        if tail > MIN_TAIL_GAP_MS and tail > TAIL_GAP_SHARE * duration_s * 1000:
+            return last.end_ms
+    return None
+
+
+def last_line_ms(cues) -> int:
+    dialog = _dialogue(cues)
+    return dialog[-1].start_ms if dialog else 0
+
+
+def clamp_long_cues(doc, max_ms: int = LONG_CUE_MS) -> int:
+    """Shorten cues that stay on screen over a minute to a readable few seconds. Returns how many."""
+    n = 0
+    for c in doc.cues:
+        if c.end_ms - c.start_ms > max_ms:
+            c.end_ms = c.start_ms + min(7000, max(2000, 1000 + 60 * len(c.text)))
+            if c.event is not None:
+                c.event.end = c.end_ms
+            n += 1
+    return n
+
+
+def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: str, duration: float | None) -> Path | None:
+    """The embedded track is cut short: a sidecar in the same language that is complete and reaches
+    further wins (e.g. one Bazarr downloaded and synced)."""
+    from . import cues as cuesmod
+    try:
+        emb = cuesmod.load(embedded).cues
+    except Exception:
+        return None
+    cut = cut_off(emb, duration)
+    if cut is None:
+        return None
+    for path, l, _sdh in side:
+        if l != lang:
+            continue
+        try:
+            sc = cuesmod.load(path).cues
+        except Exception:
+            continue
+        if cut_off(sc, duration) is None and last_line_ms(sc) > cut + 60_000:
+            return path
+    return None
+
+
 def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
                 any_language: bool = True) -> Source | None:
     """Pick the subtitle to translate FROM, never in the target language.
 
-    Order: embedded text track in a preferred language (timing is exact) -> sidecar in a
+    Order: embedded text track in a preferred language (timing is exact; a complete sidecar in the
+    same language wins over a track that stops early, see cut_off) -> sidecar in a
     preferred language (e.g. downloaded and synced by Bazarr) -> if `any_language`, any other
     embedded text track, then any other sidecar. Embedded tracks are extracted once into cache_dir.
     """
     prefer = [l for l in (langs.norm(x) for x in prefer) if l and l != langs.norm(target)]
-    streams, _ = probe(video)
+    streams, duration = probe(video)
     side = [x for x in sidecars(video) if x[1] != langs.norm(target)]
     for lang in prefer:
         st = pick_source(streams, lang)
         if st:
-            return Source(_cache_extract(video, st, cache_dir, lang), lang, "embedded")
+            emb = _cache_extract(video, st, cache_dir, lang)
+            better = _better_sidecar(emb, side, lang, duration)
+            return Source(better, lang, "sidecar") if better else Source(emb, lang, "embedded")
         for path, l, _sdh in side:
             if l == lang:
                 return Source(path, lang, "sidecar")

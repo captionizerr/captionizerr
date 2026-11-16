@@ -37,6 +37,7 @@ log = logging.getLogger("captionizerr.worker")
 
 TICK_BATCH_POLL = 300        # seconds between batch status checks
 TICK_WAITING = 300           # between checks for a Bazarr download
+CUT_PREFIX = "Source cut short:"
 SIDECAR_SETTLE = 120         # a new sidecar must be this old (Bazarr syncs right after download)
 MAINTENANCE_EVERY = 86400
 
@@ -50,6 +51,7 @@ class Prepared:
     source: media.Source
     reuse: "reuse.Reuse | None" = None      # translations carried over from a replaced release
     previous: Path | None = None            # that release's (orphaned) translation file
+    warning: str = ""                       # the source is incomplete: said in the job detail, job goes to review
 
 
 class Worker:
@@ -129,7 +131,7 @@ class Worker:
         f = self.s.context_dir / f"{series_key}.md"
         return f.read_text(encoding="utf-8") if f.is_file() else None
 
-    def prepare(self, job: Job, provider) -> Prepared | None:
+    def prepare(self, job: Job, provider, ask_bazarr: bool = True) -> Prepared | None:
         """Everything before the model call. Returns None when the job was finished or parked here."""
         s, store = self.s, self.store
         video = s.map_path(job.video_path)
@@ -153,12 +155,27 @@ class Worker:
         if not cues_to_send(doc):
             store.finish(job.id, "no_source", f"the {src.lang} subtitle ({src.origin}) has no dialogue lines")
             return None
+        warning = ""
+        duration = media.probe(video)[1]
+        cut = media.cut_off(doc.cues, duration)
+        if cut is not None:
+            where = f"{media.clock(cut)} of {media.clock(duration * 1000)}" if duration else media.clock(cut)
+            if ask_bazarr and not job.wait_since and self._ask_bazarr_quietly(job):
+                store.set_waiting(job.id, f"{CUT_PREFIX} the {src.lang} subtitle ({src.origin}) stops at {where}; "
+                                          f"asked Bazarr for a complete one, translating anyway in "
+                                          f"{s.bazarr_wait_hours:g} h if none arrives")
+                return None
+            warning = (f"incomplete source: the {src.lang} subtitle ({src.origin}) stops at {where}, so the rest of "
+                       f"the video has no subtitles. Put a complete {src.lang} subtitle next to the video "
+                       f"(e.g. from Bazarr) and press Re-translate")
+        if media.clamp_long_cues(doc):
+            warning = warning or "a source line stayed on screen over a minute; it was shortened"
         ser = store.series(job.series_key) if job.series_key else None
         profile = s.profile(job.lang, src.lang, (ser or {}).get("tone"))
         context = self.context_for(job.series_key)
         if context is None and s.auto_notes and job.series_key:
             context = self.make_notes(job, doc, provider)
-        prep = Prepared(video, doc, profile, context, src)
+        prep = Prepared(video, doc, profile, context, src, warning=warning)
         self.find_reuse(prep, job)
         return prep
 
@@ -234,7 +251,7 @@ class Worker:
         except WriteRefused as e:
             store.finish(job.id, "skipped", str(e), cost_usd=res.cost() or 0, usage=vars(res.usage))
             return
-        state = "needs_review" if res.needs_review else "done"
+        state = "needs_review" if res.needs_review or prep.warning else "done"
         cost = res.cost()
         used_model = res.steps[0].model if res.steps else ""
         unpriced = cost is None
@@ -248,6 +265,8 @@ class Worker:
                                                  for i in res.issues_final[:4]) if res.issues_final else "")
         detail = (f"{len(res.translations)} cues from {prep.source.lang} ({prep.source.origin}){via}; "
                   f"{len(res.issues_initial)} flagged, {len(res.issues_final)} open{open_}")
+        if prep.warning:
+            detail = f"{prep.warning[0].upper()}{prep.warning[1:]}. " + detail
         if unpriced:   # never pretend it was free: say so where the owner will see it
             detail += f"; cost unknown: no price for {used_model} (set it in Settings → AI provider)"
             log.warning("job %s: no price known for %s; cost recorded as $0", job.id, used_model)
@@ -377,7 +396,7 @@ class Worker:
             self.wake()
             return
         try:
-            prep = self.prepare(job, provider)
+            prep = self.prepare(job, provider, ask_bazarr=False)   # the batch is already paid for
             if prep is None:
                 return
             res = translate(prep.doc, prep.profile, provider, series_context=prep.context, title=job.title,
@@ -413,6 +432,17 @@ class Worker:
             return
         store.set_waiting(job.id, f"asked Bazarr for a {want} subtitle; checking every few minutes")
 
+    def _ask_bazarr_quietly(self, job: Job) -> bool:
+        """Ask Bazarr for a better source without failing the job when it can't help."""
+        bz = Bazarr(self.s.bazarr_url, self.s.bazarr_key)
+        if not bz.configured:
+            return False
+        try:
+            return self._bazarr_request(bz, job)
+        except Exception as e:
+            log.info("job %s: asking Bazarr for a complete source failed: %s", job.id, e)
+            return False
+
     def _bazarr_request(self, bz: Bazarr, job: Job) -> bool:
         s = self.s
         langs = [l for l in s.source_langs if l != job.lang][:2] or ["en"]
@@ -439,10 +469,17 @@ class Worker:
                 continue
             side = [p for p, l, _ in media.sidecars(video) if l != job.lang]
             settled = [p for p in side if time.time() - p.stat().st_mtime >= SIDECAR_SETTLE]
+            if job.detail.startswith(CUT_PREFIX):   # only a subtitle that arrived after we asked can help
+                settled = [p for p in settled if p.stat().st_mtime > job.wait_since]
             if settled:
                 self.store.claim(job.id, "waiting_source", "queued", f"source arrived: {settled[0].name}")
                 self.wake()
             elif job.wait_since and time.time() - job.wait_since > s.bazarr_wait_hours * 3600:
+                if job.detail.startswith(CUT_PREFIX):     # it has a source, just an incomplete one: use it
+                    self.store.claim(job.id, "waiting_source", "queued", "no complete subtitle arrived; "
+                                                                        "translating the incomplete one")
+                    self.wake()
+                    continue
                 self.store.finish(job.id, "no_source",
                                   f"Bazarr found no {', '.join(s.source_langs)} subtitle within {s.bazarr_wait_hours:g} h")
 

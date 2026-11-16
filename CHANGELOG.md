@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Incomplete source tracks:** a built-in subtitle track that stops early (its last line stretched over the rest of the video, or nothing for the last quarter) is now detected. A complete subtitle file next to the video in the same language is used instead; otherwise Bazarr is asked for one and the job waits up to `BAZARR_WAIT_HOURS`, then translates what there is, shortens the stretched line and goes to Needs review with a note saying where the source stops. Any source line longer than a minute is shortened. Found on Northwind season 2 WEB-DL releases, whose English CC tracks end 5–14 minutes early.
+
 ## 0.2.6 — 2026-11-16
 
 - **Notes for removed series:** Settings → System can check for translator's notes, correction logs and per-series settings whose series or movie is no longer in Sonarr or Radarr, and delete them one by one. Nothing is deleted automatically (a series downloaded again reuses its notes). Nothing is listed or deleted while Sonarr or Radarr can't be reached, and each Delete checks again first.

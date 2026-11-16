@@ -966,3 +966,108 @@ def test_share_credits_the_model_that_made_the_file(tmp_path, monkeypatch):
     r = c.get("/share/download", params={"path": str(v), "lang": "ru"})
     import urllib.parse as _up
     assert _up.unquote(r.headers["content-disposition"].split("filename*=UTF-8''")[1]) == sub.name
+
+
+# ------------------------------------------------------------------ incomplete source tracks
+def _srt(n: int, last_len_s: float = 2, step_s: float = 3) -> str:
+    def ts(sec):
+        ms = int(sec * 1000)
+        return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+    out = []
+    for i in range(n):
+        a = 1 + i * step_s
+        b = a + (last_len_s if i == n - 1 else 2)
+        out.append(f"{i + 1}\n{ts(a)} --> {ts(b)}\nLine number {i + 1} of the dialogue.\n")
+    return "\n".join(out)
+
+
+def _video_with(folder: Path, name: str, srt_text: str, seconds: int = 140) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    srt = folder / "src.srt"
+    srt.write_text(srt_text, encoding="utf-8")
+    v = folder / name
+    subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", f"color=c=black:s=32x32:d={seconds}:r=1",
+                    "-i", str(srt), "-map", "0", "-map", "1", "-c:v", "libx264", "-c:s", "srt",
+                    "-metadata:s:s:0", "language=eng", str(v)], check=True)
+    srt.unlink()
+    return v
+
+
+def test_cut_off_shapes(tmp_path):
+    def cues(text):
+        f = tmp_path / "x.srt"
+        f.write_text(text, encoding="utf-8")
+        return cuesmod.load(f).cues
+    assert media.cut_off(cues(_srt(25)), 80) is None                         # complete
+    assert media.cut_off(cues(_srt(25, last_len_s=600)), 700) == 73_000       # last line stretched to the end
+    assert media.cut_off(cues(_srt(25)), 3600) == 75_000                      # stops ~58 min before the end
+    assert media.cut_off(cues(_srt(25)), 600) is None                         # long credits, not a quarter gone
+    assert media.cut_off(cues(_srt(5, last_len_s=600)), 700) is None          # short (forced/signs) tracks: never judged
+    assert media.clock(3_076_917) == "51:16" and media.clock(3_676_917) == "1:01:16"
+
+
+@ffmpeg
+def test_complete_sidecar_beats_a_cut_off_embedded_track(tmp_path):
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    assert media.find_source(v, tmp_path / "cache", ["en"], "ru").origin == "embedded"
+    (v.parent / "Show S01E01.en.srt").write_text(_srt(60), encoding="utf-8")
+    src = media.find_source(v, tmp_path / "cache", ["en"], "ru")
+    assert src.origin == "sidecar" and src.path.name == "Show S01E01.en.srt"
+    (v.parent / "Show S01E01.en.srt").write_text(_srt(20), encoding="utf-8")   # shorter: no better
+    assert media.find_source(v, tmp_path / "cache", ["en"], "ru").origin == "embedded"
+
+
+@ffmpeg
+def test_cut_off_source_asks_bazarr_then_translates_with_a_warning(tmp_path, monkeypatch):
+    s = settings(tmp_path, bazarr_url="http://bazarr", bazarr_key="k")
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    store, w = app.state.store, app.state.worker
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    asked = []
+    monkeypatch.setattr(w, "_bazarr_request", lambda bz, job: asked.append(job.id) or True)
+    job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    w.process(store.next_queued())
+    j = store.get(job.id)
+    assert j.state == "waiting_source" and j.detail.startswith("Source cut short:") and "1:13" in j.detail and asked
+    v.with_name("Show S01E01.de.srt").write_text(_srt(25), encoding="utf-8")   # older, unrelated: not a reason
+    old(v.with_name("Show S01E01.de.srt"), 10 * 3600)
+    w.check_waiting()
+    assert store.get(job.id).state == "waiting_source"
+    store._q("UPDATE jobs SET wait_since=? WHERE id=?", (time.time() - 4 * 3600, job.id))
+    w.check_waiting()                                                          # nothing better came: use what we have
+    assert store.get(job.id).state == "queued"
+    w.process(store.next_queued())
+    j = store.get(job.id)
+    assert j.state == "needs_review" and j.detail.startswith("Incomplete source:") and "Re-translate" in j.detail
+    out = cuesmod.load(j.output_path).cues
+    assert len(out) == 25 and out[-1].end_ms - out[-1].start_ms <= 7000 and asked == [job.id]
+
+
+@ffmpeg
+def test_cut_off_source_uses_the_complete_subtitle_bazarr_brings(tmp_path, monkeypatch):
+    s = settings(tmp_path, bazarr_url="http://bazarr", bazarr_key="k")
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    store, w = app.state.store, app.state.worker
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    monkeypatch.setattr(w, "_bazarr_request", lambda bz, job: True)
+    job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    w.process(store.next_queued())
+    side = v.with_name("Show S01E01.en.srt")
+    side.write_text(_srt(60), encoding="utf-8")
+    t = time.time() - 300
+    os.utime(side, (t, t))
+    store._q("UPDATE jobs SET wait_since=? WHERE id=?", (t - 60, job.id))
+    w.check_waiting()
+    w.process(store.next_queued())
+    j = store.get(job.id)
+    assert j.state == "done" and "60 cues from en (sidecar)" in j.detail
+
+
+@ffmpeg
+def test_cut_off_source_without_bazarr_goes_straight_to_review(tmp_path):
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    store, w = app.state.store, app.state.worker
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    w.process(store.next_queued())
+    assert store.get(job.id).state == "needs_review" and "stops at 1:13" in store.get(job.id).detail
