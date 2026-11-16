@@ -220,25 +220,8 @@ def _retimed(path: Path, a: float, b: float, cache_dir: Path, lang: str) -> Path
     return out
 
 
-def _tail_on_speech(video: Path | None, lang: str, tail: list, cut: int) -> None:
-    """Nothing after the cut can be checked against the embedded track; the audio can. Shift each
-    section of the attached ending onto the speech in the `lang` audio (in place)."""
-    if video is None or len(tail) < 5:
-        return
-    try:
-        t0 = max(0, cut - 30_000)
-        env = speech_envelope(video, lang, t0)
-        if not env:
-            return
-        spans = [(e.start, e.end) for e in tail]
-        for ev, off in zip(tail, audio_offsets(env, t0, spans)):
-            ev.start, ev.end = max(0, ev.start + off), max(0, ev.end + off)
-    except Exception:            # an audio problem must never block the translation
-        return
-
-
 def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: str, duration: float | None,
-                    cache_dir: Path, video: Path | None = None) -> Path | None:
+                    cache_dir: Path) -> Path | None:
     """The embedded track is cut short: a sidecar in the same language that is complete and reaches
     further wins (e.g. one Bazarr downloaded). It is first lined up with the embedded track on the
     lines both have, so a file timed for another frame rate or cut still lands on the right frames."""
@@ -263,7 +246,7 @@ def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: st
         a, b = fit
         if cut_off(sc, duration) is None and a * last_line_ms(sc) + b > cut + 60_000:
             if embedded.suffix.lower() == ".srt" and path.suffix.lower() == ".srt":
-                return _spliced(embedded, emb, path, sc, fit, cut, cache_dir, lang, video)
+                return _spliced(embedded, emb, path, sc, fit, cut, cache_dir, lang)
             return _retimed(path, a, b, cache_dir, lang)
     return None
 
@@ -272,95 +255,9 @@ def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: st
 # 15 min -> up to 1.7 s, because a 25 fps version's scene cuts differ); wider only when lines are few
 SPLICE_WINDOWS = ((300_000, 10), (900_000, 15))
 
-# ---- audio check of the spliced ending: where people actually talk
-ENV_HZ = 100                 # speech-energy samples per second
-AUDIO_SEARCH_MS = 10_000     # a section may move up to this far
-AUDIO_MIN_GAIN = 0.10        # log-energy contrast a shift must win by to be applied
-AUDIO_CHUNK = 20             # dialogue lines per section
-
-
-def _audio_stream(video: Path, lang: str) -> tuple[int, int] | None:
-    """(audio index among audio streams, channels) of the track in `lang`, else the first one."""
-    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries",
-                          "stream=channels:stream_tags=language", "-of", "json", str(video)],
-                         capture_output=True, text=True)
-    try:
-        streams = json.loads(out.stdout).get("streams", [])
-    except ValueError:
-        return None
-    if not streams:
-        return None
-    pick = next((i for i, s in enumerate(streams) if langs.same((s.get("tags") or {}).get("language"), lang)), 0)
-    return pick, int(streams[pick].get("channels") or 2)
-
-
-def speech_envelope(video: Path, lang: str, start_ms: int) -> list[float] | None:
-    """Log energy of the speech band, ENV_HZ per second, from `start_ms` to the end. The centre
-    channel of a surround track carries the dialogue; stereo/mono is mixed down."""
-    import math
-    import struct
-    st = _audio_stream(video, lang)
-    if st is None:
-        return None
-    idx, ch = st
-    pan = "pan=mono|c0=FC" if ch >= 3 else "pan=mono|c0=0.5*c0+0.5*c1" if ch == 2 else "pan=mono|c0=c0"
-    r = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{start_ms / 1000:.3f}", "-i", str(video),
-                        "-map", f"0:a:{idx}", "-af",
-                        f"{pan},highpass=f=150,lowpass=f=3500,aeval=val(0)*val(0),aresample={ENV_HZ}",
-                        "-f", "f32le", "-"], capture_output=True, stdin=subprocess.DEVNULL)
-    if r.returncode or len(r.stdout) < 4 * ENV_HZ * 30:
-        return None
-    vals = struct.unpack(f"{len(r.stdout) // 4}f", r.stdout[: len(r.stdout) // 4 * 4])
-    return [math.log10(abs(x) + 1e-10) for x in vals]
-
-
-def _contrast(env: list[float], t0: int, spans: list[tuple[int, int]], off: int) -> float:
-    """Mean energy inside the subtitle spans minus outside them, around those spans."""
-    step = 1000 // ENV_HZ
-    lo = max(0, (spans[0][0] + off - t0) // step - 10 * ENV_HZ)
-    hi = min(len(env), (spans[-1][1] + off - t0) // step + 10 * ENV_HZ)
-    if hi - lo < ENV_HZ:
-        return float("-inf")
-    mask = bytearray(hi - lo)
-    for a, b in spans:
-        for i in range(max((a + off - t0) // step, lo), min((b + off - t0) // step, hi)):
-            mask[i - lo] = 1
-    ins = out = 0.0
-    ni = no = 0
-    for i in range(lo, hi):
-        if mask[i - lo]:
-            ins += env[i]
-            ni += 1
-        else:
-            out += env[i]
-            no += 1
-    return ins / ni - out / no if ni and no else float("-inf")
-
-
-def audio_offsets(env: list[float], t0: int, spans: list[tuple[int, int]]) -> list[int]:
-    """A shift (ms) for each section of AUDIO_CHUNK lines that best puts them on speech. A section
-    moves only when that clearly beats the previous section's shift (a quiet or musical stretch
-    keeps it): the result follows the real edit without chasing noise."""
-    shifts, prev = [], 0
-    for k in range(0, len(spans), AUDIO_CHUNK):
-        part = spans[k:k + AUDIO_CHUNK]
-        if len(part) < 5:
-            shifts += [prev] * len(part)
-            continue
-        base = _contrast(env, t0, part, prev)
-        best, best_off = base, prev
-        for off in range(-AUDIO_SEARCH_MS, AUDIO_SEARCH_MS + 1, 100):
-            sc = _contrast(env, t0, part, off)
-            if sc > best:
-                best, best_off = sc, off
-        if best - base >= AUDIO_MIN_GAIN:
-            prev = best_off
-        shifts += [prev] * len(part)
-    return shifts
-
 
 def _spliced(embedded: Path, emb, side_path: Path, side, fit: tuple[float, float], cut: int,
-             cache_dir: Path, lang: str, video: Path | None = None) -> Path:
+             cache_dir: Path, lang: str) -> Path:
     """The embedded track up to where it stops (exact timing), then the sidecar's remaining lines,
     lined up on the few minutes just before the cut (a sidecar from another cut can drift a second or
     two elsewhere, so a whole-file fit is only the fallback)."""
@@ -376,7 +273,7 @@ def _spliced(embedded: Path, emb, side_path: Path, side, fit: tuple[float, float
             la, lb = local
             break
     st1, st2 = embedded.stat(), side_path.stat()
-    key = hashlib.sha1(f"{embedded}|{st1.st_size}|{side_path}|{st2.st_size}|{int(st2.st_mtime)}|splice3"
+    key = hashlib.sha1(f"{embedded}|{st1.st_size}|{side_path}|{st2.st_size}|{int(st2.st_mtime)}|splice2"
                        .encode()).hexdigest()[:20]
     out = cache_dir / f"{key}.{lang}.spliced.srt"
     if out.is_file():
@@ -386,18 +283,11 @@ def _spliced(embedded: Path, emb, side_path: Path, side, fit: tuple[float, float
     for c in emb:
         if c.start_ms < cut and c.end_ms - c.start_ms <= LONG_CUE_MS:
             subs.append(pysubs2.SSAEvent(start=c.start_ms, end=c.end_ms, text=c.event.text if c.event else c.text))
-    tail = []
     for c in side:
         s = round(la * c.start_ms + lb)
         if s >= cut - 500:
-            tail.append(pysubs2.SSAEvent(start=s, end=round(la * c.end_ms + lb), text=c.event.text if c.event else c.text))
-    _tail_on_speech(video, lang, tail, cut)
-    for ev in tail:
-        subs.append(ev)
+            subs.append(pysubs2.SSAEvent(start=s, end=round(la * c.end_ms + lb), text=c.event.text if c.event else c.text))
     subs.sort()
-    for a, b in zip(subs.events, subs.events[1:]):     # sections shifted apart must not overlap
-        if a.end > b.start:
-            a.end = max(a.start + 300, b.start)
     cache_dir.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp")
     subs.save(str(tmp), format_="srt")
@@ -438,7 +328,7 @@ def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
         st = pick_source(streams, lang)
         if st:
             emb = _cache_extract(video, st, cache_dir, lang)
-            better = _better_sidecar(emb, side, lang, duration, cache_dir, video)
+            better = _better_sidecar(emb, side, lang, duration, cache_dir)
             if better is None:
                 return Source(emb, lang, "embedded")
             return Source(better, lang, "embedded + sidecar ending" if ".spliced." in better.name else "sidecar, re-timed")
