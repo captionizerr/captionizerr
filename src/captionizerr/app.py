@@ -57,6 +57,9 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
     import copy
     env_defaults = copy.deepcopy(s)          # what the environment says, before UI overrides
     s.apply(store.load_settings())          # UI-saved settings override environment defaults
+    from . import secret_store
+    secrets = secret_store.SecretStore(s.data_dir / "secrets.json")
+    secret_store.apply(s, secrets)          # UI-entered secrets, where the server sets none
     if provider_factory is None:
         from .providers import make_provider
         provider_factory = lambda: make_provider(s)  # noqa: E731
@@ -64,6 +67,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
     app = FastAPI(title="Captionizerr", version=__version__)
     app.state.store, app.state.worker, app.state.settings = store, worker, s
     app.state.env_defaults = env_defaults
+    app.state.secrets = secrets
 
     if start_worker:
         @app.on_event("startup")
@@ -90,7 +94,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
 
     @app.middleware("http")
     async def ui_login(request: Request, call_next):
-        if not s.ui_password or request.url.path.startswith(OPEN):
+        if not secret_store.login_enabled(s) or request.url.path.startswith(OPEN):
             return await call_next(request)
         who = client_id(request)
         if throttle.locked(who):
@@ -102,7 +106,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
             throttle.fail(who)
         creds = basic_auth(request)
         if creds is not None:
-            if hmac.compare_digest(creds[0], s.ui_user) and hmac.compare_digest(creds[1], s.ui_password):
+            if secret_store.check_login(s, creds[0], creds[1]):
                 throttle.ok(who)
                 return await call_next(request)
             throttle.fail(who)

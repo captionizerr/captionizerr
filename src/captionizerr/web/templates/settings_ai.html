@@ -1,0 +1,59 @@
+{% extends "settings_base.html" %}
+{% from "_forms.html" import secret, test %}
+{% block panel %}
+<form method="post" action="/settings/ai" id="aiform">
+  <section class="card">
+    <h2>Which AI translates</h2>
+    <div class="choice" role="radiogroup" aria-label="Provider">
+      <label class="opt"><input type="radio" name="provider" value="anthropic" {{ 'checked' if v.provider == 'anthropic' }}>
+        <b>Anthropic Claude</b><span class="small muted">Best quality. Whole-episode context, Batch API for half-price backlog. Pay per use.</span></label>
+      <label class="opt"><input type="radio" name="provider" value="ollama" {{ 'checked' if v.provider == 'ollama' }}>
+        <b>Local model (Ollama)</b><span class="small muted">Free and private, on your own hardware. Slower; quality depends on model size.</span></label>
+      <label class="opt"><input type="radio" name="provider" value="openai" {{ 'checked' if v.provider == 'openai' }}>
+        <b>OpenAI-compatible</b><span class="small muted">OpenAI, OpenRouter, DeepSeek, vLLM, LM Studio. Set your own prices for the budget.</span></label>
+    </div>
+  </section>
+
+  <section class="card" data-for="anthropic">
+    <h2>Anthropic</h2>
+    <div class="fields">
+      {{ secret('anthropic_key', secrets, placeholder='sk-ant-…', hint='Create one at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>. Tip: give it its own spend limit there.', next='/settings/ai') }}
+      <label class="f">Model <select name="model">{% for m in models %}<option value="{{ m.id }}" {{ 'selected' if m.id == v.model }}>{{ m.id }} · about ${{ '%.2f'|format(m.ep) }} per episode</option>{% endfor %}</select>
+        <span class="h">Opus is the quality reference; Sonnet is a good budget choice.</span></label>
+      <label class="f">Effort <select name="effort">{% for e in efforts %}<option {{ 'selected' if e == v.effort }}>{{ e }}</option>{% endfor %}</select><span class="h">Low was as clean as medium in testing, at half the price.</span></label>
+    </div>
+    <div class="actions">{{ test('anthropic', 'Test key (free)') }}</div>
+  </section>
+
+  <section class="card" data-for="ollama">
+    <h2>Local model (Ollama)</h2>
+    <div class="fields">
+      <label class="f">Ollama address <input type="url" name="ollama_url" id="oll-url" value="{{ v.ollama_url }}" placeholder="http://ollama:11434">
+        <span class="h">On that machine set <span class="mono">OLLAMA_HOST=0.0.0.0</span> so Captionizerr can reach it.</span></label>
+      <label class="f">Model <span class="row-inline"><select name="ollama_model" id="oll-model">{% if v.ollama_model %}<option selected>{{ v.ollama_model }}</option>{% else %}<option value="">Find models first</option>{% endif %}</select>
+        <button type="button" class="small" id="oll-find">Find models</button></span><span class="h" id="oll-hint">27–32B models are the useful minimum for natural dialogue.</span></label>
+      <label class="f">Context window <select name="ollama_num_ctx">{% for n in (8192, 16384, 32768, 65536) %}<option value="{{ n }}" {{ 'selected' if n == v.ollama_num_ctx }}>{{ n // 1024 }}k{{ ' (recommended)' if n == 16384 }}</option>{% endfor %}</select></label>
+    </div>
+    <div class="actions">{{ test('ollama', 'Test (one tiny request)') }}</div>
+  </section>
+
+  <section class="card" data-for="openai">
+    <h2>OpenAI-compatible</h2>
+    <div class="fields">
+      <label class="f">Base URL <input type="url" name="openai_base_url" value="{{ v.openai_base_url }}" placeholder="https://api.openai.com/v1"></label>
+      {{ secret('openai_key', secrets, label='API key', placeholder='Leave empty for local servers', next='/settings/ai') }}
+      <label class="f">Model <input type="text" name="openai_model" value="{{ v.openai_model }}" placeholder="deepseek-chat"></label>
+      <label class="f">Price in / out, $ per 1M tokens <span class="row-inline"><input type="number" name="openai_price_in" min="0" step="0.01" value="{{ v.openai_price_in }}" aria-label="Input price"><input type="number" name="openai_price_out" min="0" step="0.01" value="{{ v.openai_price_out }}" aria-label="Output price"></span><span class="h">For the budget. 0 for local servers.</span></label>
+      <label class="f">Max output tokens <input type="number" name="openai_max_output" min="1000" max="200000" step="1000" value="{{ v.openai_max_output }}"><span class="h">Long episodes are split to fit.</span></label>
+    </div>
+    <div class="actions">{{ test('openai', 'Test (one tiny request)') }}</div>
+  </section>
+  <div class="savebar"><button class="primary">Save</button></div>
+</form>
+<script>
+const f = document.getElementById('aiform');
+function show(){ const p = f.querySelector('input[name=provider]:checked').value;
+  f.querySelectorAll('[data-for]').forEach(c => c.hidden = c.dataset.for !== p); }
+f.addEventListener('change', e => { if (e.target.name === 'provider') show(); }); show();
+</script>
+{% endblock %}

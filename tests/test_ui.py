@@ -18,7 +18,10 @@ def ui(tmp_path):
     return app, TestClient(app), tmp_path
 
 
-@pytest.mark.parametrize("path", ["/", "/library", "/settings", "/providers", "/static/favicon.svg", "/static/mark.svg"])
+@pytest.mark.parametrize("path", ["/", "/library", "/settings/general", "/settings/ai", "/settings/connections",
+                                  "/settings/security", "/settings/system", "/setup", "/setup?step=ai",
+                                  "/setup?step=languages", "/setup?step=arr", "/setup?step=media", "/setup?step=done",
+                                  "/static/favicon.svg", "/static/mark.svg"])
 def test_pages_render(ui, path):
     _, c, _ = ui
     r = c.get(path)
@@ -33,30 +36,34 @@ def test_library_without_arrs_explains(ui):
 
 def test_cross_site_post_refused(ui):
     _, c, _ = ui
-    assert c.post("/settings", data={"languages": "de"}, headers={"Origin": "http://evil.example"}).status_code == 403
-    assert c.post("/settings", data={"languages": "de"}).status_code == 403          # no Origin/Referer at all
+    assert c.post("/settings/general", data={"languages": "de"}, headers={"Origin": "http://evil.example"}).status_code == 403
+    assert c.post("/settings/general", data={"languages": "de"}).status_code == 403  # no Origin/Referer at all
+    assert c.post("/settings/connections", data={"sonarr_url": "http://x"}).status_code == 403
     assert c.post("/jobs/resume", headers={"Origin": "http://evil.example"}).status_code == 403
 
 
 def test_settings_save_and_validate(ui):
     app, c, _ = ui
-    form = {"languages": "ru, uk", "model": "claude-sonnet-5-5", "effort": "low", "tone": "softened", "songs": "verse",
-            "monthly_cap_usd": "15", "alert_pct": "70", "max_line": "40", "target_cps": "18",
-            "jellyfin_path_map": "/downloads/=/mnt/media/"}
-    r = c.post("/settings", data=form, headers=SAME, follow_redirects=False)
-    assert r.status_code == 303 and "saved" in r.headers["location"]
+    form = {"languages": "ru, uk", "source_langs": "en", "any_source": "1", "tone": "softened", "songs": "verse",
+            "max_line": "40", "target_cps": "18", "monthly_cap_usd": "15", "alert_pct": "70"}
+    r = c.post("/settings/general", data=form, headers=SAME, follow_redirects=False)
+    assert r.status_code == 303 and "Saved" in r.headers["location"]
     s = app.state.settings
-    assert s.languages == ["ru", "uk"] and s.model == "claude-sonnet-5-5" and s.monthly_cap_usd == 15
-    assert s.alert_at == 0.7 and s.jellyfin_path_map == [("/downloads/", "/mnt/media/")]
-    # persisted: a fresh app over the same data dir sees the saved values
-    s2 = Settings(data_dir=s.data_dir, webhook_key=KEY)
+    assert s.languages == ["ru", "uk"] and s.monthly_cap_usd == 15 and s.alert_at == 0.7 and s.tone == "softened"
+    c.post("/settings/ai", data={"provider": "anthropic", "model": "claude-sonnet-5-5", "effort": "low"}, headers=SAME)
+    assert s.model == "claude-sonnet-5-5"
+    c.post("/settings/connections", data={"jellyfin_url": "http://jf:8096", "jellyfin_path_map": "/downloads/=/mnt/media/"},
+           headers=SAME)
+    assert s.jellyfin_path_map == [("/downloads/", "/mnt/media/")]
+    s2 = Settings(data_dir=s.data_dir, webhook_key=KEY)          # persisted across a restart
     create_app(s2, provider_factory=FakeProvider, start_worker=False)
-    assert s2.languages == ["ru", "uk"] and s2.tone == "softened"
-    bad = dict(form, languages="russian!!")
-    r = c.post("/settings", data=bad, headers=SAME, follow_redirects=False)
-    assert "Not+saved" in r.headers["location"] and app.state.settings.languages == ["ru", "uk"]
-    bad = dict(form, model="gpt-9")
-    assert "Not+saved" in c.post("/settings", data=bad, headers=SAME, follow_redirects=False).headers["location"]
+    assert s2.languages == ["ru", "uk"] and s2.tone == "softened" and s2.model == "claude-sonnet-5-5"
+    r = c.post("/settings/general", data=dict(form, languages="russian!!"), headers=SAME, follow_redirects=False)
+    assert "Not+saved" in r.headers["location"] and s.languages == ["ru", "uk"]
+    r = c.post("/settings/ai", data={"provider": "anthropic", "model": "gpt-9"}, headers=SAME, follow_redirects=False)
+    assert "Not+saved" in r.headers["location"]
+    r = c.post("/settings/connections", data={"sonarr_url": "ftp://x"}, headers=SAME, follow_redirects=False)
+    assert "Not+saved" in r.headers["location"]
 
 
 def test_series_settings_and_notes(ui):
@@ -109,8 +116,11 @@ def test_retry_and_job_page(ui):
 
 def test_provider_test_button(ui):
     _, c, _ = ui
-    r = c.post("/providers/test", headers=SAME, follow_redirects=False)
-    assert "Anthropic+works" in r.headers["location"]
+    r = c.post("/settings/test/sonarr", data={}, headers=SAME)
+    assert r.json()["ok"] is False and r.json()["message"] == "enter the address and the API key"
+    r = c.post("/settings/test/anthropic", data={}, headers=SAME)          # no key anywhere
+    assert r.status_code == 200 and r.json()["ok"] is False
+    assert c.post("/settings/test/nope", data={}, headers=SAME).status_code == 404
 
 
 # ------------------------------------------------------------------ M3: editor, notes, feedback
@@ -197,7 +207,7 @@ def test_generate_notes_prompt_and_parse():
 def test_optional_login(tmp_path):
     s = Settings(data_dir=tmp_path / "config", webhook_key=KEY, ui_password="pw", library_roots=[str(tmp_path / "lib")])
     c = TestClient(create_app(s, provider_factory=FakeProvider, start_worker=False))
-    assert c.get("/").status_code == 401 and c.get("/settings").status_code == 401
+    assert c.get("/").status_code == 401 and c.get("/settings/general").status_code == 401
     assert c.get("/", auth=("admin", "wrong")).status_code == 401
     assert c.get("/", auth=("admin", "pw")).status_code == 200
     assert c.get("/health").status_code == 200 and c.get("/metrics").status_code == 200
@@ -209,26 +219,94 @@ def test_optional_login(tmp_path):
 def test_settings_show_and_reset_overrides(ui):
     app, c, _ = ui
     s = app.state.settings
-    c.post("/settings", data={"languages": "de", "model": s.model, "effort": "low", "tone": "faithful", "songs": "verse",
-                              "monthly_cap_usd": "20", "alert_pct": "80", "max_line": "42", "target_cps": "20"}, headers=SAME)
+    c.post("/settings/general", data={"languages": "de"}, headers=SAME)
     assert s.languages == ["de"]
-    page = c.get("/settings").text
+    page = c.get("/settings/system").text
     assert "Changed here" in page and "languages" in page
     c.post("/settings/reset", data={"key": "languages"}, headers=SAME)
     assert s.languages == ["ru"] and "languages" not in app.state.store.load_settings()
 
 
-def test_settings_page_saves_everything(ui):
+def test_secrets_entered_in_the_ui(tmp_path, monkeypatch):
+    s = Settings(data_dir=tmp_path / "config", languages=["ru"], library_roots=[str(tmp_path / "lib")])
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    c = TestClient(app)
+    assert s.webhook_key and s.secret_sources["webhook_key"] == "ui"          # generated on first run
+    r = c.post("/settings/connections", data={"sonarr_url": "http://sonarr:8989", "secret:sonarr_key": "SONARR-SECRET"},
+               headers=SAME, follow_redirects=False)
+    assert "Saved" in r.headers["location"] and s.sonarr_key == "SONARR-SECRET"
+    f = tmp_path / "config/secrets.json"
+    assert oct(f.stat().st_mode & 0o777) == "0o600" and "SONARR-SECRET" in f.read_text()
+    assert "SONARR-SECRET" not in str(app.state.store.load_settings())         # never in the database
+    page = c.get("/settings/connections").text
+    assert "SONARR-SECRET" not in page and "Saved" in page                    # never rendered back
+    s2 = Settings(data_dir=s.data_dir)                                         # survives a restart
+    create_app(s2, provider_factory=FakeProvider, start_worker=False)
+    assert s2.sonarr_key == "SONARR-SECRET" and s2.webhook_key == s.webhook_key
+    c.post("/settings/secret/sonarr_key/remove", data={"next": "/settings/connections"}, headers=SAME)
+    assert s.sonarr_key == "" and "SONARR-SECRET" not in f.read_text()
+    monkeypatch.setenv("CAPTIONIZERR_RADARR_KEY", "from-env")                  # set on the server: read-only here
+    s3 = Settings.from_env()
+    s3.data_dir, s3.library_roots = tmp_path / "c3", [str(tmp_path / "lib")]
+    c3 = TestClient(create_app(s3, provider_factory=FakeProvider, start_worker=False))
+    c3.post("/settings/connections", data={"secret:radarr_key": "typed"}, headers=SAME)
+    assert s3.radarr_key == "from-env" and "Set on the server" in c3.get("/settings/connections").text
+
+
+def test_ui_password_set_in_the_ui_is_hashed(ui):
     app, c, _ = ui
-    form = {"languages": "ru", "model": "claude-opus-5-5", "effort": "low", "tone": "faithful", "songs": "verse",
-            "monthly_cap_usd": "20", "alert_pct": "80", "max_line": "42", "target_cps": "20",
-            "source_langs": "en, ja", "any_source": "1", "bazarr_url": "http://bazarr:6767",
-            "plex_url": "http://plex:32400", "plex_path_map": "/data/=/media/"}
-    r = c.post("/settings", data=form, headers=SAME, follow_redirects=False)
-    assert "Settings+saved" in r.headers["location"], r.headers["location"]
-    s = app.state.settings
-    assert s.source_langs == ["en", "ja"] and s.plex_url == "http://plex:32400" and s.plex_path_map == [("/data/", "/media/")]
-    assert s.auto_notes is False                     # unticked checkbox
+    r = c.post("/settings/security", data={"ui_user": "me", "secret:ui_password": "short", "password_again": "short"},
+               headers=SAME, follow_redirects=False)
+    assert "Password+not+set" in r.headers["location"]
+    c.post("/settings/security", data={"ui_user": "me", "secret:ui_password": "long enough pw",
+                                       "password_again": "long enough pw"}, headers=SAME)
+    stored = (app.state.settings.data_dir / "secrets.json").read_text()
+    assert "long enough pw" not in stored and "pbkdf2_sha256$" in stored
+    assert c.get("/").status_code == 401
+    assert c.get("/", auth=("me", "long enough pw")).status_code == 200
+
+
+def test_setup_wizard_flow(tmp_path):
+    s = Settings(data_dir=tmp_path / "config", library_roots=[str(tmp_path / "lib")])
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    c = TestClient(app)
+    r = c.get("/", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/setup"           # fresh install
+    r = c.post("/settings/ai", data={"provider": "anthropic", "model": "claude-opus-5-5", "effort": "low",
+                                     "secret:anthropic_key": "sk-ant-x", "next": "/setup?step=languages"},
+               headers=SAME, follow_redirects=False)
+    assert r.headers["location"].startswith("/setup?step=languages")
+    c.post("/settings/general", data={"languages": "de", "source_langs": "en", "monthly_cap_usd": "10",
+                                      "alert_pct": "80", "next": "/setup?step=arr"}, headers=SAME)
+    assert s.languages == ["de"] and s.anthropic_key == "sk-ant-x"
+    assert "Ready" in c.get("/setup?step=done").text
+    c.post("/setup/finish", headers=SAME)
+    assert c.get("/", follow_redirects=False).status_code == 200
+
+
+def test_connect_arr_creates_webhook(monkeypatch):
+    from captionizerr import connections
+    calls = []
+
+    def fake(url, headers=None, method="GET", body=None, timeout=10):
+        calls.append((method, url, body))
+        if url.endswith("/notification") and method == "GET":
+            return 200, []
+        if url.endswith("/notification/schema"):
+            return 200, [{"implementation": "Webhook", "onDownload": False, "onUpgrade": False, "onRename": False,
+                          "onHealthIssue": False, "fields": [{"name": "url"}, {"name": "method"},
+                                                              {"name": "username"}, {"name": "password"}]}]
+        if url.endswith("/notification") and method == "POST":
+            return 201, {"id": 7}
+        return 200, {}
+    monkeypatch.setattr(connections, "_req", fake)
+    ok, msg = connections.connect_arr("sonarr", "http://sonarr:8989", "k", "http://cz:8095/api/hooks/sonarr", "WK")
+    assert ok and "created" in msg
+    created = [b for m, u, b in calls if m == "POST" and u.endswith("/notification")][0]
+    f = {x["name"]: x.get("value") for x in created["fields"]}
+    assert f == {"url": "http://cz:8095/api/hooks/sonarr", "method": 1, "username": "sonarr", "password": "WK"}
+    assert created["onDownload"] and created["onUpgrade"] and created["onRename"] and not created["onHealthIssue"]
+    assert any(u.endswith("/notification/test") for _, u, _ in calls)
 
 
 def test_webhook_basic_auth_and_lockout(tmp_path):

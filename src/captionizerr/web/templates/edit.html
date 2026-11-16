@@ -6,14 +6,17 @@
 .bar-top input[type=search]{flex:1 1 180px;min-width:0;font:14px var(--sans);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
 .bar-top .status{font-size:12.5px;color:var(--muted);flex-basis:100%}
 .rows{display:grid;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:8px 12px;border-bottom:1px solid var(--line)}
+.row .edit{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:start}
+button.icon{padding:5px 9px;font-size:14px;line-height:1}
 .row:last-child{border-bottom:0}
 .row.dirty{background:var(--accent-soft)}
 .row .meta{font:12px var(--mono);color:var(--muted);display:flex;gap:8px;align-items:center;margin-bottom:4px}
 .row .src{white-space:pre-wrap;font-size:13.5px}
 .row .src.none{color:var(--muted);font-style:italic}
 .row textarea{min-height:0;height:auto;font:14px/1.45 var(--sans);padding:6px 8px;resize:vertical}
-.row .tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.row .tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.row .tools:empty{display:none}
 .flag{font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:99px;background:var(--bad-soft);color:var(--bad)}
 .row .rt{display:none;gap:6px;margin-top:6px}
 .row .rt.open{display:flex}
@@ -35,8 +38,9 @@
     <button type="button" class="chip" data-f="dirty">Changed <span id="n-dirty"></span></button>
   </div>
   <input type="search" id="q" placeholder="Search either language" aria-label="Search">
+  <label class="small"><input type="checkbox" id="dlg" checked> Hide lines without dialogue</label>
   <button class="primary" id="save" disabled>Save</button>
-  <span class="status" id="status" role="status">Limits: {{ profile.max_line }} characters per line, {{ profile.max_lines }} lines, {{ profile.target_cps|int }} characters per second. ↻ asks the model again for one line (a cent or two). Cmd/Ctrl+S saves.</span>
+  <span class="status" id="status" role="status">Limits: {{ profile.max_line }} characters per line, {{ profile.max_lines }} lines, {{ profile.target_cps|int }} per second. ↻ re-translates one line (a cent or two), optionally with your instruction. Cmd/Ctrl+S saves.</span>
 </div>
 <div class="rows" id="rows"></div>
 
@@ -75,15 +79,15 @@ for (const r of ROWS) {
   const ta = el('textarea'); ta.value = r.tr; ta.rows = Math.max(1, r.tr.split('\n').length);
   ta.setAttribute('aria-label', 'Translation of line ' + r.id); ta.lang = CTX.lang;
   const tools = el('div', 'tools'), fl = el('span');
-  const rtBtn = el('button', 'small', '↻ Re-translate'); rtBtn.type = 'button';
+  const rtBtn = el('button', 'small icon', '↻'); rtBtn.type = 'button'; rtBtn.title = 'Re-translate this line'; rtBtn.setAttribute('aria-label', 'Re-translate line ' + r.id);
   const undo = el('button', 'small hidden', 'Undo'); undo.type = 'button';
   const cost = el('span', 'small muted');
-  tools.append(fl, rtBtn, undo, cost);
+  tools.append(fl, undo, cost);
   const rt = el('div', 'rt'), ins = el('input'); ins.placeholder = 'Optional instruction, e.g. "more casual", "he is talking to his boss"';
   ins.setAttribute('aria-label', 'Instruction for line ' + r.id);
   const go = el('button', 'small primary', 'Ask'); go.type = 'button';
   rt.append(ins, go);
-  right.append(ta, tools, rt);
+  const edit = el('div', 'edit'); edit.append(ta, rtBtn); right.append(edit, tools, rt);
   row.append(left, right); box.append(row);
   const v = {r, row, ta, fl, undo, cost, rt, ins, go};
   view.set(r.id, v);
@@ -117,6 +121,7 @@ function applyFilter() {
   const q = document.getElementById('q').value.trim().toLowerCase();
   view.forEach(v => {
     let show = filter === 'all' || (filter === 'flag' && flagged.has(v.r.id)) || (filter === 'dirty' && dirty.has(v.r.id));
+    if (show && document.getElementById('dlg').checked && !/\p{L}/u.test(v.r.src) && !v.ta.value.trim()) show = false;
     if (show && q) show = (v.r.src + '\n' + v.ta.value).toLowerCase().includes(q);
     v.row.classList.toggle('hidden', !show);
   });
@@ -124,7 +129,9 @@ function applyFilter() {
 document.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => {
   filter = b.dataset.f; document.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b)); applyFilter(); }));
 document.getElementById('q').addEventListener('input', applyFilter);
+document.getElementById('dlg').addEventListener('change', applyFilter);
 counts();
+applyFilter();
 
 async function post(url, body) {
   const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...CTX, ...body})});

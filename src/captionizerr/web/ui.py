@@ -69,6 +69,7 @@ def register(app: FastAPI) -> None:
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
     def render(request: Request, name: str, **ctx):
+        ctx.setdefault("setup_needed", getattr(app.state, "setup_needed", lambda: False)())
         ctx.update(request=request, nav=name.split(".")[0], msg=request.query_params.get("msg"),
                    lvl=request.query_params.get("lvl", "ok"), settings=s)
         return templates.TemplateResponse(request, name, ctx)
@@ -90,15 +91,29 @@ def register(app: FastAPI) -> None:
     # ------------------------------------------------------------------ dashboard
     @app.get("/")
     def dashboard(request: Request, state: str = ""):
-        jobs = store.list(200)
-        if state:
-            jobs = [j for j in jobs if j.state == state]
-        spent, cap = store.spent(), s.monthly_cap_usd
-        reserved = store.reserved()
-        return render(request, "dashboard.html", jobs=jobs[:100], counts=store.counts(), spent=spent, cap=cap,
-                      reserved=reserved,
-                      pct=min(100, 100 * spent / cap) if cap else 0, month=month_now(), months=store.spend_by_month(),
-                      filter_state=state, states=STATES, avg=store.avg_cost(),
+        if getattr(app.state, "setup_needed", lambda: False)() and not request.query_params.get("msg"):
+            return RedirectResponse("/setup", 307)
+        all_jobs = store.list(300)
+        side = ("edit", "notes", "forced")
+        groups = {"attention": ("needs_review", "failed", "no_source", "paused_budget"),
+                  "active": ("queued", "running", "batched", "waiting_source"), "done": ("done", "skipped")}
+        view = state if state in (*groups, "other") or state in STATES else ""
+        if view == "other":
+            jobs = [j for j in all_jobs if j.source in side]
+        else:
+            jobs = [j for j in all_jobs if j.source not in side]
+            if view in groups:
+                jobs = [j for j in jobs if j.state in groups[view]]
+            elif view:
+                jobs = [j for j in jobs if j.state == view]
+        counts = store.counts()
+        spent, cap, reserved = store.spent(), s.monthly_cap_usd, store.reserved()
+        return render(request, "dashboard.html", jobs=jobs[:100], counts=counts, spent=spent, cap=cap,
+                      reserved=reserved, pct=min(100, 100 * (spent + reserved) / cap) if cap else 0, month=month_now(),
+                      months=store.spend_by_month(), view=view, avg=store.avg_cost(),
+                      attention={st: counts.get(st, 0) for st in groups["attention"]},
+                      active={st: counts.get(st, 0) for st in groups["active"]},
+                      side_count=sum(1 for j in all_jobs if j.source in side),
                       fmt_time=lambda t: datetime.fromtimestamp(t).strftime("%d %b %H:%M"))
 
     @app.get("/jobs/{job_id}")
@@ -141,7 +156,27 @@ def register(app: FastAPI) -> None:
         for x in series:
             x["key"] = slug(x["title"])
             x["override"] = store.series(x["key"])
-        return render(request, "library.html", series=series, movies=movies, errors=err, avg=store.avg_cost())
+            x["translated"] = translated_count(x.get("path"), langs_for(x["key"]))
+        configured = {"sonarr": bool(s.sonarr_url and s.sonarr_key), "radarr": bool(s.radarr_url and s.radarr_key)}
+        return render(request, "library.html", series=series, movies=movies, errors=err, avg=store.avg_cost(),
+                      configured=configured)
+
+    def translated_count(series_path: str | None, langs: list[str]) -> int:
+        """Episodes with our translation in every wanted language: a folder scan, no Sonarr calls."""
+        if not series_path or not langs:
+            return 0
+        root = s.map_path(series_path)
+        if not root.is_dir():
+            return 0
+        import os
+        from ..writer import _SIDECAR
+        have: dict[str, set] = {}
+        for dirpath, _dirs, files in os.walk(root):
+            for f in files:
+                m = _SIDECAR.match(f)
+                if m and not m.group("forced"):
+                    have.setdefault(os.path.join(dirpath, m.group("stem")), set()).add(m.group("lang"))
+        return sum(1 for got in have.values() if set(langs) <= got)
 
     @app.get("/library/series/{series_id}")
     def series_page(request: Request, series_id: int):
@@ -484,214 +519,6 @@ def register(app: FastAPI) -> None:
         store.record_share(str(sub), r["url"], r["already"])
         return _redirect(back, "OpenSubtitles already has this exact file." if r["already"] else "Uploaded to OpenSubtitles. Thank you!")
 
-    # ------------------------------------------------------------------ settings
-    @app.get("/settings")
-    def settings_page(request: Request):
-        from .. import maintenance
-        last = store.load_settings().get("_maintenance_last") or {}
-        return render(request, "settings.html", models=list(PRICES), efforts=EFFORTS, tones=list(TONE_RULES),
-                      songs=list(SONG_RULES), v=s.editable_values(),
-                      path_map="; ".join(f"{a}={b}" for a, b in s.jellyfin_path_map),
-                      plex_map="; ".join(f"{a}={b}" for a, b in s.plex_path_map),
-                      storage=maintenance.storage(s), last=last, v_keep={"history": s.keep_history, "days": s.keep_days},
-                      last_when=datetime.fromtimestamp(last["at"]).strftime("%d %b %H:%M") if last.get("at") else "",
-                      overridden=overrides())
-
-    def overrides() -> list[dict]:
-        """Settings saved in the UI that differ from the environment default."""
-        env, saved = app.state.env_defaults, store.load_settings()
-        out = []
-        for k in sorted(saved):
-            if k not in s.EDITABLE:
-                continue
-            here, there = getattr(s, k), getattr(env, k)
-            norm = (lambda v: [list(x) for x in v]) if s.EDITABLE[k] == "pairs" else (lambda v: v)
-            if norm(here) != norm(there):
-                out.append({"key": k, "label": k.replace("_", " "), "value": here, "env": there})
-        return out
-
-    @app.post("/settings/reset")
-    async def settings_reset(request: Request):
-        _same_origin(request)
-        f = await request.form()
-        key = str(f.get("key", ""))
-        keys = [o["key"] for o in overrides()] if key == "all" else [key]
-        keys = [k for k in keys if k in s.EDITABLE]
-        if not keys:
-            return _redirect("/settings", "Nothing to reset.", "warn")
-        store.delete_settings(keys)
-        for k in keys:
-            setattr(s, k, getattr(app.state.env_defaults, k))
-        return _redirect("/settings", f"Back to the environment value: {', '.join(k.replace('_', ' ') for k in keys)}.")
-
-    @app.post("/maintenance/run")
-    def maintenance_run(request: Request):
-        _same_origin(request)
-        from .. import maintenance
-        rep = maintenance.run(s, store)
-        return _redirect("/settings", "Cleanup done: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in rep.items() if k != "at") + ".")
-
-    @app.post("/settings")
-    async def settings_save(request: Request):
-        _same_origin(request)
-        f = await request.form()
-        try:
-            langs = [x for x in str(f.get("languages", "")).replace(" ", "").split(",") if x]
-            if not langs or any(not x.isalpha() or len(x) not in (2, 3) for x in langs):
-                raise ValueError("languages must be ISO codes such as ru, uk, de")
-            model = str(f.get("model"))
-            if model not in PRICES:
-                raise ValueError("unknown model")
-            effort = str(f.get("effort"))
-            if effort not in EFFORTS:
-                raise ValueError("unknown effort")
-            tone, songs = str(f.get("tone")), str(f.get("songs"))
-            if tone not in TONE_RULES or songs not in SONG_RULES:
-                raise ValueError("unknown tone or songs option")
-            def pairs(field):
-                out = []
-                for pair in filter(None, (x.strip() for x in str(f.get(field, "")).split(";"))):
-                    a, _, b = pair.partition("=")
-                    if not a or not b:
-                        raise ValueError("path map pairs look like /downloads/=/mnt/media/")
-                    out.append([a, b])
-                return out
-            pm = pairs("jellyfin_path_map")
-            plex_vals = ({"plex_url": str(f.get("plex_url", "")).strip(), "plex_path_map": pairs("plex_path_map")}
-                         if "plex_url" in f else {})
-            src_vals = {}
-            if "source_langs" in f:                    # the Sources card is part of this form
-                srcl = [x for x in str(f.get("source_langs", "")).replace(" ", "").split(",") if x]
-                if not srcl or any(not x.isalpha() or len(x) not in (2, 3) for x in srcl):
-                    raise ValueError("source languages must be ISO codes such as en, ja")
-                src_vals = {"source_langs": srcl, "any_source": bool(f.get("any_source")),
-                            "auto_notes": bool(f.get("auto_notes")), "bazarr_url": str(f.get("bazarr_url", "")).strip()}
-            vals = {
-                **src_vals, **plex_vals,
-                "languages": langs, "model": model, "effort": effort, "tone": tone, "songs": songs,
-                "monthly_cap_usd": max(0.0, float(f.get("monthly_cap_usd") or 0)),
-                "alert_at": min(1.0, max(0.1, float(f.get("alert_pct") or 80) / 100)),
-                "max_line": max(20, min(60, int(f.get("max_line") or 42))),
-                "target_cps": max(10.0, min(30.0, float(f.get("target_cps") or 20))),
-                "ntfy_url": str(f.get("ntfy_url", "")).strip(), "ntfy_topic": str(f.get("ntfy_topic", "")).strip(),
-                "public_url": str(f.get("public_url", "")).strip(), "jellyfin_url": str(f.get("jellyfin_url", "")).strip(),
-                "sonarr_url": str(f.get("sonarr_url", "")).strip(), "radarr_url": str(f.get("radarr_url", "")).strip(),
-                "jellyfin_path_map": pm,
-            }
-        except ValueError as e:
-            return _redirect("/settings", f"Not saved: {e}.", "warn")
-        store.save_settings(vals)
-        s.apply(vals)
-        return _redirect("/settings", "Settings saved. New jobs use them right away.")
-
-    # ------------------------------------------------------------------ providers
-    @app.get("/providers")
-    def providers(request: Request):
-        models = [{"id": m, "in": p[0], "out": p[1], "ep": _ep_cost(m), "default": m == s.model and s.provider == "anthropic"}
-                  for m, p in PRICES.items()]
-        return render(request, "providers.html", models=models, secrets=s.secrets_status, v=s.editable_values())
-
-    @app.post("/providers/use")
-    async def provider_use(request: Request):
-        _same_origin(request)
-        f = await request.form()
-        p = str(f.get("provider"))
-        if p not in ("anthropic", "openai", "ollama"):
-            raise HTTPException(400)
-        if p == "openai" and not (s.openai_base_url and s.openai_model):
-            return _redirect("/providers", "Set a base URL and model for the OpenAI-compatible provider first.", "warn")
-        if p == "ollama" and not s.ollama_model:
-            return _redirect("/providers", "Pick an Ollama model first.", "warn")
-        store.save_settings({"provider": p})
-        s.apply({"provider": p})
-        return _redirect("/providers", f"Now translating with {'Anthropic' if p == 'anthropic' else s.active_model}.")
-
-    @app.post("/providers/ollama/models")
-    async def ollama_models(request: Request):
-        _same_origin(request)
-        from ..providers.ollama import list_models
-        b = await request.json()
-        url = str((b or {}).get("url") or s.ollama_url).strip()
-        if not url.startswith(("http://", "https://")):
-            return JSONResponse({"error": "the address must start with http://"}, 400)
-        try:
-            return {"models": list_models(url)}
-        except Exception as e:
-            return JSONResponse({"error": str(e)[:200]}, 502)
-
-    @app.post("/providers/ollama")
-    async def ollama_save(request: Request):
-        _same_origin(request)
-        f = await request.form()
-        url = str(f.get("ollama_url", "")).strip().rstrip("/")
-        if not url.startswith(("http://", "https://")):
-            return _redirect("/providers", "Not saved: the Ollama address must start with http://.", "warn")
-        try:
-            ctx = int(f.get("ollama_num_ctx") or 16384)
-        except ValueError:
-            ctx = 16384
-        vals = {"ollama_url": url, "ollama_model": str(f.get("ollama_model", "")).strip(),
-                "ollama_num_ctx": max(4096, min(131072, ctx))}
-        p = str(f.get("provider") or s.provider)
-        if p not in ("anthropic", "openai", "ollama"):
-            raise HTTPException(400)
-        if p == "ollama" and not vals["ollama_model"]:
-            return _redirect("/providers", "Not saved: click Find models and pick one first.", "warn")
-        vals["provider"] = p
-        store.save_settings(vals)
-        s.apply(vals)
-        return _redirect("/providers", "Saved." + (f" Translating locally with {vals['ollama_model']} from now on."
-                                                  if p == "ollama" else ""))
-
-    @app.post("/providers/save")
-    async def provider_save(request: Request):
-        _same_origin(request)
-        f = await request.form()
-        try:
-            url = str(f.get("openai_base_url", "")).strip().rstrip("/")
-            if url and not url.startswith(("http://", "https://")):
-                raise ValueError("base URL must start with http:// or https://")
-            vals = {"openai_base_url": url, "openai_model": str(f.get("openai_model", "")).strip(),
-                    "openai_price_in": max(0.0, float(f.get("openai_price_in") or 0)),
-                    "openai_price_out": max(0.0, float(f.get("openai_price_out") or 0)),
-                    "openai_max_output": max(1000, min(200000, int(f.get("openai_max_output") or 16000)))}
-            p = str(f.get("provider") or s.provider)
-            if p not in ("anthropic", "openai", "ollama"):
-                raise ValueError("unknown provider")
-            if p == "openai" and not (vals["openai_base_url"] and vals["openai_model"]):
-                raise ValueError("the OpenAI-compatible provider needs a base URL and a model")
-            vals["provider"] = p
-        except ValueError as e:
-            return _redirect("/providers", f"Not saved: {e}.", "warn")
-        store.save_settings(vals)
-        s.apply(vals)
-        return _redirect("/providers", "Saved." + (f" Translating with {vals['openai_model']} from now on." if p == "openai" else ""))
-
-    @app.post("/providers/test")
-    async def provider_test(request: Request):
-        _same_origin(request)
-        f = await request.form()
-        which = str(f.get("which") or "anthropic")
-        t0 = time.monotonic()
-        try:
-            if which == "ollama":
-                from ..providers.ollama import OllamaProvider
-                prov = OllamaProvider(s.ollama_url, s.ollama_model, 4096, 50, timeout=300)
-                r = prov.complete("", "", "Reply with the single word OK.")
-                return _redirect("/providers", f"{s.ollama_model} answered “{r.text.strip()[:40]}” in "
-                                               f"{time.monotonic() - t0:.1f}s (includes loading the model).")
-            if which == "openai":
-                from ..providers.openai_compat import OpenAICompatProvider
-                prov = OpenAICompatProvider(s.openai_base_url, s.openai_model, s.openai_key, 200, timeout=60)
-                r = prov.complete("", "", "Reply with the single word OK.")
-                return _redirect("/providers", f"{s.openai_model} answered “{r.text.strip()[:40]}” in "
-                                               f"{time.monotonic() - t0:.1f}s ({r.usage.input_tokens}+{r.usage.output_tokens} tokens).")
-            if s.provider == "anthropic":
-                prov = app.state.worker.provider_factory()
-            else:
-                from ..providers.anthropic_provider import AnthropicProvider
-                prov = AnthropicProvider(model=s.model, effort=s.effort, api_key=s.anthropic_key or None)
-            n = prov.count_tokens("", "", "Connection test from Captionizerr.")
-        except Exception as e:
-            return _redirect("/providers", f"{which} test failed: {type(e).__name__}: {str(e)[:160]}", "warn")
-        return _redirect("/providers", f"Anthropic works ({s.model}): counted {n} tokens in {time.monotonic() - t0:.1f}s, at no cost.")
+    # ------------------------------------------------------------------ settings + setup wizard
+    from .settings_ui import register_settings
+    register_settings(app, render, _redirect, _same_origin)

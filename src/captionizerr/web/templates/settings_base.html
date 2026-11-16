@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{% for k, l in sections if k == section %}{{ l }}{% endfor %} · Settings · Captionizerr{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<nav class="subnav" aria-label="Settings sections">
+  {% for key, label in sections %}<a href="/settings/{{ key }}" class="{{ 'on' if key == section }}" {{ 'aria-current=page' if key == section }}>{{ label }}</a>{% endfor %}
+</nav>
+{% block panel %}{% endblock %}
+{% endblock %}

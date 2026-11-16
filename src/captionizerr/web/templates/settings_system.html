@@ -1,0 +1,22 @@
+{% extends "settings_base.html" %}
+{% block panel %}
+<section class="card">
+  <h2>Storage and cleanup</h2>
+  <p class="small muted">Runs daily: interrupted-extraction leftovers, cached source tracks unused for 60 days (1 GB cap), editor backups beyond the newest {{ keep.history }} per file or {{ keep.days }} days, and unpaid failed or skipped jobs. Our subtitle files whose video is gone are moved to <span class="mono">config/orphans</span> (after two sightings a day apart) and deleted from there after 30 days. A database snapshot is kept in <span class="mono">config/backup</span>. Nothing else in your library is touched.</p>
+  <div class="grid stats">{% for k, b in storage.items() %}<div class="stat"><span class="small muted">{{ k }}</span><b>{{ '%.1f'|format(b / 1048576) }} MB</b></div>{% endfor %}</div>
+  <p class="small muted">{% if last %}Last run {{ last_when }} · {{ last.get('seconds', 0) }} s{% if last.get('orphans_moved') %} · {{ last.orphans_moved }} orphan(s) moved{% endif %}{% else %}Not run yet{% endif %}.</p>
+  <form method="post" action="/maintenance/run"><button>Run cleanup now</button></form>
+</section>
+{% if overridden %}<section class="card"><h2>Changed here</h2>
+  <p class="small muted">Saved on these pages, overriding the server's environment settings. Reset one to use the environment value again.</p>
+  <div class="tw"><table class="small"><thead><tr><th>Setting</th><th>Here</th><th>Environment</th><th></th></tr></thead><tbody>
+  {% for o in overridden %}<tr><td>{{ o.label }}</td><td class="mono">{{ o.value if o.value is string or o.value is not iterable else o.value|join(', ') }}</td>
+    <td class="mono muted">{{ (o.env if o.env is string or o.env is not iterable else o.env|join(', ')) or '(empty)' }}</td>
+    <td><form method="post" action="/settings/reset" class="inline"><input type="hidden" name="key" value="{{ o.key }}"><button class="small">Reset</button></form></td></tr>{% endfor %}
+  </tbody></table></div>
+  <form method="post" action="/settings/reset" class="actions"><input type="hidden" name="key" value="all"><button class="small">Reset all</button></form>
+</section>{% endif %}
+<section class="card"><h2>About</h2>
+  <p class="small">Captionizerr {{ version }} · <a href="https://github.com/captionizerr/captionizerr" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/captionizerr/captionizerr/issues" target="_blank" rel="noopener">Report a problem</a> · <a href="/setup">Run the setup wizard again</a></p>
+</section>
+{% endblock %}

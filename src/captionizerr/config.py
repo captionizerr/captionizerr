@@ -32,6 +32,8 @@ class Settings:
     webhook_key: str = field(default="", repr=False)
     anthropic_key: str = field(default="", repr=False)
     ui_user: str = "admin"
+    ui_password_hash: str = field(default="", repr=False)    # set from the UI (secret_store), salted PBKDF2
+    secret_sources: dict = field(default_factory=dict)       # field -> file | env | ui | None
     ui_password: str = field(default="", repr=False)        # set it to require a login for the web UI (HTTP Basic); empty = open (LAN only!)
     languages: list[str] = field(default_factory=list)   # no default: chosen at first run
     model: str = "claude-opus-5-5"
@@ -164,7 +166,7 @@ class Settings:
         "tone": "str", "songs": "str", "max_line": "int", "target_cps": "float",
         "ntfy_url": "str", "ntfy_topic": "str", "public_url": "str", "jellyfin_url": "str",
         "jellyfin_path_map": "pairs", "plex_url": "str", "plex_path_map": "pairs", "sonarr_url": "str", "radarr_url": "str",
-        "source_langs": "list", "any_source": "bool", "bazarr_url": "str", "auto_notes": "bool",
+        "ui_user": "str", "opensubtitles_user": "str", "source_langs": "list", "any_source": "bool", "bazarr_url": "str", "auto_notes": "bool",
         "provider": "str", "ollama_url": "str", "ollama_model": "str", "ollama_num_ctx": "int",
         "ollama_max_output": "int", "openai_base_url": "str", "openai_model": "str", "openai_price_in": "float",
         "openai_price_out": "float", "openai_max_output": "int",
@@ -189,6 +191,10 @@ class Settings:
     @property
     def feedback_dir(self) -> Path:
         return Path(self.data_dir) / "feedback"
+
+    @property
+    def secrets_dir(self) -> Path:
+        return Path(self.data_dir) / "secrets.json"
 
     @property
     def secrets_status(self) -> dict[str, bool]:

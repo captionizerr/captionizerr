@@ -62,14 +62,67 @@ button.small{padding:4px 10px;font-size:12.5px}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 form.inline{display:inline}
 label.f{display:grid;gap:4px;font-weight:600;font-size:13px}
-label.f span.h{font-weight:400;color:var(--muted);font-size:12.5px}
-input[type=text],input[type=number],input[type=url],select,textarea{font:14px var(--sans);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%}
+label.f span.h,.f span.h,.secret .h{font-weight:400;color:var(--muted);font-size:12.5px}
+input[type=text],input[type=number],input[type=url],input[type=password],input[type=search],select,textarea{font:14px var(--sans);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%}
 textarea{font-family:var(--mono);font-size:12.5px;min-height:220px;resize:vertical}
 .fields{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{font-size:12.5px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);text-decoration:none;color:var(--muted)}
 .chip.on{border-color:var(--accent);color:var(--fg);background:var(--accent-soft)}
 .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
+
+/* --- settings, setup, tests --- */
+.h,.mono,.sub{overflow-wrap:anywhere}
+.subnav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:4px 0 18px}
+.subnav a{padding:8px 12px;text-decoration:none;color:var(--muted);border-bottom:2px solid transparent;font-weight:600}
+.subnav a.on{color:var(--fg);border-color:var(--accent-fill)}
+.subnav a:hover{color:var(--fg)}
+section.card h2 .pill{font-weight:600;vertical-align:middle}
+.svc{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.svc h3{font-size:14px;margin:0 0 8px}
+.f.check{display:flex;gap:10px;align-items:flex-start;font-weight:600}
+.f.check input{margin-top:3px}
+.f.check span.h{display:block}
+.row-inline{display:flex;gap:8px;align-items:center}
+.row-inline input,.row-inline select{flex:1;min-width:0}
+.lockline{padding:6px 0}
+.secret label{font-weight:600;font-size:13px}
+.secret{display:grid;gap:4px}
+.savebar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;position:sticky;bottom:0;background:var(--bg);padding:12px 0;border-top:1px solid var(--line);margin-top:4px;z-index:3}
+.testbox{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}
+.test-result{font-size:12.5px}
+.test-result.ok{color:var(--ok)} .test-result.bad{color:var(--bad)}
+button.linkish{background:none;border:0;color:var(--muted);text-decoration:underline;padding:2px 4px}
+.btn.small{padding:4px 10px;font-size:12.5px}
+.choice{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.choice .opt{display:grid;gap:4px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer}
+.choice .opt:has(input:checked){border-color:var(--accent-fill);background:var(--accent-soft)}
+.choice .opt input{justify-self:start}
+details.adv{margin-top:12px}
+details.adv summary{cursor:pointer;color:var(--muted);font-weight:600;font-size:13px}
+.stats{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:10px 0}
+.stat{display:grid;gap:2px;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.setup{max-width:760px;margin:0 auto}
+.stepper{display:flex;gap:6px;list-style:none;padding:0;margin:0 0 16px;flex-wrap:wrap;counter-reset:s}
+.stepper li{counter-increment:s}
+.stepper a{display:block;padding:6px 10px;border-radius:99px;text-decoration:none;font-size:12.5px;color:var(--muted);border:1px solid var(--line)}
+.stepper a::before{content:counter(s) ". "}
+.stepper li.on a{color:#14171c;background:var(--accent-fill);border-color:var(--accent-fill);font-weight:700}
+.stepper li.done a{color:var(--ok);border-color:currentColor}
+.hero h1{font-size:24px}
+.checklist{list-style:none;padding:0;display:grid;gap:8px}
+.checklist li::before{display:inline-block;width:1.4em;font-weight:700}
+.checklist li.ok::before{content:"✓";color:var(--ok)} .checklist li.warn::before{content:"•";color:var(--warn)} .checklist li.bad::before{content:"✗";color:var(--bad)}
+.btn.primary-outline{border-color:var(--accent-fill)}
+.attn{border-left:3px solid var(--bad)}
+.kpis{display:flex;gap:16px;flex-wrap:wrap}
+.kpi{display:grid}
+.kpi b{font-size:22px;font-variant-numeric:tabular-nums}
+.kpi a{text-decoration:none}
+.progress{height:6px;background:var(--line);border-radius:99px;overflow:hidden;min-width:80px}
+.progress span{display:block;height:100%;background:var(--ok)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.toolbar input[type=search]{flex:1 1 200px;min-width:0;font:14px var(--sans);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -78,15 +131,42 @@ textarea{font-family:var(--mono);font-size:12.5px;min-height:220px;resize:vertic
   <a class="brand" href="/">{% include "_mark.html" %}Captionizerr</a>
   <nav class="main" aria-label="Main">
     <a href="/" class="{{ 'on' if nav=='dashboard' or nav=='job' }}">Dashboard</a>
-    <a href="/library" class="{{ 'on' if nav in ('library','series','edit') }}">Library</a>
-    <a href="/settings" class="{{ 'on' if nav=='settings' }}">Settings</a>
-    <a href="/providers" class="{{ 'on' if nav=='providers' }}">AI providers</a>
+    <a href="/library" class="{{ 'on' if nav in ('library','series','edit','share') }}">Library</a>
+    <a href="/settings" class="{{ 'on' if nav.startswith('settings') or nav == 'setup' }}">Settings</a>
   </nav>
   <span class="ver">v{{ version }}</span>
 </div></header>
 <main class="wrap">
+{% if setup_needed and nav != 'setup' %}<div class="flash warn" role="status"><b>Setup isn't finished.</b> <a href="/setup">Continue the setup</a> to choose an AI provider and languages.</div>{% endif %}
 {% if msg %}<div class="flash {{ lvl }}" role="status">{{ msg }}</div>{% endif %}
 {% block content %}{% endblock %}
 </main>
+<script>
+// Test / Set up webhook / Find models buttons (settings pages and the setup wizard)
+async function postForm(url, form){ const r = await fetch(url, {method:'POST', body: new FormData(form)});
+  const j = await r.json().catch(() => ({ok:false, message:'HTTP ' + r.status})); return j; }
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-test],[data-connect]'); if (!b) return;
+  const out = b.parentElement.querySelector('.test-result'); const form = b.closest('form');
+  b.disabled = true; out.className = 'test-result'; out.textContent = b.dataset.test ? 'Testing…' : 'Setting up…';
+  try { const j = await postForm(b.dataset.test ? '/settings/test/' + b.dataset.test : '/settings/connect/' + b.dataset.connect, form);
+        out.textContent = (j.ok ? '✓ ' : '✗ ') + j.message; out.classList.add(j.ok ? 'ok' : 'bad'); }
+  catch (err) { out.textContent = '✗ ' + err.message; out.classList.add('bad'); }
+  b.disabled = false;
+});
+document.getElementById('oll-find')?.addEventListener('click', async () => {
+  const hint = document.getElementById('oll-hint'), sel = document.getElementById('oll-model');
+  hint.textContent = 'Asking Ollama…';
+  try { const r = await fetch('/settings/ollama/models', {method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({url: document.getElementById('oll-url').value})});
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+        if (!j.models.length) { hint.textContent = 'Ollama has no models yet: ollama pull gemma3:27b'; return; }
+        const cur = sel.value; sel.replaceChildren();
+        for (const m of j.models) { const o = document.createElement('option'); o.value = m.name;
+          o.textContent = `${m.name} · ${m.params || '?'} · ${m.size_gb} GB`; o.selected = m.name === cur; sel.append(o); }
+        hint.textContent = `${j.models.length} model(s) found.`; }
+  catch (err) { hint.textContent = "Couldn't reach Ollama: " + err.message; }
+});
+</script>
 </body>
 </html>

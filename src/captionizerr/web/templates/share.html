@@ -6,11 +6,8 @@
 <p class="sub mono" style="word-break:break-all">{{ fname }}</p>
 {% if shared %}<div class="flash ok" role="status">{{ 'OpenSubtitles already had this exact file' if shared.already else 'Shared' }} on {{ shared_when }}.{% if shared.url %} <a href="{{ shared.url }}" target="_blank" rel="noopener">Open on OpenSubtitles ↗</a>{% endif %}</div>{% endif %}
 {% if not configured %}
-<div class="card"><h2>Not set up</h2>
-  <p>Add your OpenSubtitles.org account to the environment file and restart:</p>
-  <pre class="mono">CAPTIONIZERR_OPENSUBTITLES_USER=…
-CAPTIONIZERR_OPENSUBTITLES_PASSWORD=…</pre>
-  <p class="small muted">OpenSubtitles identifies upload clients by their user agent. If they assign you one, set CAPTIONIZERR_OPENSUBTITLES_USER_AGENT.</p></div>
+<div class="card"><h2>Not set up yet</h2>
+  <p>Add your OpenSubtitles.org username and password in <a href="/settings/connections">Settings → Connections</a>, test the login there, then come back.</p></div>
 {% else %}
 <form method="post" action="/share" class="card">
   <input type="hidden" name="path" value="{{ path }}"><input type="hidden" name="lang" value="{{ lang }}">

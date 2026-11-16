@@ -1,0 +1,31 @@
+{# Reusable form pieces. Secrets are write-only: the value is never rendered. #}
+{% macro secret(field, info, label=None, placeholder="", hint="", next="") -%}
+{% set i = info[field] %}
+<div class="f secret">
+  <label for="sec-{{ field }}">{{ label or i.label }}</label>
+  {% if i.locked %}
+    <div class="lockline"><span class="pill done">Set on the server</span> <span class="small muted">from the {{ 'secret file' if i.source == 'file' else 'environment' }} (<span class="mono">{{ i.var }}{{ '_FILE' if i.source == 'file' }}</span>); change it there.</span></div>
+  {% else %}
+    <div class="row-inline">
+      <input type="password" id="sec-{{ field }}" name="secret:{{ field }}" autocomplete="new-password" spellcheck="false"
+             placeholder="{{ 'Saved · type to replace' if i.set else placeholder }}">
+      {% if i.set %}<span class="pill done" title="Stored in config/secrets.json, never shown">Saved</span>
+        <button class="small linkish" formaction="/settings/secret/{{ field }}/remove" formnovalidate
+                name="next" value="{{ next }}" onclick="return confirm('Remove the saved {{ i.label }}?')">Remove</button>{% endif %}
+    </div>
+  {% endif %}
+  {% if hint %}<span class="h">{{ hint|safe }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro test(service, label="Test") -%}
+<span class="testbox"><button type="button" class="small" data-test="{{ service }}">{{ label }}</button><span class="test-result" role="status" aria-live="polite"></span></span>
+{%- endmacro %}
+
+{% macro webhook(kind, state) -%}
+<span class="testbox">
+  {% if state == 'ok' %}<span class="pill done">Webhook connected</span>{% elif state == 'missing' %}<span class="pill needs_review">No webhook yet</span>{% endif %}
+  <button type="button" class="small" data-connect="{{ kind }}">{{ 'Re-create webhook' if state == 'ok' else 'Set up webhook' }}</button>
+  <span class="test-result" role="status" aria-live="polite"></span>
+</span>
+{%- endmacro %}

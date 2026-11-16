@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% from "_forms.html" import secret, test, webhook %}
+{% block title %}Setup · Captionizerr{% endblock %}
+{% block content %}
+<div class="setup">
+<ol class="stepper" aria-label="Setup steps">
+  {% for key, label in steps %}<li class="{{ 'on' if loop.index0 == index else ('done' if loop.index0 < index) }}" {{ 'aria-current=step' if loop.index0 == index }}><a href="/setup?step={{ key }}">{{ label }}</a></li>{% endfor %}
+</ol>
+{% set nxt = '/setup?step=' ~ next_step %}
+
+{% if step == 'welcome' %}
+<section class="card hero">
+  <h1>Welcome to Captionizerr</h1>
+  <p>Captionizerr translates the subtitles that come with your videos, timed to the exact file, and keeps the original's tone. This takes about five minutes: an AI provider, your languages, Sonarr and Radarr, and your media server. Everything can be changed later in Settings.</p>
+  <form method="post" action="/settings/security">
+    <input type="hidden" name="next" value="{{ nxt }}">
+    <h2>Protect this page <span class="pill">Recommended</span></h2>
+    <p class="small muted">Anyone who can open Captionizerr can change settings and spend your budget. Set a password unless this network is only yours.</p>
+    <div class="fields">
+      <label class="f">Username <input type="text" name="ui_user" value="{{ v.ui_user }}" autocomplete="username"></label>
+      {{ secret('ui_password', secrets, label='Password', placeholder='At least 8 characters', next='/setup') }}
+      {% if not secrets.ui_password.locked %}<label class="f">Repeat the password <input type="password" name="password_again" autocomplete="new-password"></label>{% endif %}
+    </div>
+    <div class="actions"><button class="primary">Continue</button><a class="btn" href="{{ nxt }}">Skip for now</a></div>
+  </form>
+</section>
+
+{% elif step == 'ai' %}
+<form method="post" action="/settings/ai" class="card" id="aiform">
+  <input type="hidden" name="next" value="{{ nxt }}">
+  <h1>Choose the AI</h1>
+  <div class="choice" role="radiogroup" aria-label="Provider">
+    <label class="opt"><input type="radio" name="provider" value="anthropic" {{ 'checked' if v.provider == 'anthropic' }}><b>Anthropic Claude</b><span class="small muted">Best quality; about $0.30 per episode with Opus, half that for backlog.</span></label>
+    <label class="opt"><input type="radio" name="provider" value="ollama" {{ 'checked' if v.provider == 'ollama' }}><b>Local model (Ollama)</b><span class="small muted">Free and private; slower and weaker.</span></label>
+    <label class="opt"><input type="radio" name="provider" value="openai" {{ 'checked' if v.provider == 'openai' }}><b>OpenAI-compatible</b><span class="small muted">Any /chat/completions API.</span></label>
+  </div>
+  <div data-for="anthropic"><div class="fields">
+    {{ secret('anthropic_key', secrets, placeholder='sk-ant-…', hint='From <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a> → API keys.', next='/setup?step=ai') }}
+    <label class="f">Model <select name="model">{% for m in models %}<option value="{{ m.id }}" {{ 'selected' if m.id == v.model }}>{{ m.id }} · ~${{ '%.2f'|format(m.ep) }}/episode</option>{% endfor %}</select></label>
+    <input type="hidden" name="effort" value="{{ v.effort }}">
+  </div><div class="actions">{{ test('anthropic', 'Test key (free)') }}</div></div>
+  <div data-for="ollama"><div class="fields">
+    <label class="f">Ollama address <input type="url" name="ollama_url" id="oll-url" value="{{ v.ollama_url }}"></label>
+    <label class="f">Model <span class="row-inline"><select name="ollama_model" id="oll-model">{% if v.ollama_model %}<option selected>{{ v.ollama_model }}</option>{% else %}<option value="">Find models first</option>{% endif %}</select><button type="button" class="small" id="oll-find">Find models</button></span><span class="h" id="oll-hint"></span></label>
+    <input type="hidden" name="ollama_num_ctx" value="{{ v.ollama_num_ctx }}">
+  </div><div class="actions">{{ test('ollama') }}</div></div>
+  <div data-for="openai"><div class="fields">
+    <label class="f">Base URL <input type="url" name="openai_base_url" value="{{ v.openai_base_url }}" placeholder="https://api.openai.com/v1"></label>
+    {{ secret('openai_key', secrets, label='API key', next='/setup?step=ai') }}
+    <label class="f">Model <input type="text" name="openai_model" value="{{ v.openai_model }}"></label>
+  </div><div class="actions">{{ test('openai') }}</div></div>
+  <div class="actions"><button class="primary">Save and continue</button><a class="btn" href="/setup?step={{ prev_step }}">Back</a></div>
+</form>
+<script>
+const f = document.getElementById('aiform');
+function show(){ const p = f.querySelector('input[name=provider]:checked')?.value || 'anthropic';
+  f.querySelectorAll('[data-for]').forEach(c => c.hidden = c.dataset.for !== p); }
+f.addEventListener('change', e => { if (e.target.name === 'provider') show(); }); show();
+</script>
+
+{% elif step == 'languages' %}
+<form method="post" action="/settings/general" class="card">
+  <input type="hidden" name="next" value="{{ nxt }}">
+  <h1>Languages and budget</h1>
+  <div class="fields">
+    <label class="f">Translate into <input type="text" name="languages" value="{{ v.languages|join(', ') }}" required placeholder="e.g. de or ru, uk"><span class="h">ISO codes, comma-separated.</span></label>
+    <label class="f">Translate from <input type="text" name="source_langs" value="{{ v.source_langs|join(', ') }}" placeholder="en"><span class="h">Usually en.</span></label>
+    <input type="hidden" name="any_source" value="{{ '1' if v.any_source }}">
+    <label class="f">Monthly cap, USD <input type="number" name="monthly_cap_usd" min="0" step="0.5" value="{{ v.monthly_cap_usd }}"><span class="h">Translations pause at the cap; you get a notification at 80 %.</span></label>
+    <input type="hidden" name="alert_pct" value="{{ (v.alert_at * 100)|round|int }}">
+  </div>
+  <div class="actions"><button class="primary">Save and continue</button><a class="btn" href="/setup?step={{ prev_step }}">Back</a></div>
+</form>
+
+{% elif step == 'arr' %}
+<form method="post" action="/settings/connections" class="card">
+  <input type="hidden" name="next" value="/setup?step=arr">
+  <h1>Sonarr and Radarr</h1>
+  <p class="muted">Save the address and API key (Sonarr/Radarr → Settings → General), test, then let Captionizerr add its webhook to each app.</p>
+  {% for kind, port in (('sonarr', 8989), ('radarr', 7878)) %}
+  <div class="svc"><h3>{{ kind|title }}</h3>
+    <div class="fields">
+      <label class="f">Address <input type="url" name="{{ kind }}_url" value="{{ v[kind ~ '_url'] }}" placeholder="http://{{ kind }}:{{ port }}"></label>
+      {{ secret(kind ~ '_key', secrets, label='API key', next='/setup?step=arr') }}
+    </div>
+    <div class="actions">{{ test(kind) }} {{ webhook(kind, hooks[kind]) }}</div>
+  </div>
+  {% endfor %}
+  <div class="actions"><button class="primary">Save</button><a class="btn primary-outline" href="{{ nxt }}">Continue</a><a class="btn" href="/setup?step={{ prev_step }}">Back</a></div>
+</form>
+
+{% elif step == 'media' %}
+<form method="post" action="/settings/connections" class="card">
+  <input type="hidden" name="next" value="{{ nxt }}">
+  <h1>Media server and extras</h1>
+  <p class="muted">All optional. A media server is told to rescan as soon as a translation is written.</p>
+  <div class="svc"><h3>Jellyfin or Emby</h3><div class="fields">
+    <label class="f">Address <input type="url" name="jellyfin_url" value="{{ v.jellyfin_url }}" placeholder="http://jellyfin:8096"></label>
+    {{ secret('jellyfin_key', secrets, label='API key', next='/setup?step=media') }}</div>
+    <div class="actions">{{ test('jellyfin') }}</div></div>
+  <div class="svc"><h3>Plex</h3><div class="fields">
+    <label class="f">Address <input type="url" name="plex_url" value="{{ v.plex_url }}" placeholder="http://plex:32400"></label>
+    {{ secret('plex_token', secrets, label='Token', next='/setup?step=media') }}</div>
+    <div class="actions">{{ test('plex') }}</div></div>
+  <div class="svc"><h3>Bazarr</h3><p class="small muted">Fetches a subtitle to translate when a video has none.</p><div class="fields">
+    <label class="f">Address <input type="url" name="bazarr_url" value="{{ v.bazarr_url }}" placeholder="http://bazarr:6767"></label>
+    {{ secret('bazarr_key', secrets, label='API key', next='/setup?step=media') }}</div>
+    <div class="actions">{{ test('bazarr') }}</div></div>
+  <div class="actions"><button class="primary">Save and continue</button><a class="btn" href="{{ nxt }}">Skip</a><a class="btn" href="/setup?step={{ prev_step }}">Back</a></div>
+</form>
+
+{% else %}
+<section class="card hero">
+  <h1>Ready</h1>
+  <ul class="checklist">
+    <li class="{{ 'ok' if login else 'warn' }}">Login: {{ 'on' if login else 'off (fine on a private network)' }}</li>
+    <li class="{{ 'ok' if (v.provider != 'anthropic' or secrets.anthropic_key.set) else 'bad' }}">AI: {{ {'anthropic': 'Anthropic ' ~ v.model, 'ollama': 'Ollama ' ~ v.ollama_model, 'openai': v.openai_model}[v.provider] }}{{ '' if (v.provider != 'anthropic' or secrets.anthropic_key.set) else ': no API key yet' }}</li>
+    <li class="{{ 'ok' if v.languages else 'bad' }}">Translate into: {{ v.languages|join(', ') or 'not set' }} · budget ${{ '%.0f'|format(v.monthly_cap_usd) }}/month</li>
+    <li class="{{ 'ok' if secrets.sonarr_key.set or secrets.radarr_key.set else 'warn' }}">Sonarr/Radarr: {{ 'connected' if secrets.sonarr_key.set or secrets.radarr_key.set else 'not connected (you can still translate by hand)' }}</li>
+    <li class="{{ 'ok' if secrets.jellyfin_key.set or secrets.plex_token.set else 'warn' }}">Media server rescan: {{ 'on' if secrets.jellyfin_key.set or secrets.plex_token.set else 'off' }}</li>
+  </ul>
+  <form method="post" action="/setup/finish" class="actions"><button class="primary">Go to the dashboard</button><a class="btn" href="/library">Open the library</a></form>
+</section>
+{% endif %}
+</div>
+{% endblock %}

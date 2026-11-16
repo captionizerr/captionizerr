@@ -300,7 +300,7 @@ def test_maintenance_run_reports_and_metrics(tmp_path):
     assert r.status_code == 303 and "Cleanup+done" in r.headers["location"]
     m = c.get("/metrics").text
     assert 'captionizerr_storage_bytes{kind="cache"}' in m and 'captionizerr_jobs{state="batched"} 0' in m
-    assert "Storage and cleanup" in c.get("/settings").text
+    assert "Storage and cleanup" in c.get("/settings/system").text
 
 
 # ------------------------------------------------------------------ local (Ollama) and OpenAI-compatible
@@ -354,20 +354,20 @@ def test_openai_compat_parses_usage():
 def test_ollama_setup_in_ui(tmp_path, monkeypatch):
     app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
     c = TestClient(app)
-    assert "Local model (Ollama)" in c.get("/providers").text
+    assert "Local model (Ollama)" in c.get("/settings/ai").text
     from captionizerr.providers import ollama
     monkeypatch.setattr(ollama, "list_models", lambda url: [{"name": "gemma3:27b", "size_gb": 17.0, "params": "27B", "quant": ""}])
-    assert c.post("/providers/ollama/models", json={"url": "http://box:11434"}).status_code == 403
-    r = c.post("/providers/ollama/models", json={"url": "http://box:11434"}, headers=SAME)
+    assert c.post("/settings/ollama/models", json={"url": "http://box:11434"}).status_code == 403
+    r = c.post("/settings/ollama/models", json={"url": "http://box:11434"}, headers=SAME)
     assert r.json()["models"][0]["name"] == "gemma3:27b"
-    r = c.post("/providers/ollama", data={"ollama_url": "http://box:11434", "ollama_model": "", "provider": "ollama"},
+    r = c.post("/settings/ai", data={"provider": "ollama", "ollama_url": "http://box:11434", "ollama_model": ""},
                headers=SAME, follow_redirects=False)
     assert "pick+one" in r.headers["location"]
-    r = c.post("/providers/ollama", data={"ollama_url": "http://box:11434", "ollama_model": "gemma3:27b",
-                                          "ollama_num_ctx": "32768", "provider": "ollama"}, headers=SAME, follow_redirects=False)
+    c.post("/settings/ai", data={"provider": "ollama", "ollama_url": "http://box:11434", "ollama_model": "gemma3:27b",
+                                 "ollama_num_ctx": "32768"}, headers=SAME)
     s = app.state.settings
     assert s.provider == "ollama" and s.ollama_num_ctx == 32768 and s.active_model == "gemma3:27b"
-    assert app.state.store.load_settings()["provider"] == "ollama"          # survives a restart
+    assert app.state.store.load_settings()["provider"] == "ollama"
     from captionizerr.providers import make_provider
     assert make_provider(s).name == "ollama"
 

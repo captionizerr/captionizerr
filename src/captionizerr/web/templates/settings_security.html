@@ -1,0 +1,32 @@
+{% extends "settings_base.html" %}
+{% from "_forms.html" import secret %}
+{% block panel %}
+<form method="post" action="/settings/security">
+  <section class="card">
+    <h2>Login {% if login %}<span class="pill done">On</span>{% else %}<span class="pill needs_review">Off</span>{% endif %}</h2>
+    <p class="small muted">{% if login %}The browser asks for this username and password.{% else %}Anyone who can open this page can change settings and spend your budget. Fine on a private home network; set a password if others can reach it.{% endif %}
+      Ten wrong attempts lock an address out for 15 minutes. The password is stored as a salted hash.</p>
+    <div class="fields">
+      <label class="f">Username <input type="text" name="ui_user" value="{{ v.ui_user }}" autocomplete="username"></label>
+      {{ secret('ui_password', secrets, label='New password' if login else 'Password', placeholder='At least 8 characters', next='/settings/security') }}
+      {% if not secrets.ui_password.locked %}<label class="f">Repeat the password <input type="password" name="password_again" autocomplete="new-password"></label>{% endif %}
+    </div>
+    <p class="small muted">Over plain http the browser sends it unencrypted. For anything beyond your LAN, put Captionizerr behind HTTPS (see SECURITY.md: a three-line Caddy example).</p>
+  </section>
+  <section class="card">
+    <h2>Webhook key</h2>
+    <p class="small muted">Sonarr and Radarr prove their webhook calls with this key (as the webhook password). <b>Set up webhook</b> in Connections fills it in for you.</p>
+    {% if secrets.webhook_key.locked %}<p><span class="pill done">Set on the server</span> <span class="small muted">({{ secrets.webhook_key.var }}{{ '_FILE' if secrets.webhook_key.source == 'file' }})</span></p>
+    {% else %}
+      <p>{% if webhook_shown %}<span class="mono" style="user-select:all">{{ webhook_shown }}</span>{% else %}<a class="btn small" href="/settings/security?reveal=webhook">Show key</a>{% endif %}
+        <button class="small" formaction="/settings/webhook/regenerate" formnovalidate onclick="return confirm('Make a new webhook key? Connected Sonarr/Radarr webhooks are updated automatically.')">Make a new key</button></p>
+      <p class="small muted">Webhook addresses: <span class="mono">{{ hook_base }}/api/hooks/sonarr</span> and <span class="mono">…/radarr</span>, username anything, password = the key.</p>
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>This page's address</h2>
+    <div class="fields"><label class="f">Address <input type="url" name="public_url" value="{{ v.public_url }}" placeholder="{{ hook_base }}"><span class="h">Used in notification links and for the webhooks Captionizerr creates. Empty: the address you're using now.</span></label></div>
+  </section>
+  <div class="savebar"><button class="primary">Save</button></div>
+</form>
+{% endblock %}
