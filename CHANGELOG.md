@@ -4,6 +4,12 @@
 
 - **CLI:** `captionizerr translate` now requires `--lang` instead of silently defaulting to Russian.
 - Examples on the website, in the README and in the UI no longer assume Russian.
+- **Review accuracy:**
+  - Short ALL-CAPS on-screen text such as `TEST SUBJECT: AI COLEMAN` is no longer mistaken for a speaker label.
+  - Style-only issues (a leftover speaker label, lost italics) still get a fix attempt, but no longer put a whole job into "needs review".
+  - The editor's flags now come from the pipeline's own validator, with the same tolerances, so the editor and the job status never disagree.
+  - A job's detail names its open lines ("open: #296 …"), and **Review** opens the editor on the flagged lines.
+- `deploy/deploy.sh` waits for running translations before restarting (`--force` to skip).
 
 ## 0.2.2
 
