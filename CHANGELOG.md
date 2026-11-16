@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.4 — 2026-11-16
+
 - **Re-translate:**
   - A button on a job's page, and the series page can now select already-translated episodes.
   - The file (and its forced track) is replaced. The previous version stays in the editor's history.
