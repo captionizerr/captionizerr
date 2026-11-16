@@ -12,4 +12,6 @@
 - Upgrades re-time the previous translation (keeping edits) instead of re-translating; forced tracks get `.forced` translations.
 - Open backlog batches are reserved against the budget; the editor opens without blocking while a source track is extracted.
 - Plex and Emby rescans; the Settings page shows overrides of environment values with reset.
+- Opt-in "Share on OpenSubtitles" (AI-translation flag, duplicate check, review confirmation).
+- Validator flags leftover speaker labels and lost italics.
 - `captionizerr eval` / `eval-build` quality check-set (chrF), `backfill-sources`, `--provider` for the CLI.

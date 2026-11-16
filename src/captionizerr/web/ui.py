@@ -419,6 +419,71 @@ def register(app: FastAPI) -> None:
         r.tr = text
         return {"text": text, "cost": round(c, 4), "flags": r.flags(profile)}
 
+    # ------------------------------------------------------------------ share on OpenSubtitles
+    def share_target(path: str, lang: str, forced: bool) -> tuple[Path, Path]:
+        video = s.map_path(path)
+        if not s.in_library(video) or not video.is_file():
+            raise HTTPException(404, "video not in the library")
+        if not lang.replace("-", "").isalpha():
+            raise HTTPException(400, "bad language")
+        sub = next((t for t in (target_path(video, lang, "srt", forced), target_path(video, lang, "ass", forced))
+                    if t.is_file()), None)
+        if sub is None:
+            raise HTTPException(404, "no Captionizerr translation to share")
+        return video, sub
+
+    def os_client():
+        from ..opensubtitles import Client
+        return Client(s.opensubtitles_user, s.opensubtitles_password,
+                      s.opensubtitles_user_agent or f"Captionizerr v{__version__}")
+
+    def safe_back(back: str) -> str:
+        return back if back.startswith("/") and not back.startswith("//") else "/"
+
+    @app.get("/share")
+    def share_page(request: Request, path: str, lang: str, forced: str = "", back: str = ""):
+        video, sub = share_target(path, lang, bool(forced))
+        configured = bool(s.opensubtitles_user and s.opensubtitles_password)
+        from ..opensubtitles import Guess
+        guess, err = Guess(), ""
+        if configured:
+            try:
+                c = os_client()
+                c.login()
+                guess = c.guess(video.name)
+            except Exception as e:
+                err = str(e)[:200]
+        shared = store.share(str(sub))
+        return render(request, "share.html", path=path, lang=lang, forced=bool(forced), back=safe_back(back),
+                      fname=sub.name, configured=configured, guess=guess, guess_error=err, release=video.stem,
+                      translator=f"Captionizerr (AI: {s.active_model})", hd=bool(re.search(r"(720|1080|2160)p", video.name)),
+                      comment=f"AI translation ({s.active_model}) of this release's own subtitles, timed to the file; "
+                              "reviewed by the uploader.",
+                      shared=shared, shared_when=datetime.fromtimestamp(shared["at"]).strftime("%d %b %Y") if shared else "")
+
+    @app.post("/share")
+    async def share_upload(request: Request):
+        _same_origin(request)
+        f = await request.form()
+        path, lang, forced = str(f.get("path", "")), str(f.get("lang", "")), bool(f.get("forced"))
+        back = f"/share?{urllib.parse.urlencode({'path': path, 'lang': lang, 'forced': '1' if forced else '', 'back': safe_back(str(f.get('back', '')))})}"
+        if not (f.get("reviewed") and f.get("rights")):
+            return _redirect(back, "Tick both confirmations first.", "warn")
+        video, sub = share_target(path, lang, forced)
+        imdb = str(f.get("imdb_id", "")).strip()
+        if not re.fullmatch(r"(tt)?\d{5,10}", imdb):
+            return _redirect(back, "The IMDb ID looks like tt1234567.", "warn")
+        try:
+            c = os_client()
+            c.login()
+            r = c.upload(sub, video, lang, imdb, str(f.get("release", ""))[:200], str(f.get("comment", ""))[:500],
+                         str(f.get("translator", ""))[:100], forced=forced,
+                         hd=bool(re.search(r"(720|1080|2160)p", video.name)))
+        except Exception as e:
+            return _redirect(back, f"Not uploaded: {str(e)[:200]}", "warn")
+        store.record_share(str(sub), r["url"], r["already"])
+        return _redirect(back, "OpenSubtitles already has this exact file." if r["already"] else "Uploaded to OpenSubtitles. Thank you!")
+
     # ------------------------------------------------------------------ settings
     @app.get("/settings")
     def settings_page(request: Request):

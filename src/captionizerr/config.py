@@ -38,6 +38,9 @@ class Settings:
     jellyfin_url: str = ""
     jellyfin_key: str = ""
     jellyfin_path_map: list[tuple[str, str]] = field(default_factory=list)   # (our path prefix, Jellyfin's)
+    opensubtitles_user: str = ""
+    opensubtitles_password: str = ""
+    opensubtitles_user_agent: str = ""      # default "Captionizerr v<version>"; OpenSubtitles may require a registered one
     plex_url: str = ""
     plex_token: str = ""
     plex_path_map: list[tuple[str, str]] = field(default_factory=list)       # (our path prefix, Plex's)
@@ -102,6 +105,9 @@ class Settings:
             jellyfin_url=_env("JELLYFIN_URL"),
             jellyfin_key=_env("JELLYFIN_KEY"),
             jellyfin_path_map=pairs("JELLYFIN_PATH_MAP"),
+            opensubtitles_user=_env("OPENSUBTITLES_USER"),
+            opensubtitles_password=_env("OPENSUBTITLES_PASSWORD"),
+            opensubtitles_user_agent=_env("OPENSUBTITLES_USER_AGENT"),
             plex_url=_env("PLEX_URL"),
             plex_token=_env("PLEX_TOKEN"),
             plex_path_map=pairs("PLEX_PATH_MAP"),
@@ -171,6 +177,7 @@ class Settings:
         return {"Anthropic API key": bool(os.environ.get("ANTHROPIC_API_KEY")),
                 "Webhook key": bool(self.webhook_key), "Sonarr API key": bool(self.sonarr_key),
                 "Radarr API key": bool(self.radarr_key), "Jellyfin API key": bool(self.jellyfin_key), "Plex token": bool(self.plex_token),
+                "OpenSubtitles login": bool(self.opensubtitles_user and self.opensubtitles_password),
                 "Bazarr API key": bool(self.bazarr_key), "OpenAI-compatible API key": bool(self.openai_key)}
 
     VIDEO_EXT = (".mkv", ".mp4", ".m4v", ".avi", ".mov", ".ts", ".webm")

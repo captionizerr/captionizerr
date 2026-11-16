@@ -19,16 +19,18 @@ _CYR_WORD = re.compile(r"[А-Яа-яЁёІіЇїЄєҐґ]{3,}")
 _WORD = re.compile(r"[^\W\d_]{2,}", re.UNICODE)
 _DIGITS = re.compile(r"\d+")
 _SPEAKER = re.compile(r"^\s*[A-Za-z][A-Za-z .'-]{0,24}:\s*")
+# a speaker label in any script at the start of a line: "Man #2:", "Мужчина:", "ANNA:"
+_LABEL_ANY = re.compile(r"(^|\n)\s*-?\s*[^\W\d_][\w .'#-]{0,24}:\s", re.UNICODE)
 # Latin tokens that legitimately appear in Cyrillic subtitles (Roman numerals, initialisms)
 _ALLOWED_LATIN = re.compile(r"^(?:[IVXLCDM]+|OK|DNA|FBI|CIA|USA|TV|DJ|PhD|vs)$")
 
-FIXABLE = {"leftover", "too_long", "too_many_lines", "too_fast", "tag_lost", "dropped", "boundary"}
+FIXABLE = {"label_left", "italics_lost", "leftover", "too_long", "too_many_lines", "too_fast", "tag_lost", "dropped", "boundary"}
 
 
 @dataclass
 class Issue:
     index: int
-    kind: str      # missing | dropped | boundary | leftover | too_long | too_many_lines | too_fast | tag_lost
+    kind: str      # missing | dropped | boundary | leftover | too_long | too_many_lines | too_fast | tag_lost | label_left | italics_lost
     detail: str
 
     @property
@@ -90,6 +92,12 @@ def check(cues: list[Cue], tr: dict[int, str | None], p: Profile,
                 issues.append(Issue(c.index, "leftover", f"looks untranslated: {' '.join(bad[:4])}"))
         elif p.target_lang != p.source_lang and plain(c.text).strip().lower() == body.strip().lower() and len(body) > 15:
             issues.append(Issue(c.index, "leftover", "identical to the source"))
+        if p.drop_sdh and _LABEL_ANY.search(plain(c.text)) and _LABEL_ANY.search(body) \
+                and not re.search(r"\d:\d", body):
+            issues.append(Issue(c.index, "label_left", "speaker label kept; drop it (it's a hearing-impaired tag)"))
+        src_plain = c.text.strip()
+        if src_plain.startswith("<i>") and src_plain.endswith("</i>") and "<i>" not in t:
+            issues.append(Issue(c.index, "italics_lost", "the source line is in italics (<i>…</i>); keep them"))
         if c.text.lstrip().startswith("{\\an8}") and not (c.lead_tags or t.lstrip().startswith("{\\an8}")):
             issues.append(Issue(c.index, "tag_lost", "positioning tag {\\an8} missing"))
 

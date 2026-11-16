@@ -509,3 +509,90 @@ def test_eval_build_and_run(tmp_path):
     assert "Пятая." in (made[0] / "reference.srt").read_text(encoding="utf-8")
     rep = evals.run(s.data_dir / "evals", FakeProvider())
     assert 50 < rep["chrf"] < 100 and rep["cases"][0]["flags"] == 0   # differs only on the edited line
+
+
+# ------------------------------------------------------------------ OpenSubtitles sharing
+def test_movie_hash_matches_reference_algorithm(tmp_path):
+    from captionizerr.opensubtitles import movie_hash
+    import random
+    data = random.Random(1).randbytes(300_000)
+    f = tmp_path / "v.mkv"
+    f.write_bytes(data)
+    words = lambda b: sum(int.from_bytes(b[i:i + 8], "little") for i in range(0, len(b), 8))
+    expect = (len(data) + words(data[:65536]) + words(data[-65536:])) % 2 ** 64
+    assert movie_hash(f) == (f"{expect:016x}", len(data))
+
+
+class FakeOS:
+    def __init__(self, already=False):
+        self.calls, self.already = [], already
+
+    def LogIn(self, u, p, lang, ua):
+        self.calls.append(("LogIn", u, ua))
+        return {"status": "200 OK", "token": "tok"}
+
+    def GuessMovieFromString(self, token, names):
+        return {"status": "200 OK", "data": {names[0]: {"BestGuess": {"IDMovieIMDB": "1234567", "MovieName": "Northwind",
+                                                                      "MovieKind": "episode", "SeriesSeason": "2", "SeriesEpisode": "1"}}}}
+
+    def TryUploadSubtitles(self, token, sub):
+        self.calls.append(("Try", sub))
+        return {"status": "200 OK", "alreadyindb": 1 if self.already else 0, "data": [] if not self.already else
+                [{"IDSubtitle": "123"}]}
+
+    def UploadSubtitles(self, token, sub):
+        self.calls.append(("Upload", sub))
+        return {"status": "200 OK", "data": "https://www.opensubtitles.org/subtitles/999"}
+
+
+def test_upload_payload_is_flagged_and_complete(tmp_path):
+    import base64, gzip
+    from captionizerr.opensubtitles import Client
+    v = tmp_path / "Northwind - S02E01 WEBDL-1080p.mkv"
+    v.write_bytes(b"\0" * 200_000)
+    sub = tmp_path / "Northwind - S02E01 WEBDL-1080p.captionizerr.ru.forced.srt"
+    sub.write_text(SRT, encoding="utf-8")
+    fake = FakeOS()
+    c = Client("me", "pw", "Captionizerr v0.1.0", proxy=fake)
+    c.login()
+    assert c.guess(v.name).imdb_id == "1234567"
+    r = c.upload(sub, v, "ru", "tt1234567", v.stem, "AI", "Captionizerr", forced=True, hd=True)
+    assert r == {"already": False, "url": "https://www.opensubtitles.org/subtitles/999"}
+    up = [x for x in fake.calls if x[0] == "Upload"][0][1]
+    b = up["baseinfo"]
+    assert b["automatictranslation"] == "1" and b["foreignpartsonly"] == "1" and b["sublanguageid"] == "rus"
+    assert b["idmovieimdb"] == "1234567" and b["highdefinition"] == "1"
+    assert gzip.decompress(base64.b64decode(up["cd1"]["subcontent"])) == sub.read_bytes()
+    dup = FakeOS(already=True)
+    c2 = Client("me", "pw", "ua", proxy=dup)
+    c2.login()
+    assert c2.upload(sub, v, "ru", "tt1234567", "", "", "")["already"] is True
+    assert not [x for x in dup.calls if x[0] == "Upload"]
+
+
+@ffmpeg
+def test_share_needs_config_and_confirmation(tmp_path, monkeypatch):
+    s = settings(tmp_path)
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    c = TestClient(app)
+    v = make_video(tmp_path / "lib/Show", "Show S01E01 1080p.mkv")
+    with open(v, "ab") as fh:                     # the hash reads 2 x 64 KiB; test videos are tiny
+        fh.write(b"\0" * 200_000)
+    sub = v.with_name("Show S01E01 1080p.captionizerr.ru.srt")
+    sub.write_text(SRT, encoding="utf-8")
+    q = {"path": str(v), "lang": "ru"}
+    assert "Not set up" in c.get("/share", params=q).text
+    s.opensubtitles_user, s.opensubtitles_password = "me", "pw"
+    from captionizerr import opensubtitles
+    fake = FakeOS()
+    real = opensubtitles.Client
+    monkeypatch.setattr(opensubtitles, "Client", lambda u, p, ua: real(u, p, ua, proxy=fake))
+    page = c.get("/share", params=q).text
+    assert "1234567" in page and "AI translation" in page
+    data = {**q, "imdb_id": "tt1234567", "release": "x", "comment": "c", "translator": "t"}
+    r = c.post("/share", data=data, headers=SAME, follow_redirects=False)
+    assert "Tick+both" in r.headers["location"] and not [x for x in fake.calls if x[0] == "Upload"]
+    r = c.post("/share", data={**data, "reviewed": "1", "rights": "1"}, headers=SAME, follow_redirects=False)
+    assert "Uploaded" in r.headers["location"]
+    assert app.state.store.share(str(sub))["url"].endswith("/999")
+    assert c.post("/share", data={**data, "reviewed": "1", "rights": "1"}).status_code == 403   # cross-site

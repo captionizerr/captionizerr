@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Share · Captionizerr{% endblock %}
+{% block content %}
+<p class="small"><a href="{{ back }}">← Back</a></p>
+<h1>Share on OpenSubtitles</h1>
+<p class="sub mono" style="word-break:break-all">{{ fname }}</p>
+{% if shared %}<div class="flash ok" role="status">{{ 'OpenSubtitles already had this exact file' if shared.already else 'Shared' }} on {{ shared_when }}.{% if shared.url %} <a href="{{ shared.url }}" target="_blank" rel="noopener">Open on OpenSubtitles ↗</a>{% endif %}</div>{% endif %}
+{% if not configured %}
+<div class="card"><h2>Not set up</h2>
+  <p>Add your OpenSubtitles.org account to the environment file and restart:</p>
+  <pre class="mono">CAPTIONIZERR_OPENSUBTITLES_USER=…
+CAPTIONIZERR_OPENSUBTITLES_PASSWORD=…</pre>
+  <p class="small muted">OpenSubtitles identifies upload clients by their user agent. If they assign you one, set CAPTIONIZERR_OPENSUBTITLES_USER_AGENT.</p></div>
+{% else %}
+<form method="post" action="/share" class="card">
+  <input type="hidden" name="path" value="{{ path }}"><input type="hidden" name="lang" value="{{ lang }}">
+  <input type="hidden" name="forced" value="{{ '1' if forced }}"><input type="hidden" name="back" value="{{ back }}">
+  <p class="small muted">Uploads this one file to OpenSubtitles.org under your account, marked as an <b>AI translation</b>. Nothing is ever shared automatically.</p>
+  {% if guess_error %}<div class="flash warn">Couldn't identify the title automatically: {{ guess_error }}. Enter the IMDb ID yourself.</div>{% endif %}
+  <div class="fields">
+    <label class="f">IMDb ID {% if guess.title %}<span class="h">OpenSubtitles thinks this is “{{ guess.title }}”{% if guess.season %} S{{ '%02d'|format(guess.season) }}E{{ '%02d'|format(guess.episode or 0) }}{% endif %}. Check it: for an episode it must be the <i>episode's</i> ID.</span>{% endif %}
+      <input type="text" name="imdb_id" value="{{ guess.imdb_id }}" required pattern="(tt)?[0-9]{5,10}" placeholder="tt1234567"></label>
+    <label class="f">Language <input type="text" value="{{ lang_names.get(lang, lang) }}" disabled></label>
+    <label class="f">Release name <input type="text" name="release" value="{{ release }}"><span class="h">Lets people match it to their copy.</span></label>
+    <label class="f">Translator credit <input type="text" name="translator" value="{{ translator }}"></label>
+  </div>
+  <label class="f" style="margin-top:12px">Comment <input type="text" name="comment" value="{{ comment }}"></label>
+  <p class="small" style="margin-top:12px">{{ 'Forced (foreign parts only)' if forced else 'Full subtitles' }} · {{ 'HD' if hd else 'SD' }} · AI translation: yes · hearing impaired: no</p>
+  <label class="f"><span><input type="checkbox" name="reviewed" value="1" required> I reviewed this translation in the editor and it is fit to share.</span></label>
+  <label class="f"><span><input type="checkbox" name="rights" value="1" required> I accept OpenSubtitles' terms and the responsibility for sharing it.</span></label>
+  <div class="actions"><button class="primary">Upload to OpenSubtitles</button></div>
+</form>
+{% endif %}
+{% endblock %}

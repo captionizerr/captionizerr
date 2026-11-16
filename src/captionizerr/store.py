@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS jobs_state ON jobs(state);
 CREATE TABLE IF NOT EXISTS alerts (month TEXT, level TEXT, PRIMARY KEY (month, level));
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS shares (
+  path TEXT PRIMARY KEY,         -- our subtitle file
+  url TEXT DEFAULT '',
+  at REAL NOT NULL,
+  already INTEGER DEFAULT 0      -- OpenSubtitles already had this exact file
+);
 CREATE TABLE IF NOT EXISTS series (
   key TEXT PRIMARY KEY,          -- slug of the title, same as jobs.series_key
   title TEXT NOT NULL,
@@ -169,6 +175,15 @@ class Store:
 
     def waiting(self) -> list[Job]:
         return [Job(**dict(r)) for r in self._q("SELECT * FROM jobs WHERE state='waiting_source' ORDER BY id").fetchall()]
+
+    # ---- shared on OpenSubtitles
+    def record_share(self, path: str, url: str, already: bool) -> None:
+        self._q("INSERT INTO shares (path, url, at, already) VALUES (?,?,?,?) ON CONFLICT(path) DO UPDATE SET "
+                "url=excluded.url, at=excluded.at, already=excluded.already", (path, url, time.time(), int(already)))
+
+    def share(self, path: str) -> dict | None:
+        r = self._q("SELECT * FROM shares WHERE path=?", (path,)).fetchone()
+        return dict(r) if r else None
 
     # ---- housekeeping
     def snapshot(self, dest: Path, keep: int = 7) -> Path:

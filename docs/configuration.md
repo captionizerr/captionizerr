@@ -27,6 +27,8 @@ Environment variables (prefix `CAPTIONIZERR_`) set the defaults. Values saved in
 | `BAZARR_URL` / `BAZARR_KEY` | | Fallback source download |
 | `JELLYFIN_URL` / `JELLYFIN_KEY` / `JELLYFIN_PATH_MAP` | | Rescan after writing |
 | `PLEX_URL` / `PLEX_TOKEN` / `PLEX_PATH_MAP` | | Plex folder rescan after writing (Emby: use the Jellyfin settings) |
+| `OPENSUBTITLES_USER` / `OPENSUBTITLES_PASSWORD` | | Your OpenSubtitles.org account, for the opt-in "Share on OpenSubtitles" button |
+| `OPENSUBTITLES_USER_AGENT` | `Captionizerr v<version>` | Client name sent to OpenSubtitles; set it if they assign you one |
 | `NTFY_URL` / `NTFY_TOPIC` / `PUBLIC_URL` | | Notifications and the link in them |
 
 ## Files in `/config`
@@ -48,3 +50,18 @@ Back up everything in `/config` except `cache/`, `tmp/` and the live `captionize
 ## Monitoring
 
 `GET /metrics` (Prometheus): `captionizerr_jobs{state}`, `captionizerr_spend_month_usd`, `captionizerr_budget_usd`, `captionizerr_storage_bytes{kind}`, `captionizerr_maintenance_last_run_timestamp`. `GET /health` returns JSON.
+
+## Sharing on OpenSubtitles
+
+The editor has a **Share on OpenSubtitles…** link. The confirmation page:
+- identifies the title (OpenSubtitles' own guess from the filename; check the IMDb ID, and for an episode it must be the episode's);
+- shows the language, flags, release name and credit;
+- requires two ticks: you reviewed the file, and you accept OpenSubtitles' terms.
+
+Uploads use OpenSubtitles' XML-RPC upload API (the one their own uploader uses):
+- **Always marked as an AI translation** (`automatictranslation=1`).
+- **Forced files** are marked "foreign parts only".
+- **Duplicates** (the same file) are detected before uploading.
+- **Each share is recorded** and shown on the page with its link.
+
+Check OpenSubtitles' current rules for AI-translated uploads before sharing. Translated subtitles are derivative works of the dialogue: you are responsible for what you upload.

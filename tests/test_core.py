@@ -267,3 +267,18 @@ def test_chrf_sanity():
     assert chrf(["Привет, мир"], ["Привет, мир"]) == 100.0
     assert chrf(["совсем другое"], ["Привет, мир"]) < 20
     assert 40 < chrf(["Привет, мир!"], ["Привет мир"]) <= 100
+
+
+def test_flags_leftover_labels_and_lost_italics():
+    from captionizerr.cues import Cue
+    from captionizerr.profile import Profile
+    from captionizerr.validate import check
+    p = Profile()
+    c = Cue(1, 0, 3000, "Man #2:\n<i>Surely you're not telling me</i>")
+    kinds = {i.kind for i in check([c], {1: "Мужчина #2:\nнеужели вы хотите сказать мне"}, p)}
+    assert "label_left" in kinds
+    c2 = Cue(2, 0, 3000, "<i>From Congress.</i>")
+    assert "italics_lost" in {i.kind for i in check([c2], {2: "от Конгресса."}, p)}
+    assert not check([c2], {2: "<i>от Конгресса.</i>"}, p)
+    c3 = Cue(3, 0, 3000, "Meet me at 10:30.")
+    assert not check([c3], {3: "Встретимся в 10:30."}, p)
