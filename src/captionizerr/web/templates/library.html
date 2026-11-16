@@ -40,7 +40,7 @@
       {% set missing = not (m.status.values()|list|min if m.status else false) %}
       <tr data-title="{{ m.title|lower }}" data-missing="{{ 1 if missing else 0 }}">
         <td>{% if missing %}<input type="checkbox" name="path" value="{{ m.path }}" id="m{{ m.id }}" aria-label="Select {{ m.title }}"><input type="hidden" name="label:{{ m.path }}" value="{{ m.title }} ({{ m.year }})">{% endif %}</td>
-        <td><label for="m{{ m.id }}">{{ m.title }}</label> <span class="muted small">{{ m.year or '' }}</span></td>
+        <td><a href="/library/film/{{ m.id }}"><b>{{ m.title }}</b></a> <span class="muted small">{{ m.year or '' }}</span></td>
         <td>{% for l, ok in m.status.items() %}{% if ok %}<a class="btn small" href="/edit?{{ {'path': m.path, 'lang': l, 'back': '/library'}|urlencode }}">{{ l }} ✓ Edit</a>{% else %}<span class="pill">{{ l }} not yet</span>{% endif %} {% endfor %}</td>
       </tr>
     {% else %}<tr><td colspan="3" class="muted">No films with files in Radarr.</td></tr>{% endfor %}

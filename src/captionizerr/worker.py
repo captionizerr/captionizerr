@@ -158,8 +158,9 @@ class Worker:
             store.finish(job.id, "skipped", "translation already exists")
             return None
         try:
+            auto_sync = s.whisper_url if s.speech_sync in ("auto", "all") else ""
             src = pinned or media.find_source(video, s.cache_dir, s.source_langs, job.lang, s.any_source,
-                                              speech_url=s.whisper_url)
+                                              speech_url=auto_sync)
         except subprocess.CalledProcessError as e:      # ffprobe/ffmpeg can't open it
             why = ((e.stderr or "") if isinstance(e.stderr, str) else "").strip().splitlines()
             store.finish(job.id, "failed", f"can't read the video ({why[-1][-160:] if why else 'ffprobe failed'}); "
@@ -172,7 +173,8 @@ class Worker:
             self.ask_bazarr(job, video)
             return None
         speech_note = ""
-        if s.whisper_url and not pinned and src.origin in ("sidecar", "sidecar, re-timed"):
+        sync_these = {"auto": ("sidecar", "sidecar, re-timed"), "all": ("sidecar", "sidecar, re-timed", "embedded")}
+        if auto_sync and not pinned and src.origin in sync_these.get(s.speech_sync, ()):
             try:        # a downloaded subtitle: put it on the speech before translating
                 path, speech_note = speechsync.synced_copy(s.whisper_url, video, src.path, src.lang, s.cache_dir)
                 if path != src.path:

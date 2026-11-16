@@ -108,6 +108,9 @@ f.addEventListener('change', e => { if (e.target.name === 'provider') show(); })
     <label class="f">Address <input type="url" name="bazarr_url" value="{{ v.bazarr_url }}" placeholder="http://bazarr:6767"></label>
     {{ secret('bazarr_key', secrets, label='API key', next='/setup?step=media') }}</div>
     <div class="actions">{{ test('bazarr') }}</div></div>
+  <div class="svc"><h3>Whisper <span class="pill">Optional</span></h3><p class="small muted">A speech-to-text service that checks subtitle timing against what is actually said, so downloaded subtitles land on the right moment. Needs a machine with a few CPU cores; see <a href="https://github.com/captionizerr/captionizerr/blob/main/deploy/whisper/README.md" target="_blank" rel="noopener">deploy/whisper</a>.</p><div class="fields">
+    <label class="f">Address <input type="url" name="whisper_url" value="{{ v.whisper_url }}" placeholder="http://whisper:9000"></label></div>
+    <div class="actions">{{ test('whisper') }}</div></div>
   <div class="actions"><button class="primary">Save and continue</button><a class="btn" href="{{ nxt }}">Skip</a><a class="btn" href="/setup?step={{ prev_step }}">Back</a></div>
 </form>
 

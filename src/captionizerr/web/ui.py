@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import threading
+import time
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -92,6 +93,28 @@ def share_comment(model: str, history) -> str:
         what = "of this release's own subtitles, timed to the file"
     return (f"AI translation ({model}) {what}" + ("; timing checked against the speech" if synced else "")
             + "; reviewed by the uploader.")
+
+
+def file_marks(jobs) -> tuple[list[tuple[str, str]], int | None]:
+    """Small status markers for one file's translation, and the latest translation job's id."""
+    side = ("edit", "notes", "forced", "sync")
+    last = next((j for j in reversed(jobs) if j.source not in side), None)
+    marks: list[tuple[str, str]] = []
+    if last is not None:
+        if last.state in ("queued", "running", "batched", "waiting_source"):
+            marks.append(("in progress", "running"))
+        elif last.state == "needs_review":
+            marks.append(("needs review", "needs_review"))
+        elif last.state in ("failed", "no_source"):
+            marks.append(("failed" if last.state == "failed" else "no source", "failed"))
+        if "Incomplete source" in (last.detail or "") or "Source cut short" in (last.detail or ""):
+            marks.append(("source cut short", "warn"))
+        elif "sidecar ending" in (last.detail or ""):
+            marks.append(("ending completed", ""))
+        if "synced to speech" in (last.detail or "") or any(
+                j.source == "sync" and j.state == "done" and "moved" in (j.detail or "") and j.created > last.created for j in jobs):
+            marks.append(("re-synced", "done"))
+    return marks, (last.id if last else None)
 
 
 def human_size(n: int) -> str:
@@ -242,6 +265,7 @@ def register(app: FastAPI) -> None:
         deleted = {j.id for j in jobs if j.video_path in gone}
         return render(request, "dashboard.html", jobs=jobs, counts=counts, replaced=replaced, deleted=deleted,
                       hidden_replaced=hidden_replaced, show_replaced=show_replaced,
+                      running=[j for j in all_jobs if j.state == "running"][:3], now=time.time(),
                       spent=spent, cap=cap,
                       reserved=reserved, pct=min(100, 100 * (spent + reserved) / cap) if cap else 0, month=month_now(),
                       months=store.spend_by_month(), view=view, avg=episode_estimate(),
@@ -364,9 +388,15 @@ def register(app: FastAPI) -> None:
         key = slug(ser["title"])
         langs = langs_for(key)
         seasons: dict[int, list] = {}
+        by_lang = {l: store.jobs_by_video([e["path"] for e in eps if e.get("path")], l) for l in langs}
         for e in eps:
             e["status"] = status_for(e["path"], langs)
             e["missing"] = not all(e["status"].values())
+            e["marks"], e["job"] = [], None
+            for l in langs:
+                marks, job_id = file_marks(by_lang[l].get(e.get("path") or "", []))
+                e["marks"] += [(f"{l}: {m}" if len(langs) > 1 else m, c) for m, c in marks]
+                e["job"] = e["job"] or job_id
             seasons.setdefault(e["season"], []).append(e)
         ctx_file = s.context_dir / f"{key}.md"
         saved = ctx_file.read_text(encoding="utf-8") if ctx_file.is_file() else ""
@@ -468,11 +498,15 @@ def register(app: FastAPI) -> None:
     def series_save(request: Request, series_id: int, title: str = Form(...), enabled: str = Form(""),
                     langs: str = Form(""), tone: str = Form(""), context: str = Form("")):
         _same_origin(request)
+        return save_title_settings(f"/library/series/{series_id}", "Series", title, enabled, langs, tone, context)
+
+    def save_title_settings(back: str, what: str, title: str, enabled: str, langs: str, tone: str, context: str):
+        """Per-title settings and notes: the same for a series and a film (keyed by the title's slug)."""
         key = slug(title)
         lang_list = [x for x in langs.replace(" ", "").split(",") if x]
         bad = [x for x in lang_list if not x.isalpha() or len(x) not in (2, 3)]
         if bad:
-            return _redirect(f"/library/series/{series_id}", f"Not a language code: {', '.join(bad)}", "warn")
+            return _redirect(back, f"Not a language code: {', '.join(bad)}", "warn")
         if tone and tone not in TONE_RULES:
             raise HTTPException(400, "unknown tone")
         store.save_series(key, title, bool(enabled), lang_list, tone)
@@ -482,7 +516,81 @@ def register(app: FastAPI) -> None:
             f.write_text(context.strip() + "\n", encoding="utf-8")
         elif f.exists():
             f.unlink()
-        return _redirect(f"/library/series/{series_id}", "Series settings saved.")
+        return _redirect(back, f"{what} settings saved.")
+
+    # ------------------------------------------------------------------ films
+    def radarr_movie(movie_id: int) -> dict:
+        try:
+            m = radarr().get(f"/movie/{movie_id}")
+        except ArrError as e:
+            if "404" in str(e):
+                raise HTTPException(404)
+            raise
+        f = m.get("movieFile") or {}
+        return {"id": m["id"], "title": m["title"], "year": m.get("year"), "overview": m.get("overview") or "",
+                "path": f.get("path") or ""}
+
+    @app.get("/library/film/{movie_id}")
+    def film_page(request: Request, movie_id: int):
+        return film_view(request, movie_id)
+
+    def film_view(request: Request, movie_id: int, proposed: str | None = None, note: str = ""):
+        try:
+            m = radarr_movie(movie_id)
+        except ArrError as e:
+            return _redirect("/library", f"Radarr: {e}", "warn")
+        key = slug(m["title"])
+        langs = langs_for(key)
+        status = status_for(m["path"], langs) if m["path"] else {l: False for l in langs}
+        per_lang = []
+        for l in langs:
+            jobs = store.jobs_for(m["path"], l) if m["path"] else []
+            marks, job_id = file_marks(jobs)
+            per_lang.append({"lang": l, "ok": status.get(l, False), "marks": marks, "job": job_id})
+        history = sorted((j for l in langs for j in (store.jobs_for(m["path"], l) if m["path"] else [])),
+                         key=lambda j: j.created)
+        ctx_file = s.context_dir / f"{key}.md"
+        saved = ctx_file.read_text(encoding="utf-8") if ctx_file.is_file() else ""
+        return render(request, "film.html", m=m, key=key, langs=langs, per_lang=per_lang, history=history,
+                      on_disk=bool(m["path"]) and s.map_path(m["path"]).is_file(),
+                      override=store.series(key) or {"enabled": True, "langs": [], "tone": ""},
+                      context=proposed if proposed is not None else saved, proposed=proposed is not None,
+                      corrections=len(bible.corrections(s.feedback_dir, key)), tones=list(TONE_RULES),
+                      avg=episode_estimate(), note=note,
+                      fmt_time=lambda t: datetime.fromtimestamp(t).strftime("%d %b %Y %H:%M"))
+
+    @app.post("/library/film/{movie_id}/settings")
+    def film_save(request: Request, movie_id: int, title: str = Form(...), enabled: str = Form(""),
+                  langs: str = Form(""), tone: str = Form(""), context: str = Form("")):
+        _same_origin(request)
+        return save_title_settings(f"/library/film/{movie_id}", "Film", title, enabled, langs, tone, context)
+
+    @app.post("/library/film/{movie_id}/notes")
+    def film_notes(request: Request, movie_id: int):
+        """Draft notes for a film from its overview and its own subtitle track; shown, saved only on save."""
+        _same_origin(request)
+        if not budget_left(0.5):
+            return _redirect(f"/library/film/{movie_id}", "Monthly budget reached; notes not generated.", "warn")
+        try:
+            m = radarr_movie(movie_id)
+        except ArrError as e:
+            return _redirect(f"/library/film/{movie_id}", f"Radarr: {e}", "warn")
+        local = s.map_path(m["path"]) if m["path"] else None
+        src = (media.find_source(local, s.cache_dir, s.source_langs, (langs_for(None) or ["en"])[0], s.any_source)
+               if local and s.in_library(local) and local.is_file() else None)
+        if not src:
+            return _redirect(f"/library/film/{movie_id}", "No text subtitle in the film to learn from.", "warn")
+        key = slug(m["title"])
+        try:
+            text, res = bible.generate_notes(app.state.worker.provider_factory(), m["title"], m["overview"],
+                                             (langs_for(key) or ["en"])[0], cuesmod.load(src.path).cues)
+        except Exception as e:
+            return _redirect(f"/library/film/{movie_id}", f"Generation failed: {type(e).__name__}: {str(e)[:160]}", "warn")
+        c = price_of(res.model, res.usage) or 0.0
+        store.record("notes", f"{m['title']}: film notes drafted", m["path"], (langs_for(key) or ["en"])[0], key,
+                     "generated from the film page", c, vars(res.usage), res.model)
+        return film_view(request, movie_id, proposed=text,
+                         note=f"Draft notes below (${c:.3f}), not saved yet. Edit, then save film settings.")
 
     @app.post("/library/translate")
     async def translate_selected(request: Request):

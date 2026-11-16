@@ -12,16 +12,18 @@
   {% for season, eps in seasons.items() %}
   <h2 style="margin-top:{{ '0' if loop.first else '18px' }}">Season {{ season }}
     <button type="button" class="small" data-season="{{ season }}">Select untranslated</button></h2>
-  <table>
-    <thead><tr><th></th><th>Ep</th><th>Title</th>{% for l in langs %}<th>{{ l }}</th>{% endfor %}</tr></thead>
+  <table class="eps">
+    <colgroup><col style="width:40px"><col style="width:56px"><col>{% for l in langs %}<col style="width:64px">{% endfor %}<col style="width:56px"></colgroup>
+    <thead><tr><th></th><th>Ep</th><th>Title</th>{% for l in langs %}<th>{{ l }}</th>{% endfor %}<th></th></tr></thead>
     <tbody>
     {% for e in eps %}
       <tr>
         <td>{% if e.path %}<input type="checkbox" name="path" value="{{ e.path }}" {% if e.missing %}data-s="{{ season }}"{% else %}data-done="1"{% endif %} id="e{{ season }}-{{ e.episode }}" aria-label="Select S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}">
             <input type="hidden" name="label:{{ e.path }}" value="S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}">{% endif %}</td>
         <td class="mono"><label for="e{{ season }}-{{ e.episode }}">{{ '%02d'|format(e.episode) }}</label></td>
-        <td>{{ e.title }}</td>
+        <td>{{ e.title }}{% for m, c in e.marks %} <span class="pill {{ c }}">{{ m }}</span>{% endfor %}</td>
         {% for l in langs %}<td class="{{ 'yes' if e.status[l] else 'no' }}">{% if e.status[l] %}<a href="/edit?{{ {'path': e.path, 'lang': l, 'key': key, 'back': '/library/series/' ~ ser.id}|urlencode }}" title="Edit the {{ l }} translation of S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}" aria-label="Edit {{ l }} translation of episode {{ e.episode }}">✓</a>{% else %}–{% endif %}</td>{% endfor %}
+        <td class="small">{% if e.job %}<a href="/jobs/{{ e.job }}" title="Job and history of this episode">job</a>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>

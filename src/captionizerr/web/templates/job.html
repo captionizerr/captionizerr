@@ -4,28 +4,27 @@
 <p class="small"><a href="/">← Dashboard</a></p>
 <h1>{{ job.title }}</h1>
 <p class="sub"><span class="pill {{ job.state }}">{{ state_label.get(job.state, job.state) }}</span> · {{ job.lang|upper }} · {{ {'sonarr': 'imported by Sonarr', 'radarr': 'imported by Radarr', 'manual': 'started by hand', 'sync': 're-sync to speech', 'edit': 'editor', 'notes': 'series notes', 'forced': 'forced track', 'bazarr': 'via Bazarr'}.get(job.source, 'from ' ~ job.source) }}</p>
+{% set editable = job.output_path and job.output_path.endswith(('.srt', '.ass')) and not deleted and not replaced_by %}
+{% set main_job = job.source not in ('edit', 'notes', 'forced', 'sync') %}
+<div class="actions" style="margin:0 0 18px">
+  {% if editable %}<a class="btn {{ 'primary' if job.state == 'needs_review' }}" href="/edit?{{ {'path': job.video_path, 'lang': job.lang, 'key': job.series_key or '', 'back': '/jobs/' ~ job.id, 'view': 'flag' if job.state == 'needs_review' else ''}|urlencode }}">{{ 'Review flagged lines' if job.state == 'needs_review' else 'Open in editor' }}</a>
+  <a class="btn" href="/share/download?{{ {'path': job.video_path, 'lang': job.lang}|urlencode }}">Download</a>
+  <a class="btn" href="/share?{{ {'path': job.video_path, 'lang': job.lang, 'back': '/jobs/' ~ job.id}|urlencode }}">Share…</a>{% endif %}
+  {% if not deleted and main_job and (job.state in ('done', 'needs_review') and editable or job.state == 'skipped') %}
+  <form method="post" action="/jobs/{{ job.id }}/retranslate" class="inline"
+        onsubmit="return confirm('Translate this again with {{ settings.active_model }}? The current file is replaced, including your edits; the previous version stays in the editor\'s history.')">
+    <button>Re-translate</button></form>{% endif %}
+  {% if editable and settings.whisper_url and main_job and job.state in ('done', 'needs_review') %}
+  <form method="post" action="/jobs/{{ job.id }}/resync" class="inline"
+        onsubmit="return confirm('Move this translation onto the speech in the audio? Lines are matched with Whisper; nothing is re-translated and there is no cost. The current timing stays in the editor\'s history.')">
+    <button title="Match the lines to the speech in the audio (Whisper) and fix their timing">Re-sync to speech</button></form>{% endif %}
+  {% if not deleted and job.state in ('failed','needs_review','no_source','paused_budget') %}<form method="post" action="/jobs/{{ job.id }}/retry" class="inline"><button class="{{ 'primary' if job.state != 'needs_review' }}">Retry</button></form>{% endif %}
+</div>
 <div class="grid">
   <div class="card"><h2>Result</h2><p>{{ (job.detail|human) or '—' }}</p>
-    {% if job.output_path %}<p class="small muted">Wrote</p><p class="mono" style="word-break:break-all">{{ job.output_path }}</p>
-      {% if deleted %}<p class="small"><span class="pill deleted">Video deleted</span> The video was removed on the server, so this translation can't be edited, shared or redone.</p>
-      {% elif replaced_by %}<p class="small">This file was translated again later: see <a href="/jobs/{{ replaced_by }}">job {{ replaced_by }}</a>.</p>
-      {% elif job.output_path.endswith(('.srt', '.ass')) %}<div class="actions"><a class="btn" href="/edit?{{ {'path': job.video_path, 'lang': job.lang, 'key': job.series_key or '', 'back': '/jobs/' ~ job.id, 'view': 'flag' if job.state == 'needs_review' else ''}|urlencode }}">{{ 'Review flagged lines' if job.state == 'needs_review' else 'Open in editor' }}</a>
-        <a class="btn" href="/share/download?{{ {'path': job.video_path, 'lang': job.lang}|urlencode }}">Download</a>
-        <a class="btn" href="/share?{{ {'path': job.video_path, 'lang': job.lang, 'back': '/jobs/' ~ job.id}|urlencode }}">Share…</a>
-        {% if job.source not in ('edit', 'notes', 'forced', 'sync') and job.state in ('done', 'needs_review') %}
-        <form method="post" action="/jobs/{{ job.id }}/retranslate" class="inline"
-              onsubmit="return confirm('Translate this again with {{ settings.active_model }}? The current file is replaced, including your edits; the previous version stays in the editor\'s history.')">
-          <button>Re-translate</button></form>{% endif %}
-        {% if settings.whisper_url and job.source not in ('edit', 'notes', 'forced', 'sync') and job.state in ('done', 'needs_review') %}
-        <form method="post" action="/jobs/{{ job.id }}/resync" class="inline"
-              onsubmit="return confirm('Move this translation onto the speech in the audio? Lines are matched with Whisper; nothing is re-translated and there is no cost. The current timing stays in the editor\'s history.')">
-          <button title="Match the lines to the speech in the audio (Whisper) and fix their timing">Re-sync to speech</button></form>{% endif %}</div>{% endif %}{% endif %}
-      {% if job.state == 'skipped' and not deleted and job.source not in ('edit', 'notes', 'forced', 'sync') %}
-      <form method="post" action="/jobs/{{ job.id }}/retranslate" class="inline"
-            onsubmit="return confirm('Translate this again with {{ settings.active_model }}? The existing file is replaced; the previous version stays in the editor\'s history.')">
-        <button>Re-translate</button></form>{% endif %}
-    {% if deleted and not job.output_path %}<p class="small"><span class="pill deleted">Video deleted</span> The video was removed on the server.</p>
-    {% elif job.state in ('failed','needs_review','no_source','paused_budget') %}<form method="post" action="/jobs/{{ job.id }}/retry"><button class="primary">Retry</button></form>{% endif %}
+    {% if job.output_path %}<p class="small muted">Wrote</p><p class="mono" style="word-break:break-all">{{ job.output_path }}</p>{% endif %}
+    {% if deleted %}<p class="small"><span class="pill deleted">Video deleted</span> The video was removed on the server, so this translation can't be edited, shared or redone.</p>
+    {% elif replaced_by %}<p class="small">This file was translated again later: see <a href="/jobs/{{ replaced_by }}">job {{ replaced_by }}</a>.</p>{% endif %}
   </div>
   {% if job.source == 'sync' %}<div class="card"><h2>Cost</h2><div class="big">Free</div>
     <p class="small muted">Done by the Whisper speech-to-text service on your own hardware; no AI provider was used.</p>

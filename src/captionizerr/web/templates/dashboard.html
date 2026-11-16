@@ -15,6 +15,8 @@
   <section class="card">
     <h2>In progress</h2>
     {% if n_active %}<div class="kpis">{% for st, n in active.items() if n %}<a class="kpi" href="/?state={{ st }}"><b>{{ n }}</b><span class="small muted">{{ state_label[st] }}</span></a>{% endfor %}</div>
+      {% for j in running %}<div class="small" style="margin-top:10px"><a href="/jobs/{{ j.id }}"><b>{{ j.title }}</b></a>
+        <div class="muted">{{ (j.detail|human) or 'starting' }} · {{ ((now - j.updated) / 60)|round|int }} min</div></div>{% endfor %}
       {% if active.batched %}<p class="small muted">Backlog batches finish within 24 h, usually under an hour.</p>{% endif %}
     {% else %}<p class="muted">Idle. <a href="/library">Translate something from the library</a>.</p>{% endif %}
   </section>

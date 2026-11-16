@@ -228,6 +228,9 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
                             ("jellyfin_url", "Jellyfin"), ("plex_url", "Plex"), ("ntfy_url", "ntfy")):
                 if k in f:
                     vals[k] = _url(f.get(k), f"the {what} address")
+            if "speech_sync" in f:
+                v = str(f.get("speech_sync") or "auto")
+                vals["speech_sync"] = v if v in ("auto", "all", "off") else "auto"
             if "ntfy_topic" in f:
                 vals["ntfy_topic"] = str(f.get("ntfy_topic") or "").strip()
             if "jellyfin_path_map" in f:
@@ -447,7 +450,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
 
     LABELS = {
         "alert_at": "Budget warning (% of cap)", "any_source": "Translate from any language", "auto_notes": "Draft series notes",
-        "bazarr_url": "Bazarr address", "whisper_url": "Whisper address", "effort": "Claude effort", "jellyfin_path_map": "Jellyfin path mapping",
+        "bazarr_url": "Bazarr address", "whisper_url": "Whisper address", "speech_sync": "Sync to speech", "effort": "Claude effort", "jellyfin_path_map": "Jellyfin path mapping",
         "jellyfin_url": "Jellyfin address", "languages": "Translate into", "max_line": "Characters per line",
         "model": "Claude model", "monthly_cap_usd": "Monthly cap (USD)", "ntfy_topic": "ntfy topic", "ntfy_url": "ntfy server",
         "ollama_max_output": "Ollama max output", "ollama_model": "Ollama model", "ollama_num_ctx": "Ollama context size",

@@ -60,6 +60,9 @@
     <p class="small muted">A speech-to-text service that lets CaptionizeRR check subtitle timing against what is actually said: endings taken from another release and downloaded subtitles are moved onto the speech, and each translation gets a <b>Re-sync to speech</b> button. Any <a href="https://github.com/ahmetoner/whisper-asr-webservice" target="_blank" rel="noopener">whisper-asr-webservice</a>-compatible server works; <span class="mono">deploy/whisper</span> in the repository has a small one.</p>
     <div class="fields">
       <label class="f">Address <input type="url" name="whisper_url" value="{{ v.whisper_url }}" placeholder="http://whisper:9000"></label>
+      <label class="f">Use it automatically for <select name="speech_sync">
+        {% for k, label in (('auto', 'Downloaded subtitles and completed endings (recommended)'), ('all', 'Every translation, built-in tracks too'), ('off', 'Nothing: only the Re-sync button')) %}<option value="{{ k }}" {{ 'selected' if v.speech_sync == k }}>{{ label }}</option>{% endfor %}</select>
+        <span class="h">A built-in track is timed to its own file, so checking it rarely changes anything; it costs a few minutes of the Whisper machine per episode.</span></label>
     </div>
     <div class="actions">{{ test('whisper') }}</div>
   </section>

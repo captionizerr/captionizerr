@@ -48,6 +48,8 @@ tr:last-child td{border-bottom:0}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .nowrap{white-space:nowrap}
 .m-only{display:none}
+table.eps{table-layout:fixed} table.eps td{overflow-wrap:anywhere}
+.pill.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 @media (max-width:640px){
   table.jobs thead{display:none}
   table.jobs tr{display:grid;grid-template-columns:1fr auto;grid-template-areas:"title title" "when state" "act cost";gap:4px 10px;padding:10px 0;border-bottom:1px solid var(--line)}

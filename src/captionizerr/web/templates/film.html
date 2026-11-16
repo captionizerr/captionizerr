@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ m.title }} · CaptionizeRR{% endblock %}
+{% block content %}
+<p class="small"><a href="/library">← Library</a></p>
+<h1>{{ m.title }} {% if m.year %}<span class="muted" style="font-weight:400">{{ m.year }}</span>{% endif %}</h1>
+<p class="sub">{% if on_disk %}<span class="mono">{{ m.path.rsplit('/', 1)[-1] }}</span>{% else %}Not on disk yet{% endif %} · languages {{ langs|join(', ') }} · {{ 'automatic on import' if override.enabled else 'automatic translation off' }}</p>
+
+<section class="card tw">
+  <h2>Translations</h2>
+  <table>
+    <thead><tr><th>Language</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for p in per_lang %}
+      <tr>
+        <td class="mono">{{ p.lang }}</td>
+        <td>{% if p.ok %}<span class="yes">✓ translated</span>{% else %}<span class="muted">not yet</span>{% endif %}{% for mk, c in p.marks %} <span class="pill {{ c }}">{{ mk }}</span>{% endfor %}</td>
+        <td><div class="actions" style="margin:0">
+          {% if p.ok %}<a class="btn small" href="/edit?{{ {'path': m.path, 'lang': p.lang, 'key': key, 'back': '/library/film/' ~ m.id}|urlencode }}">Open in editor</a>
+          <a class="btn small" href="/share/download?{{ {'path': m.path, 'lang': p.lang}|urlencode }}">Download</a>
+          <a class="btn small" href="/share?{{ {'path': m.path, 'lang': p.lang, 'back': '/library/film/' ~ m.id}|urlencode }}">Share…</a>{% endif %}
+          {% if p.job %}<a class="btn small" href="/jobs/{{ p.job }}">Job</a>{% endif %}
+        </div></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if on_disk %}
+  <form method="post" action="/library/translate" class="actions" id="tr">
+    <input type="hidden" name="back" value="/library/film/{{ m.id }}">
+    <input type="hidden" name="series_key" value="{{ key }}">
+    <input type="hidden" name="path" value="{{ m.path }}">
+    <input type="hidden" name="label:{{ m.path }}" value="{{ m.title }} ({{ m.year }})">
+    {% set done = per_lang|selectattr('ok')|list|length %}
+    <button class="primary">{{ 'Translate again' if done == per_lang|length else 'Translate' }}</button>
+    <button name="mode" value="batch" title="Half price through the Batch API; results within 24 hours">Add to backlog (½ price)</button>
+    <span class="small muted">About {{ (avg * 2)|money }} per language for a 2-hour film.{% if done %} An existing translation is replaced, including your edits; the previous version stays in the editor's history.{% endif %}</span>
+  </form>
+  {% else %}<p class="small muted">Radarr has no file for this film yet; it can be translated once it is downloaded.</p>{% endif %}
+</section>
+
+{% if history %}
+<section class="card tw" style="margin-top:16px"><h2>History</h2>
+  <table class="small"><tbody>
+  {% for h in history %}<tr>
+    <td class="muted nowrap">{{ fmt_time(h.created) }}</td>
+    <td><a href="/jobs/{{ h.id }}">{{ h.title }}</a> <span class="mono muted">{{ h.lang }}</span><div class="muted clamp">{{ h.detail|human }}</div></td>
+    <td><span class="pill {{ h.state }}">{{ state_label.get(h.state, h.state) }}</span></td>
+    <td class="num">{{ 'free' if h.source == 'sync' else h.cost_usd|money }}</td></tr>{% endfor %}
+  </tbody></table></section>
+{% endif %}
+
+<form method="post" action="/library/film/{{ m.id }}/settings" class="card" id="settings" style="margin-top:16px">
+  <h2>Film settings</h2>
+  {% if note %}<div class="flash ok" role="status">{{ note }}</div>{% endif %}
+  <input type="hidden" name="title" value="{{ m.title }}">
+  <div class="fields">
+    <label class="f"><span><input type="checkbox" name="enabled" value="1" {{ 'checked' if override.enabled }}> Translate automatically on import</span><span class="h">Off: Radarr's webhook for this film is ignored; you can still translate by hand.</span></label>
+    <label class="f">Languages <input type="text" name="langs" value="{{ override.langs|join(', ') }}" placeholder="{{ settings.languages|join(', ') }} (global default)"><span class="h">Comma-separated ISO codes. Empty uses the global setting.</span></label>
+    <label class="f">Tone for swearing <select name="tone"><option value="">Global ({{ settings.tone }})</option>{% for t in tones %}<option value="{{ t }}" {{ 'selected' if override.tone==t }}>{{ t }}</option>{% endfor %}</select></label>
+  </div>
+  <label class="f" style="margin-top:14px">Film notes <span class="h">Synopsis, names and how to render them, who uses formal or informal "you". Sent with the film; cached, so it costs little.</span>
+    <textarea name="context" placeholder="# {{ m.title }}&#10;Short synopsis, main characters, glossary…">{{ context }}</textarea></label>
+  <div class="actions"><button class="primary">Save film settings</button>
+    {% if on_disk %}<button formaction="/library/film/{{ m.id }}/notes" formnovalidate title="Reads the overview and the film's own subtitle track, about $0.05–0.15">Draft notes with AI</button>{% endif %}
+    {% if proposed %}<a class="btn" href="/library/film/{{ m.id }}">Discard draft</a>{% endif %}
+  </div>
+</form>
+<script>
+document.getElementById('tr')?.addEventListener('submit', e => {
+  const half = e.submitter && e.submitter.value === 'batch';
+  const cost = money({{ avg * 2 }} * {{ langs|length }} * (half ? 0.5 : 1));
+  const t = {{ m.title|tojson }};
+  if (!confirm(half ? `Add ${t} to the backlog for about ${cost}? Results arrive within 24 hours.` : `Translate ${t} for about ${cost}?`)) e.preventDefault(); });
+</script>
+{% endblock %}

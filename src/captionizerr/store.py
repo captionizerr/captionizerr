@@ -210,6 +210,18 @@ class Store:
         return [Job(**dict(r)) for r in self._q("SELECT * FROM jobs WHERE video_path=? AND lang=? ORDER BY created "
                                                 "LIMIT ?", (video_path, lang, limit)).fetchall()]
 
+    def jobs_by_video(self, paths: list[str], lang: str) -> dict[str, list[Job]]:
+        """video_path -> its jobs in `lang`, oldest first (one query for a whole season)."""
+        out: dict[str, list[Job]] = {}
+        paths = [p for p in paths if p]
+        for i in range(0, len(paths), 500):
+            chunk = paths[i:i + 500]
+            for r in self._q(f"SELECT * FROM jobs WHERE lang=? AND video_path IN ({','.join('?' * len(chunk))}) "
+                             "ORDER BY created", (lang, *chunk)).fetchall():
+                j = Job(**dict(r))
+                out.setdefault(j.video_path, []).append(j)
+        return out
+
     def share(self, path: str) -> dict | None:
         r = self._q("SELECT * FROM shares WHERE path=?", (path,)).fetchone()
         return dict(r) if r else None
