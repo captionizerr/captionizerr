@@ -896,3 +896,50 @@ def test_ai_page_shows_saved_key_clearly_and_effort_saves(tmp_path):
     assert "✓ Saved" in page and "…WXYZ" in page and "sk-test-0123456789" not in page and "saved " in page
     c.post("/settings/ai", data={"provider": "ollama", "ollama_model": "gpt-oss:20b", "ollama_effort": "bogus"}, headers=SAME)
     assert s.ollama_effort == "off"                            # unknown values fall back safely
+
+
+class RealShapeOS(FakeOS):
+    """GuessMovieFromString exactly as OpenSubtitles answered for a real episode file (2026-11-16)."""
+    def GuessMovieFromString(self, token, names):
+        return {"status": "200 OK", "data": {names[0]: {
+            "GuessIt": {"title": "Harbor Lights", "season": 2, "episode": 1, "type": "episode"},
+            "BestGuess": {"IDMovieIMDB": "7654321", "MovieName": "Harbor Lights", "MovieYear": 2020, "MovieKind": "tv series",
+                          "Reason": "GetIMDBSuggest", "Episode": 1, "Season": 2, "IMDBEpisode": "35366575"}}}}
+
+
+def test_guess_uses_the_episode_id():
+    from captionizerr.opensubtitles import Client
+    c = Client("me", "pw", "ua", proxy=RealShapeOS()); c.login()
+    g = c.guess("Harbor Lights - S02E01 - Title WEBDL-1080p.mkv")
+    assert (g.imdb_id, g.series_imdb_id, g.kind, g.season, g.episode) == ("35366575", "7654321", "episode", 2, 1)
+
+
+@ffmpeg
+def test_share_episode_id_guard_and_download(tmp_path, monkeypatch):
+    s = settings(tmp_path)
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    c = TestClient(app)
+    v = make_video(tmp_path / "lib/Harbor Lights/Season 2", "Harbor Lights - S02E01 - Title WEBDL-1080p.mkv")
+    with open(v, "ab") as fh:
+        fh.write(b"\0" * 200_000)
+    sub = v.with_name(v.stem + ".captionizerr.ru.srt"); sub.write_text(SRT, encoding="utf-8")
+    q = {"path": str(v), "lang": "ru"}
+    # download works without any OpenSubtitles setup, with a clean player-style name
+    r = c.get("/share/download", params=q)
+    assert r.status_code == 200 and r.content == sub.read_bytes()
+    import urllib.parse as _up
+    assert _up.unquote(r.headers["content-disposition"]).endswith("Harbor Lights - S02E01 - Title WEBDL-1080p.ru.srt")
+    assert c.get("/share/download", params={"path": "/etc/passwd", "lang": "ru"}).status_code == 404
+    assert "Download SRT" in c.get("/share", params=q).text
+    s.opensubtitles_user, s.opensubtitles_password = "me", "pw"
+    from captionizerr import opensubtitles
+    fake = RealShapeOS(); real = opensubtitles.Client
+    monkeypatch.setattr(opensubtitles, "Client", lambda u, p, ua: real(u, p, ua, proxy=fake))
+    page = c.get("/share", params=q).text
+    assert 'value="35366575"' in page and "the show is tt7654321" in page
+    data = {**q, "release": "x", "comment": "c", "translator": "t", "reviewed": "1", "rights": "1"}
+    r = c.post("/share", data={**data, "imdb_id": "tt7654321"}, headers=SAME, follow_redirects=False)
+    assert "whole+series" in r.headers["location"] and not [x for x in fake.calls if x[0] == "Upload"]
+    r = c.post("/share", data={**data, "imdb_id": "tt35366575"}, headers=SAME, follow_redirects=False)
+    assert "Uploaded" in r.headers["location"]
+    assert [x for x in fake.calls if x[0] == "Upload"][0][1]["baseinfo"]["idmovieimdb"] == "35366575"

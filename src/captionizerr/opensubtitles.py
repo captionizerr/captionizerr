@@ -78,6 +78,7 @@ class Guess:
     kind: str = ""           # movie | episode | tv series
     season: int | None = None
     episode: int | None = None
+    series_imdb_id: str = ""  # for an episode: the show's ID (imdb_id is then the episode's own)
 
 
 class Client:
@@ -112,9 +113,14 @@ class Client:
         best = data.get("BestGuess") or {}
         g = Guess(imdb_id=str(best.get("IDMovieIMDB") or ""), title=str(best.get("MovieName") or ""),
                   kind=str(best.get("MovieKind") or ""))
-        for k, attr in (("SeriesSeason", "season"), ("SeriesEpisode", "episode")):
-            if str(best.get(k) or "").isdigit():
-                setattr(g, attr, int(best[k]))
+        for keys, attr in ((("Season", "SeriesSeason"), "season"), (("Episode", "SeriesEpisode"), "episode")):
+            v = next((best[k] for k in keys if str(best.get(k) or "").isdigit()), None)
+            if v is not None:
+                setattr(g, attr, int(v))
+        # Episodes are filed under the episode's own IMDb ID, not the show's
+        ep_id = str(best.get("IMDBEpisode") or "")
+        if ep_id.isdigit():
+            g.series_imdb_id, g.imdb_id, g.kind = g.imdb_id, ep_id, "episode"
         return g
 
     def upload(self, sub: Path, video: Path, lang: str, imdb_id: str, release: str, comment: str,

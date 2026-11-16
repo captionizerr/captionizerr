@@ -2,8 +2,12 @@
 {% block title %}Share · CaptionizeRR{% endblock %}
 {% block content %}
 <p class="small"><a href="{{ back }}">← Back</a></p>
-<h1>Share on OpenSubtitles</h1>
+<h1>Share</h1>
 <p class="sub mono" style="word-break:break-all">{{ fname }}</p>
+<div class="card"><h2>Download</h2>
+  <p class="small muted">Save the file to share it yourself (a forum, a friend, another subtitle site). It's named <span class="mono">{{ dl_name }}</span>, the way players expect.</p>
+  <div class="actions"><a class="btn" href="/share/download?{{ {'path': path, 'lang': lang, 'forced': '1' if forced else ''}|urlencode }}" download>Download {{ dl_name.rsplit('.', 1)[-1]|upper }}</a></div></div>
+<h2 style="margin-top:20px">Upload to OpenSubtitles</h2>
 {% if shared %}<div class="flash ok" role="status">{{ 'OpenSubtitles already had this exact file' if shared.already else 'Shared' }} on {{ shared_when }}.{% if shared.url %} <a href="{{ shared.url }}" target="_blank" rel="noopener">Open on OpenSubtitles ↗</a>{% endif %}</div>{% endif %}
 {% if not configured %}
 <div class="card"><h2>Not set up yet</h2>
@@ -15,7 +19,8 @@
   <p class="small muted">Uploads this one file to OpenSubtitles.org under your account, marked as an <b>AI translation</b>. Nothing is ever shared automatically.</p>
   {% if guess_error %}<div class="flash warn">Couldn't identify the title automatically: {{ guess_error }}. Enter the IMDb ID yourself.</div>{% endif %}
   <div class="fields">
-    <label class="f">IMDb ID {% if guess.title %}<span class="h">OpenSubtitles thinks this is “{{ guess.title }}”{% if guess.season %} S{{ '%02d'|format(guess.season) }}E{{ '%02d'|format(guess.episode or 0) }}{% endif %}. Check it: for an episode it must be the <i>episode's</i> ID.</span>{% endif %}
+    <label class="f">IMDb ID {% if guess.title %}<span class="h">OpenSubtitles thinks this is “{{ guess.title }}”{% if guess.season %} S{{ '%02d'|format(guess.season) }}E{{ '%02d'|format(guess.episode or 0) }}{% endif %}.
+        {% if guess.kind == 'episode' %}This is the <i>episode's</i> own ID (the show is tt{{ guess.series_imdb_id }}).{% elif episode_file %}<b>No episode ID found</b>: look the episode up on IMDb and paste its own ID; the show's ID is refused.{% else %}Check it before uploading.{% endif %}</span>{% endif %}
       <input type="text" name="imdb_id" value="{{ guess.imdb_id }}" required pattern="(tt)?[0-9]{5,10}" placeholder="tt1234567"></label>
     <label class="f">Language <input type="text" value="{{ lang_names.get(lang, lang) }}" disabled></label>
     <label class="f">Release name <input type="text" name="release" value="{{ release }}"><span class="h">Lets people match it to their copy.</span></label>

@@ -6,6 +6,7 @@ UI has no login on a trusted LAN and some actions spend money.
 """
 from __future__ import annotations
 
+import logging
 import re
 import threading
 import time
@@ -14,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -30,6 +31,8 @@ from ..jellyfin import refresh_all
 from ..pricing import cost as price_of
 from ..profile import Profile
 from ..writer import WriteRefused, replace_own, target_path
+
+log = logging.getLogger("captionizerr.web")
 
 HERE = Path(__file__).parent
 EFFORTS = ["low", "medium", "high", "xhigh", "max"]
@@ -550,7 +553,17 @@ def register(app: FastAPI) -> None:
                       translator=f"CaptionizeRR (AI: {s.active_model})", hd=bool(re.search(r"(720|1080|2160)p", video.name)),
                       comment=f"AI translation ({s.active_model}) of this release's own subtitles, timed to the file; "
                               "reviewed by the uploader.",
+                      dl_name=f"{video.stem}.{lang}{'.forced' if forced else ''}{sub.suffix}",
+                      episode_file=bool(re.search(r"[Ss]\d{1,3}[Ee]\d{1,4}", video.name)),
                       shared=shared, shared_when=datetime.fromtimestamp(shared["at"]).strftime("%d %b %Y") if shared else "")
+
+    @app.get("/share/download")
+    def share_download(path: str, lang: str, forced: str = ""):
+        """The translation as a file to keep or share by hand, named the way players and sites expect
+        (<video>.<lang>[.forced].srt), without CaptionizeRR's own marker."""
+        video, sub = share_target(path, lang, bool(forced))
+        name = f"{video.stem}.{lang}{'.forced' if forced else ''}{sub.suffix}"
+        return FileResponse(sub, filename=name, media_type="application/x-subrip" if sub.suffix == ".srt" else "text/plain")
 
     @app.post("/share")
     async def share_upload(request: Request):
@@ -564,16 +577,24 @@ def register(app: FastAPI) -> None:
         imdb = str(f.get("imdb_id", "")).strip()
         if not re.fullmatch(r"(tt)?\d{5,10}", imdb):
             return _redirect(back, "The IMDb ID looks like tt1234567.", "warn")
+        episode_file = bool(re.search(r"[Ss]\d{1,3}[Ee]\d{1,4}", video.name))
+
         def upload():
             c = os_client()
             c.login()
+            if episode_file:     # the show's ID files it under the whole series: OpenSubtitles refuses that
+                g = c.guess(video.name)
+                if g.series_imdb_id and re.sub(r"\D", "", imdb) == g.series_imdb_id:
+                    raise ValueError(f"tt{imdb.lstrip('t')} is the whole series; use this episode's own IMDb ID"
+                                     + (f" (OpenSubtitles suggests tt{g.imdb_id})" if g.imdb_id else ""))
             return c.upload(sub, video, lang, imdb, str(f.get("release", ""))[:200], str(f.get("comment", ""))[:500],
                          str(f.get("translator", ""))[:100], forced=forced,
                          hd=bool(re.search(r"(720|1080|2160)p", video.name)))
         try:
             r = await run_in_threadpool(upload)
         except Exception as e:
-            return _redirect(back, f"Not uploaded: {str(e)[:200]}", "warn")
+            log.warning("OpenSubtitles upload of %s failed: %s", sub.name, e)
+            return _redirect(back, f"Not uploaded: {str(e)[:300]}", "warn")
         store.record_share(str(sub), r["url"], r["already"])
         return _redirect(back, "OpenSubtitles already has this exact file." if r["already"] else "Uploaded to OpenSubtitles. Thank you!")
 
