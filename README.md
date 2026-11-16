@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<h1 align="center">Captionizerr</h1>
+<h1 align="center">CaptionizeRR</h1>
 
 <p align="center">LLM subtitle translation for the *arr stack, timed to the file and faithful to the original.</p>
 
