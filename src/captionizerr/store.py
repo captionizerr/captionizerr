@@ -94,8 +94,11 @@ class Store:
         for col, decl in MIGRATIONS.items():
             if col not in have:
                 self.db.execute(f"ALTER TABLE jobs ADD COLUMN {col} {decl}")
-        # a crash mid-job leaves it 'running'; requeue on start
-        self.db.execute("UPDATE jobs SET state='queued', updated=? WHERE state='running'", (time.time(),))
+
+    def requeue_interrupted(self) -> int:
+        """A crash or restart mid-job leaves it 'running': requeue it. Only the service calls this,
+        at its own start; a CLI or script opening the same database must not touch a live job."""
+        return self._q("UPDATE jobs SET state='queued', updated=? WHERE state='running'", (time.time(),)).rowcount
 
     def _q(self, sql, args=()):
         with self._lock:

@@ -1175,3 +1175,15 @@ def test_batch_result_uses_the_source_it_was_built_from(tmp_path):
     w.poll_batches()
     j = store.get(job.id)
     assert "40 cues from en (embedded)" in j.detail and j.state == "needs_review"   # not re-planned on the new file
+
+
+def test_opening_the_database_elsewhere_leaves_a_running_job_alone(tmp_path):
+    from captionizerr.store import Store
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    store = app.state.store
+    j = store.enqueue("manual", "x", "/x.mkv", "ru", None)
+    store.next_queued()                                   # now running
+    Store(tmp_path / "config" / "captionizerr.db")        # e.g. the CLI, or a script
+    assert store.get(j.id).state == "running"
+    create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)   # the service restarting
+    assert store.get(j.id).state == "queued"
