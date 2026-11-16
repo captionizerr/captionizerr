@@ -648,3 +648,68 @@ def test_opensubtitles_login_errors_explain_themselves():
     with pytest.raises(OpenSubtitlesError, match="USER_AGENT"):
         Client("u", "p", "ua", proxy=R("414 Unknown User Agent")).login()
     assert Client("u", "p", "ua", proxy=R("200 OK")).login() == "t"
+
+
+# ------------------------------------------------------------------ automatic prices
+def fake_fetch(url, cache, timeout=20):
+    if "litellm" in url:
+        return {"gpt-6-luna": {"input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07, "cache_read_input_token_cost": 1e-08},
+                "deepseek/deepseek-chat": {"input_cost_per_token": 2.8e-07, "output_cost_per_token": 4.2e-07},
+                "claude-opus-5-5": {"input_cost_per_token": 4e-06, "output_cost_per_token": 2e-05},
+                "claude-sonnet-5-5": {"input_cost_per_token": 3e-06, "output_cost_per_token": 1e-05}}, 1700000000.0
+    return {"data": [{"id": "openai/gpt-6-luna", "pricing": {"prompt": "0.0000001", "completion": "0.0000005"}}]}, 1700000000.0
+
+
+def test_price_lookup_sources(tmp_path):
+    from captionizerr.price_lookup import lookup, check_builtin
+    p = lookup("openai", "https://api.openai.com/v1", "gpt-6-luna", tmp_path, fake_fetch)
+    assert (round(p.inp, 4), round(p.out, 4), round(p.cache_read, 4)) == (0.1, 0.5, 0.01) and "LiteLLM" in p.source
+    assert round(p.per_episode, 4) == round((16000 * 0.1 + 12000 * 0.5) / 1e6, 4)
+    assert lookup("openai", "https://api.deepseek.com/v1", "deepseek-chat", tmp_path, fake_fetch).inp == pytest.approx(0.28)
+    assert lookup("openai", "https://openrouter.ai/api/v1", "openai/gpt-6-luna", tmp_path, fake_fetch).source == "OpenRouter (live)"
+    assert lookup("openai", "http://192.168.1.5:1234/v1", "anything", tmp_path, fake_fetch).inp == 0
+    assert lookup("ollama", "", "gemma3:27b", tmp_path, fake_fetch).source.startswith("local")
+    a = lookup("anthropic", "", "claude-opus-5-5", tmp_path, fake_fetch)
+    assert (a.inp, a.out) == (4.0, 20.0) and "built-in" in a.source
+    assert lookup("openai", "https://api.openai.com/v1", "no-such-model", tmp_path, fake_fetch) is None
+    chk = check_builtin(tmp_path, fake_fetch)
+    assert chk["claude-opus-5-5"]["status"] == "matches" and chk["claude-sonnet-5-5"]["status"] == "differs"
+
+
+def test_price_cache_used_when_offline(tmp_path):
+    from captionizerr import price_lookup
+    import json as _json, time as _time
+    cache = tmp_path / "prices-litellm.json"
+    cache.write_text(_json.dumps({"fetched": _time.time() - 10 * 86400, "data": {"m": {"input_cost_per_token": 1e-06}}}))
+    def offline(*a, **k):
+        raise OSError("no network")
+    import urllib.request
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = offline
+    try:
+        p = price_lookup.litellm("m", tmp_path)       # stale but usable
+    finally:
+        urllib.request.urlopen = orig
+    assert p is not None and p.inp == pytest.approx(1.0)
+
+
+def test_price_endpoint_and_zero_price_warning(tmp_path, monkeypatch):
+    from captionizerr import price_lookup
+    monkeypatch.setattr(price_lookup, "_fetch_json", fake_fetch)
+    monkeypatch.setattr(price_lookup.lookup, "__defaults__", (fake_fetch,))
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    c = TestClient(app)
+    r = c.post("/settings/price", data={"provider": "openai", "model": "gpt-6-luna", "base_url": "https://api.openai.com/v1"}, headers=SAME)
+    assert r.json()["found"] and r.json()["per_episode"] == pytest.approx(0.0076)
+    assert c.post("/settings/price", data={"provider": "openai", "model": "x"}).status_code == 403
+    r = c.post("/settings/ai", data={"provider": "openai", "openai_base_url": "https://api.openai.com/v1", "openai_model": "gpt-6-luna",
+                                     "openai_price_in": "0", "openai_price_out": "0"}, headers=SAME, follow_redirects=False)
+    assert "can%27t+protect" in r.headers["location"] or "can't+protect" in r.headers["location"]
+    r = c.post("/settings/ai", data={"provider": "openai", "openai_base_url": "https://api.openai.com/v1", "openai_model": "gpt-6-luna",
+                                     "openai_price_in": "0.1", "openai_price_out": "0.5", "openai_price_source": "LiteLLM community price list"},
+               headers=SAME, follow_redirects=False)
+    s = app.state.settings
+    assert "protect" not in r.headers["location"] and s.openai_price_source.startswith("LiteLLM") and s.openai_price_in == 0.1
+    r = c.post("/settings/ai", data={"provider": "openai", "openai_base_url": "http://localhost:1234/v1", "openai_model": "local",
+                                     "openai_price_in": "0", "openai_price_out": "0"}, headers=SAME, follow_redirects=False)
+    assert "protect" not in r.headers["location"]                     # local servers are free: no warning

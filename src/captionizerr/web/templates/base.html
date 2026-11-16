@@ -150,7 +150,8 @@ document.addEventListener('click', async e => {
   const out = b.parentElement.querySelector('.test-result'); const form = b.closest('form');
   b.disabled = true; out.className = 'test-result'; out.textContent = b.dataset.test ? 'Testing…' : 'Setting up…';
   try { const j = await postForm(b.dataset.test ? '/settings/test/' + b.dataset.test : '/settings/connect/' + b.dataset.connect, form);
-        out.textContent = (j.ok ? '✓ ' : '✗ ') + j.message; out.classList.add(j.ok ? 'ok' : 'bad'); }
+        out.textContent = (j.ok ? '✓ ' : '✗ ') + j.message; out.classList.add(j.ok ? 'ok' : 'bad');
+        if (j.price) fillPrice(j.price); }
   catch (err) { out.textContent = '✗ ' + err.message; out.classList.add('bad'); }
   b.disabled = false;
 });
@@ -167,6 +168,48 @@ document.getElementById('oll-find')?.addEventListener('click', async () => {
         hint.textContent = `${j.models.length} model(s) found.`; }
   catch (err) { hint.textContent = "Couldn't reach Ollama: " + err.message; }
 });
+
+// Model lists and automatic prices (AI provider settings and the setup wizard)
+const $ = id => document.getElementById(id);
+function fillPrice(p) {
+  if (!$('oa-in')) return;
+  $('oa-in').value = +p.inp.toFixed(4); $('oa-out').value = +p.out.toFixed(4); $('oa-src').value = p.source;
+  const when = p.updated ? ', updated ' + new Date(p.updated * 1000).toLocaleDateString() : '';
+  if ($('oa-info')) $('oa-info').textContent = `≈ $${p.per_episode.toFixed(3)} per episode · $${(+p.inp.toFixed(4))} in / $${(+p.out.toFixed(4))} out per 1M tokens · from ${p.source}${when}. You can change them.`;
+}
+async function lookupPrice(provider, model, base) {
+  const fd = new FormData(); fd.append('provider', provider); fd.append('model', model); fd.append('base_url', base || '');
+  const r = await fetch('/settings/price', {method: 'POST', body: fd}); return r.ok ? r.json() : {found: false};
+}
+$('oa-model')?.addEventListener('change', async () => {
+  const m = $('oa-model').value.trim(); if (!m) return;
+  $('oa-info').textContent = 'Looking up the price…';
+  const p = await lookupPrice('openai', m, $('oa-url')?.value);
+  if (p.found) fillPrice(p);
+  else { $('oa-src').value = 'entered by hand';
+         $('oa-info').textContent = `No published price found for “${m}”. Enter it, or the monthly cap can't count this model's cost.`; }
+});
+$('oa-find')?.addEventListener('click', async () => {
+  const form = $('oa-find').closest('form'), hint = $('oa-models-hint') || $('oa-info');
+  hint.textContent = 'Asking the provider…';
+  const r = await fetch('/settings/models/openai', {method: 'POST', body: new FormData(form)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { hint.textContent = "Couldn't list models: " + (j.error || r.status); return; }
+  const dl = $('oa-models'); dl.replaceChildren(...j.models.map(id => Object.assign(document.createElement('option'), {value: id})));
+  hint.textContent = `${j.models.length} models available. Click the Model field to pick one.`;
+  $('oa-model').focus();
+});
+async function anthropicInfo() {
+  const sel = $('an-model'), info = $('an-info'); if (!sel || !info) return;
+  const p = await lookupPrice('anthropic', sel.value, '');
+  let text = p.found ? `≈ $${p.per_episode.toFixed(2)} per episode ($${p.inp} in / $${p.out} out per 1M tokens).` : '';
+  try { const r = await fetch('/settings/price/check', {method: 'POST'}); const c = (await r.json())[sel.value];
+        if (c && c.status === 'matches') text += ' Matches the published price list.';
+        if (c && c.status === 'differs') text += ` Note: the published list now says $${c.litellm[0]} in / $${c.litellm[1]} out; the built-in prices may be out of date.`;
+  } catch {}
+  info.textContent = text;
+}
+$('an-model')?.addEventListener('change', anthropicInfo); anthropicInfo();
 </script>
 </body>
 </html>

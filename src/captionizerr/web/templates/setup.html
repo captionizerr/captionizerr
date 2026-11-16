@@ -36,7 +36,7 @@
   </div>
   <div data-for="anthropic"><div class="fields">
     {{ secret('anthropic_key', secrets, placeholder='sk-ant-…', hint='From <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a> → API keys.', next='/setup?step=ai') }}
-    <label class="f">Model <select name="model">{% for m in models %}<option value="{{ m.id }}" {{ 'selected' if m.id == v.model }}>{{ m.id }} · ~${{ '%.2f'|format(m.ep) }}/episode</option>{% endfor %}</select></label>
+    <label class="f">Model <select name="model" id="an-model">{% for m in models %}<option value="{{ m.id }}" {{ 'selected' if m.id == v.model }}>{{ m.id }} · ~${{ '%.2f'|format(m.ep) }}/episode</option>{% endfor %}</select><span class="h" id="an-info"></span></label>
     <input type="hidden" name="effort" value="{{ v.effort }}">
   </div><div class="actions">{{ test('anthropic', 'Test key (free)') }}</div></div>
   <div data-for="ollama"><div class="fields">
@@ -45,9 +45,11 @@
     <input type="hidden" name="ollama_num_ctx" value="{{ v.ollama_num_ctx }}">
   </div><div class="actions">{{ test('ollama') }}</div></div>
   <div data-for="openai"><div class="fields">
-    <label class="f">Base URL <input type="url" name="openai_base_url" value="{{ v.openai_base_url or 'https://api.openai.com/v1' }}"><span class="h">OpenAI's address is filled in. For OpenRouter, vLLM, LM Studio or Ollama, use their <span class="mono">/v1</span> address.</span></label>
+    <label class="f">Base URL <input type="url" name="openai_base_url" id="oa-url" value="{{ v.openai_base_url or 'https://api.openai.com/v1' }}"><span class="h">OpenAI's address is filled in. For OpenRouter, vLLM, LM Studio or Ollama, use their <span class="mono">/v1</span> address.</span></label>
     {{ secret('openai_key', secrets, label='API key', next='/setup?step=ai') }}
-    <label class="f">Model <input type="text" name="openai_model" value="{{ v.openai_model }}" placeholder="e.g. gpt-6-luna"></label>
+    <label class="f">Model <span class="row-inline"><input type="text" name="openai_model" id="oa-model" list="oa-models" value="{{ v.openai_model }}" placeholder="e.g. gpt-6-luna" autocomplete="off"><button type="button" class="small" id="oa-find">Find models</button></span>
+      <datalist id="oa-models"></datalist><span class="h" id="oa-info">The price is looked up when you pick a model.</span></label>
+    <input type="hidden" name="openai_price_in" id="oa-in" value="{{ v.openai_price_in }}"><input type="hidden" name="openai_price_out" id="oa-out" value="{{ v.openai_price_out }}"><input type="hidden" name="openai_price_source" id="oa-src" value="{{ v.openai_price_source }}">
   </div><div class="actions">{{ test('openai') }}</div></div>
   <div class="actions"><button class="primary">Save and continue</button><a class="btn" href="/setup?step={{ prev_step }}">Back</a></div>
 </form>

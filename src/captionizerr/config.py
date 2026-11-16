@@ -80,6 +80,7 @@ class Settings:
     openai_model: str = ""
     openai_price_in: float = 0.0  # $ per 1M tokens; 0 for local models
     openai_price_out: float = 0.0
+    openai_price_source: str = ""     # where the prices came from ("LiteLLM …", "OpenRouter (live)", "entered by hand")
     openai_max_output: int = 16000
     # batch backlog
     batch_min_wait_s: int = 120   # collect backlog jobs this long before sending one batch
@@ -169,7 +170,7 @@ class Settings:
         "ui_user": "str", "opensubtitles_user": "str", "source_langs": "list", "any_source": "bool", "bazarr_url": "str", "auto_notes": "bool",
         "provider": "str", "ollama_url": "str", "ollama_model": "str", "ollama_num_ctx": "int",
         "ollama_max_output": "int", "openai_base_url": "str", "openai_model": "str", "openai_price_in": "float",
-        "openai_price_out": "float", "openai_max_output": "int",
+        "openai_price_out": "float", "openai_price_source": "str", "openai_max_output": "int",
     }
 
     def apply(self, values: dict) -> None:

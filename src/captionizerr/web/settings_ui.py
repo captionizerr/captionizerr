@@ -179,6 +179,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
                             openai_model=str(f.get("openai_model") or "").strip(),
                             openai_price_in=max(0.0, float(f.get("openai_price_in") or 0)),
                             openai_price_out=max(0.0, float(f.get("openai_price_out") or 0)),
+                            openai_price_source=str(f.get("openai_price_source") or "entered by hand")[:80],
                             openai_max_output=max(1000, min(200000, int(f.get("openai_max_output") or 16000))))
                 if not (vals["openai_base_url"] and vals["openai_model"]):
                     raise ValueError("enter the base URL and the model")
@@ -188,6 +189,10 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         save(vals)
         if p == "anthropic" and not s.anthropic_key:
             return redirect(nxt, "Saved, but there is no Anthropic API key yet.", "warn")
+        from ..price_lookup import is_local
+        if p == "openai" and not (vals["openai_price_in"] or vals["openai_price_out"]) and not is_local(vals["openai_base_url"]):
+            return redirect(nxt, "Saved, but the prices are $0: jobs will count as free and the monthly cap can't "
+                                 "protect you. Use Find models or Test to fill them in, or enter them.", "warn")
         return redirect(nxt, "Saved." if "/setup" not in nxt else "")
 
     @app.get("/settings/connections")
@@ -271,14 +276,46 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         elif service == "openai":
             try:
                 from ..providers.openai_compat import OpenAICompatProvider
-                r = OpenAICompatProvider(g("openai_base_url", s.openai_base_url), g("openai_model", s.openai_model),
-                                         effective(f, "openai_key"), 200, timeout=60).complete("", "", "Reply with OK.")
+                base, model = g("openai_base_url", s.openai_base_url), g("openai_model", s.openai_model)
+                r = OpenAICompatProvider(base, model, effective(f, "openai_key"), 200, timeout=60).complete("", "", "Reply with OK.")
                 ok, msg = True, f"model answered “{r.text.strip()[:30]}”"
+                from ..price_lookup import lookup
+                pr = lookup("openai", base, model, s.cache_dir)
+                if pr:
+                    return {"ok": ok, "message": msg + f" · ≈ ${pr.per_episode:.3f} per episode ({pr.source})",
+                            "seconds": round(time.monotonic() - t0, 1), "price": pr.as_dict()}
             except Exception as e:
                 ok, msg = False, str(e)[:200]
         else:
             raise HTTPException(404)
         return {"ok": ok, "message": msg, "seconds": round(time.monotonic() - t0, 1)}
+
+    @app.post("/settings/models/openai")
+    async def openai_models(request: Request):
+        same_origin(request)
+        f = await request.form()
+        from ..price_lookup import list_openai_models
+        try:
+            base = _url(f.get("openai_base_url") or s.openai_base_url, "the base URL")
+            return {"models": await run_in_threadpool(list_openai_models, base, effective(f, "openai_key"))}
+        except Exception as e:
+            return JSONResponse({"error": str(e)[:200]}, 502)
+
+    @app.post("/settings/price")
+    async def price(request: Request):
+        """Look a model's price up (built-in table, OpenRouter, LiteLLM; local servers are free)."""
+        same_origin(request)
+        f = await request.form()
+        from ..price_lookup import lookup
+        p = await run_in_threadpool(lookup, str(f.get("provider") or s.provider), str(f.get("base_url") or ""),
+                                    str(f.get("model") or ""), s.cache_dir)
+        return {"found": False} if p is None else {"found": True, **p.as_dict()}
+
+    @app.post("/settings/price/check")
+    async def price_check(request: Request):
+        same_origin(request)
+        from ..price_lookup import check_builtin
+        return await run_in_threadpool(check_builtin, s.cache_dir)
 
     @app.post("/settings/ollama/models")
     async def ollama_models(request: Request):
