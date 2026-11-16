@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **`captionizerr eval`:** `--only` limits the run to cases whose name contains a string (repeatable); `--keep DIR` saves each model's lines as `DIR/<case>.json` (private, like the cases) for reading side by side. OpenAI-compatible models now get the `--effort` you pass, or the effort saved in the web UI; the CLI reads the UI-saved settings (read-only) instead of only the environment, so a model is measured the way it translates.
+
 ## 0.3.0 — 2026-11-16
 
 - **Film pages:** a film in the Library opens its own page: status per language with editor, download, share and job links; **Translate** / **Translate again** / backlog; its history; film settings (translate automatically on import, languages, swearing tone) and film notes, which the AI can draft from the overview and the film's own subtitles.

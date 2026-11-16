@@ -126,6 +126,8 @@ captionizerr serve --port 8095
 # quality check-set (private: cases contain copyrighted dialogue)
 captionizerr eval-build --data /config --out /config/evals      # from translations you approved or edited
 captionizerr eval /config/evals --provider ollama --model gemma3:12b
+captionizerr eval /config/evals --provider openai --model <model> --effort low \
+    --only S02E09 --keep /config/sidebyside/<model>        # a few scenes, keeping each line to read side by side
 captionizerr backfill-sources      # once, after upgrading from a version before 0.1
 ```
 
