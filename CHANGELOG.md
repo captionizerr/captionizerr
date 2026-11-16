@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.2.9 — 2026-11-16
+
+UI polish after a full review of every page on desktop and phone:
+
+- **Dashboard on phones:** each translation is a compact card (title, details, time · language · model, state, cost, actions) instead of a table cut off at the right.
+- **Replaced translations hidden:** older versions of files that were translated again no longer fill the list; a note says how many are hidden, with **Show them**.
+- **Plain words:** details read "755 lines from the built-in English track, its missing ending from a downloaded subtitle; 23 lines checked and fixed" instead of "755 cues from en (embedded + sidecar ending); 23 flagged, 0 open". Only the display changed.
+- **Job page:** a **History of this file** list (translations, re-syncs, editor work) links every job for that episode; re-sync jobs show **Free** instead of a table of zero tokens; the source reads "imported by Sonarr", "started by hand", "re-sync to speech".
+- **Editor:** lines left out on purpose (TV promos, adverts the model confirmed) are shown greyed out as *skipped on purpose* instead of red "empty", and no longer count as flagged. Recorded with each new translation and kept in step by re-sync; for older files, the last translation's state decides.
+- **Share:** the suggested OpenSubtitles comment says where the subtitle really came from (the release's own track, completed from another subtitle, or a downloaded one) and whether its timing was checked against the speech.
+- "Other spend" is now **Other activity**; line re-translations are titled "Northwind S02E05: line 13" instead of the file name.
+- Settings: storage sizes in KB/MB (no more "0.0 MB"), short swearing options with a hint, whole numbers without a trailing ",0".
+
 ## 0.2.8 — 2026-11-16
 
 - **Sync to speech (Whisper):** connect a speech-to-text service (Settings → Connections → Whisper; any whisper-asr-webservice-compatible server, or the small faster-whisper one in `deploy/whisper`). Each subtitle line is found in the transcript of the audio, and the timing follows the speech:
