@@ -1008,12 +1008,12 @@ def test_cut_off_shapes(tmp_path):
 
 @ffmpeg
 def test_complete_sidecar_beats_a_cut_off_embedded_track(tmp_path):
-    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(40, last_len_s=65))
     assert media.find_source(v, tmp_path / "cache", ["en"], "ru").origin == "embedded"
-    (v.parent / "Show S01E01.en.srt").write_text(_srt(60), encoding="utf-8")
+    (v.parent / "Show S01E01.en.srt").write_text(_srt(70), encoding="utf-8")
     src = media.find_source(v, tmp_path / "cache", ["en"], "ru")
     assert src.origin == "sidecar" and src.path.name == "Show S01E01.en.srt"
-    (v.parent / "Show S01E01.en.srt").write_text(_srt(20), encoding="utf-8")   # shorter: no better
+    (v.parent / "Show S01E01.en.srt").write_text(_srt(38), encoding="utf-8")   # shorter: no better
     assert media.find_source(v, tmp_path / "cache", ["en"], "ru").origin == "embedded"
 
 
@@ -1022,13 +1022,13 @@ def test_cut_off_source_asks_bazarr_then_translates_with_a_warning(tmp_path, mon
     s = settings(tmp_path, bazarr_url="http://bazarr", bazarr_key="k")
     app = create_app(s, provider_factory=FakeProvider, start_worker=False)
     store, w = app.state.store, app.state.worker
-    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(40, last_len_s=65))
     asked = []
     monkeypatch.setattr(w, "_bazarr_request", lambda bz, job: asked.append(job.id) or True)
     job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
     w.process(store.next_queued())
     j = store.get(job.id)
-    assert j.state == "waiting_source" and j.detail.startswith("Source cut short:") and "1:13" in j.detail and asked
+    assert j.state == "waiting_source" and j.detail.startswith("Source cut short:") and "1:58" in j.detail and asked
     v.with_name("Show S01E01.de.srt").write_text(_srt(25), encoding="utf-8")   # older, unrelated: not a reason
     old(v.with_name("Show S01E01.de.srt"), 10 * 3600)
     w.check_waiting()
@@ -1040,7 +1040,7 @@ def test_cut_off_source_asks_bazarr_then_translates_with_a_warning(tmp_path, mon
     j = store.get(job.id)
     assert j.state == "needs_review" and j.detail.startswith("Incomplete source:") and "Re-translate" in j.detail
     out = cuesmod.load(j.output_path).cues
-    assert len(out) == 25 and out[-1].end_ms - out[-1].start_ms <= 7000 and asked == [job.id]
+    assert len(out) == 40 and out[-1].end_ms - out[-1].start_ms <= 7000 and asked == [job.id]
 
 
 @ffmpeg
@@ -1048,29 +1048,29 @@ def test_cut_off_source_uses_the_complete_subtitle_bazarr_brings(tmp_path, monke
     s = settings(tmp_path, bazarr_url="http://bazarr", bazarr_key="k")
     app = create_app(s, provider_factory=FakeProvider, start_worker=False)
     store, w = app.state.store, app.state.worker
-    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(40, last_len_s=65))
     monkeypatch.setattr(w, "_bazarr_request", lambda bz, job: True)
     job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
     w.process(store.next_queued())
     side = v.with_name("Show S01E01.en.srt")
-    side.write_text(_srt(60), encoding="utf-8")
+    side.write_text(_srt(70), encoding="utf-8")
     t = time.time() - 300
     os.utime(side, (t, t))
     store._q("UPDATE jobs SET wait_since=? WHERE id=?", (t - 60, job.id))
     w.check_waiting()
     w.process(store.next_queued())
     j = store.get(job.id)
-    assert j.state == "done" and "60 cues from en (sidecar)" in j.detail
+    assert j.state == "done" and "70 cues from en (sidecar)" in j.detail
 
 
 @ffmpeg
 def test_cut_off_source_without_bazarr_goes_straight_to_review(tmp_path):
     app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
     store, w = app.state.store, app.state.worker
-    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(40, last_len_s=65))
     job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
     w.process(store.next_queued())
-    assert store.get(job.id).state == "needs_review" and "stops at 1:13" in store.get(job.id).detail
+    assert store.get(job.id).state == "needs_review" and "stops at 1:58" in store.get(job.id).detail
 
 
 @ffmpeg
@@ -1078,9 +1078,9 @@ def test_stretched_last_line_confirmed_by_a_sidecar_is_just_shortened(tmp_path, 
     s = settings(tmp_path, bazarr_url="http://bazarr", bazarr_key="k")
     app = create_app(s, provider_factory=FakeProvider, start_worker=False)
     store, w = app.state.store, app.state.worker
-    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(40, last_len_s=65))
     side = v.with_name("Show S01E01.en.hi.srt")
-    side.write_text(_srt(26), encoding="utf-8")          # complete, ends 3 s after the embedded track: same dialogue
+    side.write_text(_srt(41), encoding="utf-8")          # complete, ends 3 s after the embedded track: same dialogue
     old(side)
     asked = []
     monkeypatch.setattr(w, "_bazarr_request", lambda bz, job: asked.append(1) or True)
@@ -1089,3 +1089,36 @@ def test_stretched_last_line_confirmed_by_a_sidecar_is_just_shortened(tmp_path, 
     j = store.get(job.id)
     assert j.state == "done" and "(embedded)" in j.detail and "shortened" in j.detail and not asked
     assert cuesmod.load(j.output_path).cues[-1].end_ms - cuesmod.load(j.output_path).cues[-1].start_ms <= 7000
+
+
+def test_fit_timing_undoes_frame_rate_and_shift(tmp_path):
+    ref = cuesmod.load(_write(tmp_path / "ref.srt", _srt(80))).cues
+    pal = cuesmod.load(_write(tmp_path / "pal.srt", _srt(80))).cues
+    for c in pal:                                   # the same lines timed for 25 fps with a 20 s longer intro
+        c.start_ms, c.end_ms = round(c.start_ms / 1.0427 - 20_000), round(c.end_ms / 1.0427 - 20_000)
+    a, b = media.fit_timing(ref, pal)
+    assert abs(a - 1.0427) < 1e-3 and all(abs(a * p.start_ms + b - r.start_ms) < 50 for p, r in zip(pal, ref))
+    other = cuesmod.load(_write(tmp_path / "other.srt", _srt(80).replace("dialogue", "monologue"))).cues
+    assert media.fit_timing(ref, other) is None     # nothing in common: never used
+
+
+def _write(p: Path, text: str) -> Path:
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+@ffmpeg
+def test_out_of_sync_sidecar_is_lined_up_before_use(tmp_path):
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(40, last_len_s=65))
+    side = v.parent / "Show S01E01.en.srt"
+    pal = cuesmod.load(_write(tmp_path / "x.srt", _srt(70)))
+    import pysubs2
+    for ev in pal.ssa.events:
+        ev.start, ev.end = round(ev.start / 1.0427) + 5000, round(ev.end / 1.0427) + 5000
+    pal.ssa.save(str(side), format_="srt")
+    src = media.find_source(v, tmp_path / "cache", ["en"], "ru")
+    assert src.origin == "sidecar" and src.path != side and src.path.parent == tmp_path / "cache"
+    fixed = cuesmod.load(src.path).cues
+    want = cuesmod.load(_write(tmp_path / "y.srt", _srt(70))).cues
+    assert all(abs(f.start_ms - w.start_ms) <= 20 for f, w in zip(fixed, want))
+    assert pysubs2 and side.read_text(encoding="utf-8").startswith("1\n")      # the original is untouched

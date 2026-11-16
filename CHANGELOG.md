@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Incomplete source tracks:** a built-in subtitle track that stops early (its last line stretched over the rest of the video, or nothing for the last quarter) is now detected. A complete subtitle file next to the video in the same language is used instead; otherwise Bazarr is asked for one and the job waits up to `BAZARR_WAIT_HOURS`, then translates what there is, shortens the stretched line and goes to Needs review with a note saying where the source stops. Any source line longer than a minute is shortened. Found on Northwind season 2 WEB-DL releases, whose English CC tracks end 5–14 minutes early.
+- **Downloaded subtitles are lined up before use:** a subtitle that replaces a cut-off track is matched against the lines both share, and its timing is shifted and stretched to fit (a file made for 25 fps or a different intro drifts by minutes otherwise; Bazarr's sync only shifts). A file that doesn't line up closely is not used. The original file is never changed: the aligned copy lives in the cache.
 
 ## 0.2.6 — 2026-11-16
 

@@ -146,9 +146,77 @@ def clamp_long_cues(doc, max_ms: int = LONG_CUE_MS) -> int:
     return n
 
 
-def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: str, duration: float | None) -> Path | None:
+_NORM_DROP = re.compile(r"\[.*?\]|\(.*?\)|<.*?>|\{.*?\}")
+
+
+def _norm(text: str) -> str:
+    return " ".join(re.sub(r"[^\w ]+", " ", _NORM_DROP.sub(" ", text.lower())).split())
+
+
+def fit_timing(reference, other, min_pairs: int = 30, max_error_ms: int = 400) -> tuple[float, float] | None:
+    """Map `other`'s times onto `reference`'s (t_ref = a * t_other + b) from the lines both share.
+
+    A subtitle made for another cut or frame rate (25 fps PAL vs 23.976 WEB, an extra intro) is
+    shifted and/or stretched; a straight-line fit through matching lines undoes both. Returns None
+    when too few lines match or the fit is poor (different edit): such a file is not used."""
+    def unique(cues):
+        seen: dict[str, int | None] = {}
+        for c in cues:
+            k = _norm(c.text)
+            if len(k) >= 12:
+                seen[k] = None if k in seen else c.start_ms
+        return {k: v for k, v in seen.items() if v is not None}
+    ref, oth = unique(reference), unique(other)
+    pts = [(oth[k], ref[k]) for k in oth.keys() & ref.keys()]
+    if len(pts) < min_pairs:
+        return None
+
+    def lsq(ps):
+        n = len(ps)
+        mx = sum(x for x, _ in ps) / n
+        my = sum(y for _, y in ps) / n
+        vx = sum((x - mx) ** 2 for x, _ in ps)
+        a = sum((x - mx) * (y - my) for x, y in ps) / vx if vx else 1.0
+        return a, my - a * mx
+    a, b = lsq(pts)
+    for limit in (5000, 1500, 700):                       # drop lines that matched by accident, refit
+        kept = [(x, y) for x, y in pts if abs(a * x + b - y) <= limit]
+        if len(kept) < min_pairs:
+            return None
+        a, b = lsq(kept)
+    errs = sorted(abs(a * x + b - y) for x, y in kept)
+    if errs[len(errs) // 2] > max_error_ms or not 0.9 < a < 1.1:
+        return None
+    return a, b
+
+
+def _retimed(path: Path, a: float, b: float, cache_dir: Path, lang: str) -> Path:
+    """A copy of `path` with every time mapped through (a, b), kept in the cache (the original is never touched)."""
+    import hashlib
+    import pysubs2
+    if abs(a - 1) < 1e-4 and abs(b) < 150:
+        return path
+    st = path.stat()
+    key = hashlib.sha1(f"{path}|{st.st_size}|{int(st.st_mtime)}|{a:.6f}|{b:.0f}".encode()).hexdigest()[:20]
+    out = cache_dir / f"{key}.{lang}.aligned{path.suffix.lower()}"
+    if out.is_file():
+        os.utime(out)
+        return out
+    subs = pysubs2.load(str(path), encoding="utf-8")
+    for ev in subs.events:
+        ev.start, ev.end = max(0, round(a * ev.start + b)), max(0, round(a * ev.end + b))
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(out.suffix + ".tmp")
+    subs.save(str(tmp), format_="ass" if out.suffix == ".ass" else "srt")
+    os.replace(tmp, out)
+    return out
+
+
+def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: str, duration: float | None,
+                    cache_dir: Path) -> Path | None:
     """The embedded track is cut short: a sidecar in the same language that is complete and reaches
-    further wins (e.g. one Bazarr downloaded and synced)."""
+    further wins (e.g. one Bazarr downloaded). It is first lined up with the embedded track on the
+    lines both have, so a file timed for another frame rate or cut still lands on the right frames."""
     from . import cues as cuesmod
     try:
         emb = cuesmod.load(embedded).cues
@@ -164,14 +232,18 @@ def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: st
             sc = cuesmod.load(path).cues
         except Exception:
             continue
-        if cut_off(sc, duration) is None and last_line_ms(sc) > cut + 60_000:
-            return path
+        fit = fit_timing(emb, sc)
+        if fit is None:
+            continue
+        a, b = fit
+        if cut_off(sc, duration) is None and a * last_line_ms(sc) + b > cut + 60_000:
+            return _retimed(path, a, b, cache_dir, lang)
     return None
 
 
-def end_confirmed(video: Path, lang: str, cut_ms: int, duration: float | None) -> bool:
-    """A complete sidecar in the same language ends about where the embedded track does: the
-    dialogue really ends there (only the last line was stretched over the credits)."""
+def end_confirmed(video: Path, lang: str, cues, cut_ms: int, duration: float | None) -> bool:
+    """A complete sidecar in the same language, lined up with the embedded track `cues`, ends about
+    where that track does: the dialogue really ends there (the last line was stretched over the credits)."""
     from . import cues as cuesmod
     for path, l, _sdh in sidecars(video):
         if l != lang:
@@ -180,7 +252,8 @@ def end_confirmed(video: Path, lang: str, cut_ms: int, duration: float | None) -
             sc = cuesmod.load(path).cues
         except Exception:
             continue
-        if cut_off(sc, duration) is None and abs(last_line_ms(sc) - cut_ms) <= 60_000:
+        fit = fit_timing(cues, sc)
+        if fit and cut_off(sc, duration) is None and abs(fit[0] * last_line_ms(sc) + fit[1] - cut_ms) <= 60_000:
             return True
     return False
 
@@ -201,7 +274,7 @@ def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
         st = pick_source(streams, lang)
         if st:
             emb = _cache_extract(video, st, cache_dir, lang)
-            better = _better_sidecar(emb, side, lang, duration)
+            better = _better_sidecar(emb, side, lang, duration, cache_dir)
             return Source(better, lang, "sidecar") if better else Source(emb, lang, "embedded")
         for path, l, _sdh in side:
             if l == lang:

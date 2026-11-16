@@ -159,7 +159,7 @@ class Worker:
         warning = ""
         duration = media.probe(video)[1]
         cut = media.cut_off(doc.cues, duration)
-        if cut is not None and src.origin == "embedded" and media.end_confirmed(video, src.lang, cut, duration):
+        if cut is not None and src.origin == "embedded" and media.end_confirmed(video, src.lang, doc.cues, cut, duration):
             cut = None                     # another subtitle ends there too: only the last line was stretched
         if cut is not None:
             where = f"{media.clock(cut)} of {media.clock(duration * 1000)}" if duration else media.clock(cut)
