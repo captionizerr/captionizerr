@@ -391,6 +391,7 @@ def test_translate_back_param_is_sanitised(ui):
 def test_translations_list_shows_the_model(ui):
     app, c, _ = ui
     st = app.state.store
+    st.save_settings({"_setup_done": True})          # the test app has no API key, so / would open the wizard
     j = st.enqueue("manual", "Show S01E01", "/x/a.mkv", "ru", None)
     st.finish(j.id, "done", "ok", "", 0.31, {}, "claude-opus-5-5")
     k = st.enqueue("manual", "Show S01E02", "/x/b.mkv", "ru", None)
