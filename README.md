@@ -46,31 +46,39 @@ Captionizerr writes into your media library, so the writer is deliberately narro
 ```bash
 mkdir captionizerr && cd captionizerr
 curl -LO https://raw.githubusercontent.com/captionizerr/captionizerr/main/deploy/docker-compose.yml
-curl -L -o .env https://raw.githubusercontent.com/captionizerr/captionizerr/main/deploy/env.example
-# edit .env: ANTHROPIC_API_KEY, CAPTIONIZERR_WEBHOOK_KEY, library path; edit the media volume in docker-compose.yml
+# edit the media volume in docker-compose.yml, then:
 docker compose up -d
 ```
 
-Open `http://<host>:8095`, pick your target languages in **Settings**, and check **AI providers**.
+Open `http://<host>:8095`. A **setup wizard** walks you through it in about five minutes:
+1. an optional login;
+2. the AI provider and its key, with a free test;
+3. your languages and monthly budget;
+4. Sonarr and Radarr (**Test**, then **Set up webhook**: Captionizerr adds its webhook to each app for you);
+5. Jellyfin, Emby or Plex, and Bazarr.
 
-Images: `ghcr.io/captionizerr/captionizerr` for linux/amd64 and linux/arm64 (Raspberry Pi 4/5 works fine; the model runs in the cloud or on your Ollama box).
+Everything can be changed later under **Settings**. No config file is needed.
 
-### Connect Sonarr and Radarr
+**Keys typed in the UI** are stored in `config/secrets.json` (readable only by the app), never in the database, and are never shown again. If you prefer to keep secrets out of the app's data entirely, provide them as files or environment variables instead (see [deploy/env.example](deploy/env.example) and the `secrets:` block in the compose file). Secrets set that way take precedence and show as "Set on the server".
 
-In each app: **Settings → Connect → + → Webhook**.
+Images: `ghcr.io/captionizerr/captionizerr` for linux/amd64 and linux/arm64. A Raspberry Pi 4/5 works fine, since the model runs in the cloud or on your Ollama box.
 
-- URL: `http://<captionizerr>:8095/api/hooks/sonarr` (use `radarr` for Radarr)
+### Webhooks by hand
+
+If you'd rather add them yourself: in Sonarr or Radarr go to **Settings → Connect → + → Webhook**.
+- URL: `http://<captionizerr>:8095/api/hooks/sonarr` (or `radarr`)
 - Method: POST
-- Username: anything (e.g. `sonarr`); Password: your `CAPTIONIZERR_WEBHOOK_KEY`. This keeps the key out of the URL; `?apikey=<key>` in the URL still works but ends up in logs.
-- Triggers: **On Import**, **On Upgrade**, **On Rename**
+- Triggers: On Import, On Upgrade, On Rename
+- Username: anything
+- Password: the webhook key (**Settings → Security → Show key**)
 
-Mount the library at the same path the *arr apps use, or set `CAPTIONIZERR_PATH_MAP`. For the Library page (translate existing episodes and films) and the Bazarr fallback, also set the Sonarr/Radarr URLs and keys.
+Mount the library at the same path the *arr apps use, or set the path maps under **Settings → Connections**.
 
 > If Sonarr/Radarr **Import Extra Files** is on with `srt` in the list, Sonarr may adopt and rename Captionizerr's files. That's harmless, but leaving `srt` out keeps ownership clear.
 
 ### Local models (Ollama)
 
-**AI providers → Local model (Ollama)**: enter the address, click **Find models**, pick one, and choose **Save and use**. Captionizerr uses Ollama's native API with an explicit context window and translates in chunks. Expect slower runs, and noticeably weaker results below ~27B parameters.
+**Settings → AI provider → Local model (Ollama)**: enter the address, click **Find models**, pick one, and save. Captionizerr uses Ollama's native API with an explicit context window and translates in chunks. Expect slower runs, and noticeably weaker results below ~27B parameters.
 
 ## Cost
 
@@ -87,9 +95,9 @@ A film costs about twice an episode. Series notes cost $0.05–0.15 once per ser
 
 ## Configuration
 
-Everything except secrets can be changed in the web UI. Environment variables set the defaults; see [docs/configuration.md](docs/configuration.md) and [deploy/env.example](deploy/env.example).
+Everything, including keys, can be set in the web UI. Environment variables and secret files can preset any of it, which suits automated deploys; see [docs/configuration.md](docs/configuration.md) and [deploy/env.example](deploy/env.example).
 
-**Security:** there is **no login by default**; it's meant for a home LAN. Set `CAPTIONIZERR_UI_PASSWORD` if anyone else can reach the port, and never expose it to the internet without a reverse proxy with auth. See [SECURITY.md](SECURITY.md).
+**Security:** there is **no login until you set one** (the wizard's first step, or **Settings → Security**). It's meant for a home LAN; set a password if anyone else can reach the port, and never expose it to the internet without a reverse proxy with auth. See [SECURITY.md](SECURITY.md).
 
 ## How it works
 

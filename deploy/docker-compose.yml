@@ -7,7 +7,9 @@ services:
     image: ghcr.io/captionizerr/captionizerr:latest
     container_name: captionizerr
     restart: unless-stopped
-    env_file: .env
+    env_file:                    # optional: everything can be set in the web UI instead
+      - path: .env
+        required: false
     environment:
       - TZ=Etc/UTC
       # secrets as files (not visible in `docker inspect`); any CAPTIONIZERR_* secret supports *_FILE

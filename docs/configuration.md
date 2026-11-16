@@ -42,6 +42,7 @@ Environment variables (prefix `CAPTIONIZERR_`) set the defaults. **Every secret 
 | `feedback/` | editor corrections per series | last 1000 |
 | `orphans/` | our files whose video disappeared, and translations replaced after an upgrade | 30 days |
 | `sources/` | the source each translation was made from (re-timing, editor, evals) | 30 days after the translation is gone |
+| `secrets.json` | keys and passwords entered in the UI (mode 600; the UI password as a PBKDF2 hash) | never |
 | `backup/` | daily consistent database snapshot (newest 7): **back up this folder, not the live `captionizerr.db`** | 7 kept |
 | `evals/` | your quality check cases (private) | never |
 
