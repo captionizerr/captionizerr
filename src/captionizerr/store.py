@@ -189,15 +189,15 @@ class Store:
 
     def replaced_by(self, job) -> int | None:
         """The id of a later finished translation of the same video and language, if any (its file replaced this one's)."""
-        if job.source in ("edit", "notes", "forced"):
+        if job.source in ("edit", "notes", "forced", "sync"):
             return None
-        r = self._q("SELECT id FROM jobs WHERE video_path=? AND lang=? AND id>? AND source NOT IN ('edit','notes','forced') "
+        r = self._q("SELECT id FROM jobs WHERE video_path=? AND lang=? AND id>? AND source NOT IN ('edit','notes','forced','sync') "
                     "AND state IN ('done','needs_review') ORDER BY id LIMIT 1", (job.video_path, job.lang, job.id)).fetchone()
         return r[0] if r else None
 
     def model_for(self, video_path: str, lang: str, forced: bool = False) -> str:
         """The model of the latest finished job that wrote this video's translation (or its forced track)."""
-        src = "source='forced'" if forced else "source NOT IN ('edit','notes','forced')"
+        src = "source='forced'" if forced else "source NOT IN ('edit','notes','forced','sync')"
         r = self._q(f"SELECT model FROM jobs WHERE video_path=? AND lang=? AND {src} AND model<>'' "
                     "AND state IN ('done','needs_review') ORDER BY updated DESC LIMIT 1", (video_path, lang)).fetchone()
         return r[0] if r else ""
@@ -293,7 +293,7 @@ class Store:
         """Average cost of the last 50 translations; with `model`, only jobs that model did (so switching
         vendor or model doesn't carry the old model's prices into estimates). Returns `default` when
         there are fewer than `min_jobs` such jobs."""
-        where = "state IN ('done','needs_review') AND source NOT IN ('edit','notes','forced') AND cost_usd > 0"
+        where = "state IN ('done','needs_review') AND source NOT IN ('edit','notes','forced','sync') AND cost_usd > 0"
         args: tuple = ()
         if model is not None:
             where += " AND model=?"

@@ -220,8 +220,36 @@ def _retimed(path: Path, a: float, b: float, cache_dir: Path, lang: str) -> Path
     return out
 
 
+def _ending_on_speech(url: str, video: Path, lang: str, subs, cut: int) -> None:
+    """Nothing after the cut can be checked against the embedded track, but the speech can: find
+    the lines in a Whisper transcript and move the attached ending onto it (in place). The embedded
+    lines before the cut set how early this track shows a line; they are never moved."""
+    from . import speechsync
+    from .cues import Cue
+    try:
+        evs = [e for e in subs.events if e.start >= cut - 300_000]
+        if not evs:
+            return
+        words = speechsync.transcribe(url, video, lang, cut - 300_000, max(e.end for e in evs) + 20_000)
+        cs = [Cue(i + 1, e.start, e.end, e.plaintext, event=e) for i, e in enumerate(evs)]
+        anch = speechsync.anchors(cs, words)            # matched over both parts: more context
+        lead = speechsync.lead_ms(cs, {i: t for i, t in anch.items() if cs[i].start_ms < cut})
+        first = next((i for i, c in enumerate(cs) if c.start_ms >= cut), len(cs))
+        tail = cs[first:]                                # shifts never blend across the cut
+        moves = speechsync.shifts(tail, {i - first: t for i, t in anch.items() if i >= first}, lead, min_anchors=4)
+        if moves is None:
+            return
+        if tail and tail[0].start_ms == cut:             # the line the embedded track stops on: exact already
+            moves[0] = 0
+        speechsync.apply(tail, moves)
+        subs.sort()
+    except Exception as e:      # speech sync is a bonus: never block the translation
+        import logging
+        logging.getLogger("captionizerr.media").warning("speech sync of the ending skipped: %s", e)
+
+
 def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: str, duration: float | None,
-                    cache_dir: Path) -> Path | None:
+                    cache_dir: Path, video: Path | None = None, speech_url: str = "") -> Path | None:
     """The embedded track is cut short: a sidecar in the same language that is complete and reaches
     further wins (e.g. one Bazarr downloaded). It is first lined up with the embedded track on the
     lines both have, so a file timed for another frame rate or cut still lands on the right frames."""
@@ -246,7 +274,7 @@ def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: st
         a, b = fit
         if cut_off(sc, duration) is None and a * last_line_ms(sc) + b > cut + 60_000:
             if embedded.suffix.lower() == ".srt" and path.suffix.lower() == ".srt":
-                return _spliced(embedded, emb, path, sc, fit, cut, cache_dir, lang)
+                return _spliced(embedded, emb, path, sc, fit, cut, cache_dir, lang, video, speech_url)
             return _retimed(path, a, b, cache_dir, lang)
     return None
 
@@ -257,7 +285,7 @@ SPLICE_WINDOWS = ((300_000, 10), (900_000, 15))
 
 
 def _spliced(embedded: Path, emb, side_path: Path, side, fit: tuple[float, float], cut: int,
-             cache_dir: Path, lang: str) -> Path:
+             cache_dir: Path, lang: str, video: Path | None = None, speech_url: str = "") -> Path:
     """The embedded track up to where it stops (exact timing), then the sidecar's remaining lines,
     lined up on the few minutes just before the cut (a sidecar from another cut can drift a second or
     two elsewhere, so a whole-file fit is only the fallback)."""
@@ -273,7 +301,7 @@ def _spliced(embedded: Path, emb, side_path: Path, side, fit: tuple[float, float
             la, lb = local
             break
     st1, st2 = embedded.stat(), side_path.stat()
-    key = hashlib.sha1(f"{embedded}|{st1.st_size}|{side_path}|{st2.st_size}|{int(st2.st_mtime)}|splice2"
+    key = hashlib.sha1(f"{embedded}|{st1.st_size}|{side_path}|{st2.st_size}|{int(st2.st_mtime)}|splice3|{'speech' if speech_url and video else ''}"
                        .encode()).hexdigest()[:20]
     out = cache_dir / f"{key}.{lang}.spliced.srt"
     if out.is_file():
@@ -283,11 +311,23 @@ def _spliced(embedded: Path, emb, side_path: Path, side, fit: tuple[float, float
     for c in emb:
         if c.start_ms < cut and c.end_ms - c.start_ms <= LONG_CUE_MS:
             subs.append(pysubs2.SSAEvent(start=c.start_ms, end=c.end_ms, text=c.event.text if c.event else c.text))
-    for c in side:
+    # the line the embedded track stops on: its start is known exactly (the cut), so the sidecar's
+    # copy of it starts the ending there, however that file is timed
+    stop = next((c for c in emb if c.start_ms == cut), None)
+    key = _norm(stop.text) if stop else ""
+    at = next((k for k, c in enumerate(side) if key and _norm(c.text) == key
+               and abs(la * c.start_ms + lb - cut) <= 20_000), None)
+    for k, c in enumerate(side):
+        text = c.event.text if c.event else c.text
+        if at is not None and k == at:
+            subs.append(pysubs2.SSAEvent(start=cut, end=cut + round(la * (c.end_ms - c.start_ms)), text=text))
+            continue
         s = round(la * c.start_ms + lb)
-        if s >= cut - 500:
-            subs.append(pysubs2.SSAEvent(start=s, end=round(la * c.end_ms + lb), text=c.event.text if c.event else c.text))
+        if (at is not None and k > at) or (at is None and s >= cut - 500):
+            subs.append(pysubs2.SSAEvent(start=max(s, cut), end=max(round(la * c.end_ms + lb), cut + 500), text=text))
     subs.sort()
+    if speech_url and video is not None:
+        _ending_on_speech(speech_url, video, lang, subs, cut)
     cache_dir.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp")
     subs.save(str(tmp), format_="srt")
@@ -313,7 +353,7 @@ def end_confirmed(video: Path, lang: str, cues, cut_ms: int, duration: float | N
 
 
 def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
-                any_language: bool = True) -> Source | None:
+                any_language: bool = True, speech_url: str = "") -> Source | None:
     """Pick the subtitle to translate FROM, never in the target language.
 
     Order: embedded text track in a preferred language (timing is exact; a complete sidecar in the
@@ -328,7 +368,7 @@ def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
         st = pick_source(streams, lang)
         if st:
             emb = _cache_extract(video, st, cache_dir, lang)
-            better = _better_sidecar(emb, side, lang, duration, cache_dir)
+            better = _better_sidecar(emb, side, lang, duration, cache_dir, video, speech_url)
             if better is None:
                 return Source(emb, lang, "embedded")
             return Source(better, lang, "embedded + sidecar ending" if ".spliced." in better.name else "sidecar, re-timed")

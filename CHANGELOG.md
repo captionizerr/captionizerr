@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Sync to speech (Whisper):** connect a speech-to-text service (Settings → Connections → Whisper; any whisper-asr-webservice-compatible server, or the small faster-whisper one in `deploy/whisper`). Each subtitle line is found in the transcript of the audio, and the timing follows the speech:
+  - endings taken from another release (cut-off tracks) are moved onto the speech; Northwind S02's Bazarr endings were 1.5–4 s early because that release is edited differently right after the cut;
+  - downloaded subtitles are synced to the speech before translating;
+  - each translation's page has **Re-sync to speech**, which re-times the existing file without re-translating (free; the old timing stays in the editor's history).
+  Matching is word by word, so music and effects don't fool it; a line whose words land in two places isn't trusted, outliers are ignored, and the track's own habit of how early it shows a line is kept, so a track that's already right is left alone.
+- The line an embedded track stops on is kept when the ending comes from another file (it could be dropped when that file was timed earlier).
+
 ## 0.2.7 — 2026-11-16
 
 - **Incomplete source tracks:** a built-in subtitle track that stops early (its last line stretched over the rest of the video, or nothing for the last quarter) is now detected. A complete subtitle file next to the video in the same language is used instead; otherwise Bazarr is asked for one and the job waits up to 3 hours, then translates what there is, shortens the stretched line and goes to Needs review with a note saying where the source stops. Any source line longer than a minute is shortened. Found on Northwind season 2 WEB-DL releases, whose English CC tracks end 5–14 minutes early.

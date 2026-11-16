@@ -53,6 +53,16 @@ def test_bazarr(url: str, key: str) -> tuple[bool, str]:
         return False, _why(e)
 
 
+def test_whisper(url: str) -> tuple[bool, str]:
+    if not url:
+        return False, "enter the address"
+    from .speechsync import SpeechError, health
+    try:
+        return True, f"Whisper ready (model {health(url)})"
+    except SpeechError as e:
+        return False, str(e)
+
+
 def test_jellyfin(url: str, key: str) -> tuple[bool, str]:
     if not url or not key:
         return False, "enter the address and the API key"

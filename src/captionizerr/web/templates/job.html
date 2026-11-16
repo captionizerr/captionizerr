@@ -12,11 +12,15 @@
       {% elif job.output_path.endswith(('.srt', '.ass')) %}<div class="actions"><a class="btn" href="/edit?{{ {'path': job.video_path, 'lang': job.lang, 'key': job.series_key or '', 'back': '/jobs/' ~ job.id, 'view': 'flag' if job.state == 'needs_review' else ''}|urlencode }}">{{ 'Review flagged lines' if job.state == 'needs_review' else 'Open in editor' }}</a>
         <a class="btn" href="/share/download?{{ {'path': job.video_path, 'lang': job.lang}|urlencode }}">Download</a>
         <a class="btn" href="/share?{{ {'path': job.video_path, 'lang': job.lang, 'back': '/jobs/' ~ job.id}|urlencode }}">Share…</a>
-        {% if job.source not in ('edit', 'notes', 'forced') and job.state in ('done', 'needs_review') %}
+        {% if job.source not in ('edit', 'notes', 'forced', 'sync') and job.state in ('done', 'needs_review') %}
         <form method="post" action="/jobs/{{ job.id }}/retranslate" class="inline"
               onsubmit="return confirm('Translate this again with {{ settings.active_model }}? The current file is replaced, including your edits; the previous version stays in the editor\'s history.')">
-          <button>Re-translate</button></form>{% endif %}</div>{% endif %}{% endif %}
-      {% if job.state == 'skipped' and not deleted and job.source not in ('edit', 'notes', 'forced') %}
+          <button>Re-translate</button></form>{% endif %}
+        {% if settings.whisper_url and job.source not in ('edit', 'notes', 'forced', 'sync') and job.state in ('done', 'needs_review') %}
+        <form method="post" action="/jobs/{{ job.id }}/resync" class="inline"
+              onsubmit="return confirm('Move this translation onto the speech in the audio? Lines are matched with Whisper; nothing is re-translated and there is no cost. The current timing stays in the editor\'s history.')">
+          <button title="Match the lines to the speech in the audio (Whisper) and fix their timing">Re-sync to speech</button></form>{% endif %}</div>{% endif %}{% endif %}
+      {% if job.state == 'skipped' and not deleted and job.source not in ('edit', 'notes', 'forced', 'sync') %}
       <form method="post" action="/jobs/{{ job.id }}/retranslate" class="inline"
             onsubmit="return confirm('Translate this again with {{ settings.active_model }}? The existing file is replaced; the previous version stays in the editor\'s history.')">
         <button>Re-translate</button></form>{% endif %}

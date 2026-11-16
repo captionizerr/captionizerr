@@ -56,6 +56,15 @@
   </section>
 
   <section class="card">
+    <h2>Whisper <span class="pill">Optional</span></h2>
+    <p class="small muted">A speech-to-text service that lets CaptionizeRR check subtitle timing against what is actually said: endings taken from another release and downloaded subtitles are moved onto the speech, and each translation gets a <b>Re-sync to speech</b> button. Any <a href="https://github.com/ahmetoner/whisper-asr-webservice" target="_blank" rel="noopener">whisper-asr-webservice</a>-compatible server works; <span class="mono">deploy/whisper</span> in the repository has a small one.</p>
+    <div class="fields">
+      <label class="f">Address <input type="url" name="whisper_url" value="{{ v.whisper_url }}" placeholder="http://whisper:9000"></label>
+    </div>
+    <div class="actions">{{ test('whisper') }}</div>
+  </section>
+
+  <section class="card">
     <h2>Notifications <span class="pill">Optional</span></h2>
     <p class="small muted">An <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> message with a 10-line spot-check after each translation, and budget alerts.</p>
     <div class="fields">

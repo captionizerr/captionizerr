@@ -131,7 +131,7 @@ def register(app: FastAPI) -> None:
         if getattr(app.state, "setup_needed", lambda: False)() and not request.query_params.get("msg"):
             return RedirectResponse("/setup", 307)
         all_jobs = store.list(300)
-        side = ("edit", "notes", "forced")
+        side = ("edit", "notes", "forced", "sync")
         groups = {"attention": ("needs_review", "failed", "no_source", "paused_budget"),
                   "active": ("queued", "running", "batched", "waiting_source"), "done": ("done", "skipped")}
         view = state if state in (*groups, "other") or state in STATES else ""
@@ -188,7 +188,7 @@ def register(app: FastAPI) -> None:
         """Translate the same video and language again, replacing our file (the old one goes to the editor's history)."""
         _same_origin(request)
         j = store.get(job_id)
-        if not j or j.source in ("edit", "notes", "forced"):
+        if not j or j.source in ("edit", "notes", "forced", "sync"):
             return _redirect("/", "Nothing to re-translate.", "warn")
         if gone_videos([j.video_path], s.library_roots):
             return _redirect(f"/jobs/{job_id}", "The video was deleted on the server, so there is nothing to translate.", "warn")
@@ -198,6 +198,24 @@ def register(app: FastAPI) -> None:
             return _redirect(f"/jobs/{job_id}", "Already queued or running.", "warn")
         return _redirect("/", f"Re-translating {j.title} ({j.lang}) with {s.active_model}, "
                               f"about ${episode_estimate():.2f}. The previous version is kept in the editor's history.")
+
+    @app.post("/jobs/{job_id}/resync")
+    def job_resync(request: Request, job_id: int):
+        """Move this translation onto the speech (Whisper). Free: nothing is re-translated."""
+        _same_origin(request)
+        j = store.get(job_id)
+        if not j or j.source in ("edit", "notes", "forced", "sync"):
+            return _redirect("/", "Nothing to re-sync.", "warn")
+        if not s.whisper_url:
+            return _redirect(f"/jobs/{job_id}", "Set up a Whisper service first (Settings → Connections).", "warn")
+        if gone_videos([j.video_path], s.library_roots):
+            return _redirect(f"/jobs/{job_id}", "The video was deleted on the server.", "warn")
+        new = store.enqueue("sync", f"{j.title}: re-sync to speech", j.video_path, j.lang, j.series_key)
+        app.state.worker.wake()
+        if not new:
+            return _redirect(f"/jobs/{job_id}", "Something is already running for this file.", "warn")
+        return _redirect("/", f"Re-syncing {j.title} ({j.lang}) to the speech: a few minutes, no cost. "
+                              "The previous timing is kept in the editor's history.")
 
     @app.post("/jobs/resume")
     def jobs_resume(request: Request):

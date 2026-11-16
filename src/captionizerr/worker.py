@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import bible, cues as cuesmod
-from . import maintenance, media, reuse
+from . import maintenance, media, reuse, speechsync
 from .arr import Arr, radarr_id_for_path, sonarr_ids_for_path
 from .bazarr import Bazarr
 from .config import Settings
@@ -158,7 +158,8 @@ class Worker:
             store.finish(job.id, "skipped", "translation already exists")
             return None
         try:
-            src = pinned or media.find_source(video, s.cache_dir, s.source_langs, job.lang, s.any_source)
+            src = pinned or media.find_source(video, s.cache_dir, s.source_langs, job.lang, s.any_source,
+                                              speech_url=s.whisper_url)
         except subprocess.CalledProcessError as e:      # ffprobe/ffmpeg can't open it
             why = ((e.stderr or "") if isinstance(e.stderr, str) else "").strip().splitlines()
             store.finish(job.id, "failed", f"can't read the video ({why[-1][-160:] if why else 'ffprobe failed'}); "
@@ -170,6 +171,14 @@ class Worker:
         if not src:
             self.ask_bazarr(job, video)
             return None
+        speech_note = ""
+        if s.whisper_url and not pinned and src.origin in ("sidecar", "sidecar, re-timed"):
+            try:        # a downloaded subtitle: put it on the speech before translating
+                path, speech_note = speechsync.synced_copy(s.whisper_url, video, src.path, src.lang, s.cache_dir)
+                if path != src.path:
+                    src = media.Source(path, src.lang, f"{src.origin}, synced to speech")
+            except speechsync.SpeechError as e:
+                speech_note = f"speech sync skipped: {e}"
         doc = cuesmod.load(src.path)
         if not cues_to_send(doc):
             store.finish(job.id, "no_source", f"the {src.lang} subtitle ({src.origin}) has no dialogue lines")
@@ -195,6 +204,7 @@ class Worker:
             warning = (f"a source line at {media.clock(c.start_ms)} stayed on screen for "
                        f"{media.clock(c.end_ms - c.start_ms)}, so dialogue may be missing there; it was shortened")
         note = "a source line that stayed on screen over a minute was shortened" if media.clamp_long_cues(doc) else ""
+        note = "; ".join(x for x in (speech_note, note) if x)
         ser = store.series(job.series_key) if job.series_key else None
         profile = s.profile(job.lang, src.lang, (ser or {}).get("tone"))
         context = self.context_for(job.series_key)
@@ -247,6 +257,9 @@ class Worker:
 
     # ------------------------------------------------------------ live job
     def process(self, job: Job):
+        if job.source == "sync":
+            self.resync(job)
+            return
         provider = self.provider_factory()
         prep = self.prepare(job, provider)
         if prep is None:
@@ -263,6 +276,59 @@ class Worker:
                         log=lambda m: log.info("job %s %s", job.id, m.strip()),
                         prefilled=prep.reuse.translations if prep.reuse else None)
         self.finalize(job, prep, res)
+
+    def resync(self, job: Job):
+        """Move an existing translation onto the speech: its source's lines are found in a Whisper
+        transcript and the translation follows (same lines, same times). Nothing is re-translated."""
+        s, store = self.s, self.store
+        if not s.whisper_url:
+            store.finish(job.id, "failed", "no Whisper service set up (Settings → Connections)")
+            return
+        video = s.map_path(job.video_path)
+        out = next((p for f in ("srt", "ass") if (p := target_path(video, job.lang, f)).is_file()), None)
+        if not video.is_file() or out is None:
+            store.finish(job.id, "failed", "the video or its translation is gone")
+            return
+        stored = reuse.stored_source(s.data_dir / "sources", out)
+        if not stored:
+            store.finish(job.id, "failed", "the source this translation was made from wasn't kept, so lines can't be matched")
+            return
+        store.set_state(job.id, "running", "listening to the audio (a few minutes per episode)")
+        src = cuesmod.load(stored[0])
+        try:
+            moves = speechsync.sync_cues(s.whisper_url, video, stored[1], src.cues)
+        except speechsync.SpeechError as e:
+            store.finish(job.id, "failed", str(e))
+            return
+        if moves is None:
+            store.finish(job.id, "done", "too few lines were found in the speech; timing left as it was", str(out))
+            return
+        if not any(moves):
+            store.finish(job.id, "done", speechsync.summary(moves), str(out))
+            return
+        before = [(c.start_ms, c.end_ms) for c in src.cues]
+        speechsync.apply(src.cues, moves)
+        new = {b: (c.start_ms, c.end_ms) for b, c in zip(before, src.cues)}
+        doc = cuesmod.load(out)
+        moved = 0
+        for c in doc.cues:
+            if (c.start_ms, c.end_ms) in new:
+                c.start_ms, c.end_ms = new[(c.start_ms, c.end_ms)]
+                if c.event is not None:
+                    c.event.start, c.event.end = c.start_ms, c.end_ms
+                moved += 1
+        text = cuesmod.render(doc, {c.index: c.text for c in doc.cues})
+        replace_own(out, text, s.history_dir)            # the previous timing stays in the editor's history
+        try:
+            import tempfile
+            with tempfile.TemporaryDirectory() as d:
+                tmp = Path(d) / f"src{stored[0].suffix}"
+                src.ssa.save(str(tmp), format_="ass" if tmp.suffix == ".ass" else "srt")
+                reuse.store_source(s.data_dir / "sources", out, tmp, stored[1])
+        except Exception as e:
+            log.warning("job %s: stored source not updated: %s", job.id, e)
+        store.finish(job.id, "done", f"{speechsync.summary(moves)}; {moved} of {len(doc.cues)} translated lines follow",
+                     str(out), 0.0, {}, "whisper")
 
     def finalize(self, job: Job, prep: Prepared, res):
         s, store = self.s, self.store

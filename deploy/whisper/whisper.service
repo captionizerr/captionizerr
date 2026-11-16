@@ -1,0 +1,19 @@
+[Unit]
+Description=Whisper speech-to-text for Captionizerr (faster-whisper)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=whisper
+WorkingDirectory=/opt/whisper
+Environment=HF_HOME=/opt/whisper/models
+Environment=WHISPER_MODEL=small
+ExecStart=/opt/whisper/venv/bin/uvicorn whisper_service:app --host 0.0.0.0 --port 9000
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/whisper /tmp
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -33,7 +33,7 @@
       <a class="chip {{ 'on' if view == key }}" href="/{{ '?state=' ~ key if key }}">{{ label }}{% if key == 'other' and side_count %} · {{ side_count }}{% endif %}</a>
     {% endfor %}
   </div>
-  {% if view == 'other' %}<p class="small muted">Line re-translations in the editor, series notes and forced-track translations.</p>{% endif %}
+  {% if view == 'other' %}<p class="small muted">Line re-translations in the editor, series notes, forced-track translations and re-syncs to speech.</p>{% endif %}
   <table>
     <thead><tr><th>When</th><th>Title</th><th>Lang</th><th>Model</th><th>State</th><th class="num">Cost</th><th></th></tr></thead>
     <tbody>
@@ -45,7 +45,7 @@
         <td class="mono small nowrap" title="{{ j.model }}">{{ (j.model|replace('claude-', '')) or '–' }}</td>
         <td><span class="pill {{ j.state }}">{{ state_label.get(j.state, j.state) }}</span></td>
         <td class="num">{{ j.cost_usd|money }}</td>
-        <td style="white-space:nowrap">{% if j.id not in deleted %}{% if j.id not in replaced and j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
+        <td style="white-space:nowrap">{% if j.id not in deleted %}{% if j.id not in replaced and j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced','sync') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
           {% if j.state in ('failed','needs_review','no_source','waiting_source') %}<form method="post" action="/jobs/{{ j.id }}/retry" class="inline"><button class="small">Retry</button></form>{% endif %}{% endif %}</td>
       </tr>
     {% else %}

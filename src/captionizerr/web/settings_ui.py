@@ -224,7 +224,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         nxt = _next(f, "/settings/connections")
         try:
             vals = {}
-            for k, what in (("sonarr_url", "Sonarr"), ("radarr_url", "Radarr"), ("bazarr_url", "Bazarr"),
+            for k, what in (("sonarr_url", "Sonarr"), ("radarr_url", "Radarr"), ("bazarr_url", "Bazarr"), ("whisper_url", "Whisper"),
                             ("jellyfin_url", "Jellyfin"), ("plex_url", "Plex"), ("ntfy_url", "ntfy")):
                 if k in f:
                     vals[k] = _url(f.get(k), f"the {what} address")
@@ -258,6 +258,8 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
             ok, msg = connections.test_arr(service, g(f"{service}_url", getattr(s, f"{service}_url")), effective(f, f"{service}_key"))
         elif service == "bazarr":
             ok, msg = connections.test_bazarr(g("bazarr_url", s.bazarr_url), effective(f, "bazarr_key"))
+        elif service == "whisper":
+            ok, msg = connections.test_whisper(g("whisper_url", s.whisper_url))
         elif service == "jellyfin":
             ok, msg = connections.test_jellyfin(g("jellyfin_url", s.jellyfin_url), effective(f, "jellyfin_key"))
         elif service == "plex":
@@ -445,7 +447,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
 
     LABELS = {
         "alert_at": "Budget warning (% of cap)", "any_source": "Translate from any language", "auto_notes": "Draft series notes",
-        "bazarr_url": "Bazarr address", "effort": "Claude effort", "jellyfin_path_map": "Jellyfin path mapping",
+        "bazarr_url": "Bazarr address", "whisper_url": "Whisper address", "effort": "Claude effort", "jellyfin_path_map": "Jellyfin path mapping",
         "jellyfin_url": "Jellyfin address", "languages": "Translate into", "max_line": "Characters per line",
         "model": "Claude model", "monthly_cap_usd": "Monthly cap (USD)", "ntfy_topic": "ntfy topic", "ntfy_url": "ntfy server",
         "ollama_max_output": "Ollama max output", "ollama_model": "Ollama model", "ollama_num_ctx": "Ollama context size",

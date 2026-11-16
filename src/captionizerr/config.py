@@ -69,6 +69,7 @@ class Settings:
     bazarr_url: str = ""
     bazarr_key: str = field(default="", repr=False)
     bazarr_wait_hours: float = 3.0
+    whisper_url: str = ""         # speech-to-text service (whisper-asr-webservice API) for syncing to speech
     # AI provider
     provider: str = "anthropic"   # anthropic | ollama (local) | openai (any OpenAI-compatible endpoint)
     ollama_url: str = "http://localhost:11434"
@@ -138,6 +139,7 @@ class Settings:
             any_source=_env("ANY_SOURCE", "1").lower() not in ("0", "false", "no", "off"),
             bazarr_url=_env("BAZARR_URL"),
             bazarr_key=_secret("BAZARR_KEY"),
+            whisper_url=_env("WHISPER_URL"),
             provider=_env("PROVIDER", "anthropic"),
             ollama_url=_env("OLLAMA_URL", "http://localhost:11434"),
             ollama_model=_env("OLLAMA_MODEL"),
@@ -171,7 +173,7 @@ class Settings:
         "tone": "str", "songs": "str", "max_line": "int", "target_cps": "float",
         "ntfy_url": "str", "ntfy_topic": "str", "public_url": "str", "jellyfin_url": "str",
         "jellyfin_path_map": "pairs", "plex_url": "str", "plex_path_map": "pairs", "sonarr_url": "str", "radarr_url": "str",
-        "ui_user": "str", "opensubtitles_user": "str", "source_langs": "list", "any_source": "bool", "bazarr_url": "str", "auto_notes": "bool",
+        "ui_user": "str", "opensubtitles_user": "str", "source_langs": "list", "any_source": "bool", "bazarr_url": "str", "auto_notes": "bool", "whisper_url": "str",
         "provider": "str", "ollama_url": "str", "ollama_model": "str", "ollama_num_ctx": "int", "ollama_effort": "str", "openai_effort": "str",
         "ollama_max_output": "int", "openai_base_url": "str", "openai_model": "str", "openai_price_in": "float",
         "openai_price_out": "float", "openai_price_source": "str", "openai_max_output": "int",
