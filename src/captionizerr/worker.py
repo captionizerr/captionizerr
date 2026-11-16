@@ -12,7 +12,9 @@ main request in a batch and finish when the result comes back (missing cues and 
 from __future__ import annotations
 
 import logging
+import json
 import random
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -132,7 +134,17 @@ class Worker:
         f = self.s.context_dir / f"{series_key}.md"
         return f.read_text(encoding="utf-8") if f.is_file() else None
 
-    def prepare(self, job: Job, provider, ask_bazarr: bool = True) -> Prepared | None:
+    def pinned_source(self, job: Job) -> media.Source | None:
+        """The exact source a batch request was built from (its line numbers must still match)."""
+        try:
+            d = json.loads(job.source_pin or "{}")
+            p = Path(d["path"])
+            return media.Source(p, d["lang"], d["origin"]) if p.is_file() else None
+        except (KeyError, ValueError, TypeError):
+            return None
+
+    def prepare(self, job: Job, provider, ask_bazarr: bool = True,
+                pinned: media.Source | None = None) -> Prepared | None:
         """Everything before the model call. Returns None when the job was finished or parked here."""
         s, store = self.s, self.store
         video = s.map_path(job.video_path)
@@ -145,7 +157,13 @@ class Worker:
         if not job.redo and (target_path(video, job.lang, "srt").exists() or target_path(video, job.lang, "ass").exists()):
             store.finish(job.id, "skipped", "translation already exists")
             return None
-        src = media.find_source(video, s.cache_dir, s.source_langs, job.lang, s.any_source)
+        try:
+            src = pinned or media.find_source(video, s.cache_dir, s.source_langs, job.lang, s.any_source)
+        except subprocess.CalledProcessError as e:      # ffprobe/ffmpeg can't open it
+            why = ((e.stderr or "") if isinstance(e.stderr, str) else "").strip().splitlines()
+            store.finish(job.id, "failed", f"can't read the video ({why[-1][-160:] if why else 'ffprobe failed'}); "
+                                           "if the library is on a network share, check the mount and retry")
+            return None
         if src and src.origin == "sidecar" and time.time() - src.path.stat().st_mtime < SIDECAR_SETTLE:
             store.set_waiting(job.id, f"{src.path.name} is brand new; waiting for Bazarr's sync to finish")
             return None
@@ -158,7 +176,7 @@ class Worker:
             return None
         warning = ""
         duration = media.probe(video)[1]
-        cut = media.cut_off(doc.cues, duration)
+        cut = last_cut = media.cut_off(doc.cues, duration)
         if cut is not None and src.origin == "embedded" and media.end_confirmed(video, src.lang, doc.cues, cut, duration):
             cut = None                     # another subtitle ends there too: only the last line was stretched
         if cut is not None:
@@ -171,6 +189,11 @@ class Worker:
             warning = (f"incomplete source: the {src.lang} subtitle ({src.origin}) stops at {where}, so the rest of "
                        f"the video has no subtitles. Put a complete {src.lang} subtitle next to the video "
                        f"(e.g. from Bazarr) and press Re-translate")
+        inside = media.stretched_inside(doc.cues, last_cut)
+        if inside and not warning:
+            c = inside[0]
+            warning = (f"a source line at {media.clock(c.start_ms)} stayed on screen for "
+                       f"{media.clock(c.end_ms - c.start_ms)}, so dialogue may be missing there; it was shortened")
         note = "a source line that stayed on screen over a minute was shortened" if media.clamp_long_cues(doc) else ""
         ser = store.series(job.series_key) if job.series_key else None
         profile = s.profile(job.lang, src.lang, (ser or {}).get("tone"))
@@ -349,7 +372,7 @@ class Worker:
                 reserved += est
                 items.append((str(job.id), provider.batch_params(*first_request(prep.doc, prep.profile,
                                                                                 prep.context, job.title))))
-                sent.append((job, est))
+                sent.append((job, est, prep.source))
             except Exception as e:
                 log.exception("batch prep failed for job %s", job.id)
                 self.store.finish(job.id, "failed", f"{type(e).__name__}: {e}")
@@ -358,11 +381,12 @@ class Worker:
         try:
             bid = provider.submit_batch(items)
         except Exception as e:
-            for job, _ in sent:
+            for job, _, _ in sent:
                 self.store.finish(job.id, "failed", f"batch submit failed: {e}")
             return
-        for job, est in sent:
-            self.store.set_batched(job.id, bid, f"in batch {bid} (est ${est:.2f}); results within 24 h", est)
+        for job, est, src in sent:
+            self.store.set_batched(job.id, bid, f"in batch {bid} (est ${est:.2f}); results within 24 h", est,
+                                   json.dumps({"path": str(src.path), "lang": src.lang, "origin": src.origin}))
         log.info("submitted batch %s with %d jobs, est $%.2f", bid, len(sent), reserved)
 
     def batch_provider(self):
@@ -400,7 +424,8 @@ class Worker:
             self.wake()
             return
         try:
-            prep = self.prepare(job, provider, ask_bazarr=False)   # the batch is already paid for
+            prep = self.prepare(job, provider, ask_bazarr=False,   # the batch is already paid for
+                                pinned=self.pinned_source(job))
             if prep is None:
                 return
             res = translate(prep.doc, prep.profile, provider, series_context=prep.context, title=job.title,

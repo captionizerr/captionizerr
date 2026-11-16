@@ -120,13 +120,21 @@ def cut_off(cues, duration_s: float | None) -> int | None:
     if len(dialog) < 20:
         return None
     last = dialog[-1]
-    if last.end_ms - last.start_ms > LONG_CUE_MS:
+    length = last.end_ms - last.start_ms
+    # stretched to the end of the video (a legit long last line, e.g. a song, stops well before it)
+    if length > LONG_CUE_MS and (length > 3 * LONG_CUE_MS or not duration_s
+                                 or last.end_ms >= duration_s * 1000 - LONG_CUE_MS):
         return last.start_ms
     if duration_s:
         tail = duration_s * 1000 - last.end_ms
         if tail > MIN_TAIL_GAP_MS and tail > TAIL_GAP_SHARE * duration_s * 1000:
             return last.end_ms
     return None
+
+
+def stretched_inside(cues, cut_ms: int | None) -> list:
+    """Lines other than the cut-off one that stay on screen over a minute: dialogue may be missing there."""
+    return [c for c in _dialogue(cues) if c.end_ms - c.start_ms > LONG_CUE_MS and c.start_ms != cut_ms]
 
 
 def last_line_ms(cues) -> int:

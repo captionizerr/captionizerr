@@ -49,7 +49,8 @@ STATES = ("queued", "running", "batched", "waiting_source", "done", "needs_revie
 ACTIVE = ("queued", "running", "paused_budget", "batched", "waiting_source")
 # columns added after M1; created on start if missing
 MIGRATIONS = {"mode": "TEXT DEFAULT 'live'", "batch_id": "TEXT DEFAULT ''", "wait_since": "REAL DEFAULT 0",
-              "est_usd": "REAL DEFAULT 0", "model": "TEXT DEFAULT ''", "redo": "INTEGER DEFAULT 0"}
+              "est_usd": "REAL DEFAULT 0", "model": "TEXT DEFAULT ''", "redo": "INTEGER DEFAULT 0",
+              "source_pin": "TEXT DEFAULT ''"}
 
 
 def month_now() -> str:
@@ -78,6 +79,7 @@ class Job:
     est_usd: float = 0.0         # estimate of a submitted batch job (reserved against the cap until paid)
     model: str = ""              # the model that did the work (per-model cost averages)
     redo: int = 0                # 1: replace our existing translation (old one goes to editor history)
+    source_pin: str = ""         # JSON {path, lang, origin}: the source a submitted batch was built from
 
 
 class Store:
@@ -153,9 +155,9 @@ class Store:
         return self._q("UPDATE jobs SET state=?, detail=?, updated=? WHERE id=? AND state=?",
                        (to_state, detail[:2000], time.time(), job_id, from_state)).rowcount == 1
 
-    def set_batched(self, job_id: int, batch_id: str, detail: str, est_usd: float = 0.0):
-        self._q("UPDATE jobs SET state='batched', batch_id=?, detail=?, est_usd=?, updated=? WHERE id=?",
-                (batch_id, detail[:2000], est_usd, time.time(), job_id))
+    def set_batched(self, job_id: int, batch_id: str, detail: str, est_usd: float = 0.0, source_pin: str = ""):
+        self._q("UPDATE jobs SET state='batched', batch_id=?, detail=?, est_usd=?, source_pin=?, updated=? WHERE id=?",
+                (batch_id, detail[:2000], est_usd, source_pin, time.time(), job_id))
 
     def reserved(self) -> float:
         """Estimated cost of batch requests already submitted but not yet paid."""

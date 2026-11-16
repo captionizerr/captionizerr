@@ -1124,3 +1124,54 @@ def test_out_of_sync_sidecar_is_lined_up_before_use(tmp_path):
     want = cuesmod.load(_write(tmp_path / "y.srt", _srt(70))).cues
     assert all(abs(f.start_ms - w.start_ms) <= 20 for f, w in zip(fixed, want))
     assert pysubs2 and side.read_text(encoding="utf-8").startswith("1\n")      # the original is untouched
+
+
+def test_long_last_line_that_stops_before_the_end_is_not_a_cut(tmp_path):
+    f = _write(tmp_path / "x.srt", _srt(40, last_len_s=90))          # 118 s -> 208 s, a song over the credits
+    cs = cuesmod.load(f).cues
+    assert media.cut_off(cs, 600) is None and media.cut_off(cs, 230) == 118_000
+    assert media.cut_off(cuesmod.load(_write(tmp_path / "y.srt", _srt(40, last_len_s=200))).cues, 600) == 118_000
+
+
+@ffmpeg
+def test_stretched_line_in_the_middle_goes_to_review(tmp_path):
+    text = _srt(40)
+    text = text.replace("00:00:31,000 --> 00:00:33,000", "00:00:31,000 --> 00:03:31,000")   # line 11 over 3 min
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    store, w = app.state.store, app.state.worker
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", text)
+    job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    w.process(store.next_queued())
+    j = store.get(job.id)
+    assert j.state == "needs_review" and "line at 0:31 stayed on screen for 3:00" in j.detail
+    assert max(c.end_ms - c.start_ms for c in cuesmod.load(j.output_path).cues) <= 7000
+
+
+def test_unreadable_video_fails_with_a_clear_message(tmp_path):
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    store, w = app.state.store, app.state.worker
+    v = tmp_path / "lib/Show/Show S01E01.mkv"
+    v.parent.mkdir(parents=True)
+    v.write_bytes(b"not a video")
+    job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    w.process(store.next_queued())
+    j = store.get(job.id)
+    assert j.state == "failed" and j.detail.startswith("can't read the video") and "network share" in j.detail
+
+
+@ffmpeg
+def test_batch_result_uses_the_source_it_was_built_from(tmp_path):
+    s = settings(tmp_path, batch_min_wait_s=0)
+    app = create_app(s, provider_factory=FakeBatch, start_worker=False)
+    store, w = app.state.store, app.state.worker
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(40, last_len_s=65))
+    job = store.enqueue("manual", "Show S01E01", str(v), "ru", None, "batch")
+    store._q("UPDATE jobs SET wait_since=? WHERE id=?", (time.time() - 10 * 3600, job.id))  # already waited for Bazarr
+    w.submit_batch()
+    assert store.get(job.id).state == "batched" and '"origin": "embedded"' in store.get(job.id).source_pin
+    side = v.with_name("Show S01E01.en.srt")                          # a complete subtitle lands meanwhile
+    side.write_text(_srt(70), encoding="utf-8")
+    old(side)
+    w.poll_batches()
+    j = store.get(job.id)
+    assert "40 cues from en (embedded)" in j.detail and j.state == "needs_review"   # not re-planned on the new file
