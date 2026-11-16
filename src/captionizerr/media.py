@@ -237,8 +237,47 @@ def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: st
             continue
         a, b = fit
         if cut_off(sc, duration) is None and a * last_line_ms(sc) + b > cut + 60_000:
+            if embedded.suffix.lower() == ".srt" and path.suffix.lower() == ".srt":
+                return _spliced(embedded, emb, path, sc, fit, cut, cache_dir, lang)
             return _retimed(path, a, b, cache_dir, lang)
     return None
+
+
+SPLICE_WINDOW_MS = 900_000   # line the tail up on the last 15 minutes before the cut
+
+
+def _spliced(embedded: Path, emb, side_path: Path, side, fit: tuple[float, float], cut: int,
+             cache_dir: Path, lang: str) -> Path:
+    """The embedded track up to where it stops (exact timing), then the sidecar's remaining lines,
+    lined up on the stretch just before the cut (a sidecar from another cut can drift a second or
+    two elsewhere, so a whole-file fit is only the fallback)."""
+    import hashlib
+    import pysubs2
+    a, b = fit
+    near_ref = [c for c in emb if c.start_ms >= cut - SPLICE_WINDOW_MS]
+    near_side = [c for c in side if a * c.start_ms + b >= cut - SPLICE_WINDOW_MS - 60_000]
+    la, lb = fit_timing(near_ref, near_side, min_pairs=15) or fit
+    st1, st2 = embedded.stat(), side_path.stat()
+    key = hashlib.sha1(f"{embedded}|{st1.st_size}|{side_path}|{st2.st_size}|{int(st2.st_mtime)}|splice1"
+                       .encode()).hexdigest()[:20]
+    out = cache_dir / f"{key}.{lang}.spliced.srt"
+    if out.is_file():
+        os.utime(out)
+        return out
+    subs = pysubs2.SSAFile()
+    for c in emb:
+        if c.start_ms < cut and c.end_ms - c.start_ms <= LONG_CUE_MS:
+            subs.append(pysubs2.SSAEvent(start=c.start_ms, end=c.end_ms, text=c.event.text if c.event else c.text))
+    for c in side:
+        s = round(la * c.start_ms + lb)
+        if s >= cut - 500:
+            subs.append(pysubs2.SSAEvent(start=s, end=round(la * c.end_ms + lb), text=c.event.text if c.event else c.text))
+    subs.sort()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".tmp")
+    subs.save(str(tmp), format_="srt")
+    os.replace(tmp, out)
+    return out
 
 
 def end_confirmed(video: Path, lang: str, cues, cut_ms: int, duration: float | None) -> bool:
@@ -275,7 +314,9 @@ def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
         if st:
             emb = _cache_extract(video, st, cache_dir, lang)
             better = _better_sidecar(emb, side, lang, duration, cache_dir)
-            return Source(better, lang, "sidecar") if better else Source(emb, lang, "embedded")
+            if better is None:
+                return Source(emb, lang, "embedded")
+            return Source(better, lang, "embedded + sidecar ending" if ".spliced." in better.name else "sidecar, re-timed")
         for path, l, _sdh in side:
             if l == lang:
                 return Source(path, lang, "sidecar")

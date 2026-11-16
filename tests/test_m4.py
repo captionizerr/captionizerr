@@ -1012,7 +1012,9 @@ def test_complete_sidecar_beats_a_cut_off_embedded_track(tmp_path):
     assert media.find_source(v, tmp_path / "cache", ["en"], "ru").origin == "embedded"
     (v.parent / "Show S01E01.en.srt").write_text(_srt(70), encoding="utf-8")
     src = media.find_source(v, tmp_path / "cache", ["en"], "ru")
-    assert src.origin == "sidecar" and src.path.name == "Show S01E01.en.srt"
+    assert src.origin == "embedded + sidecar ending" and ".spliced." in src.path.name
+    got = cuesmod.load(src.path).cues
+    assert len(got) == 70 and max(c.end_ms - c.start_ms for c in got) < 60_000
     (v.parent / "Show S01E01.en.srt").write_text(_srt(38), encoding="utf-8")   # shorter: no better
     assert media.find_source(v, tmp_path / "cache", ["en"], "ru").origin == "embedded"
 
@@ -1060,7 +1062,7 @@ def test_cut_off_source_uses_the_complete_subtitle_bazarr_brings(tmp_path, monke
     w.check_waiting()
     w.process(store.next_queued())
     j = store.get(job.id)
-    assert j.state == "done" and "70 cues from en (sidecar)" in j.detail
+    assert j.state == "done" and "70 cues from en (embedded + sidecar ending)" in j.detail
 
 
 @ffmpeg
@@ -1117,7 +1119,7 @@ def test_out_of_sync_sidecar_is_lined_up_before_use(tmp_path):
         ev.start, ev.end = round(ev.start / 1.0427) + 5000, round(ev.end / 1.0427) + 5000
     pal.ssa.save(str(side), format_="srt")
     src = media.find_source(v, tmp_path / "cache", ["en"], "ru")
-    assert src.origin == "sidecar" and src.path != side and src.path.parent == tmp_path / "cache"
+    assert src.origin == "embedded + sidecar ending" and src.path.parent == tmp_path / "cache"
     fixed = cuesmod.load(src.path).cues
     want = cuesmod.load(_write(tmp_path / "y.srt", _srt(70))).cues
     assert all(abs(f.start_ms - w.start_ms) <= 20 for f, w in zip(fixed, want))
