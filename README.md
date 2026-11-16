@@ -15,6 +15,8 @@ Because it translates the file's own track, the timing is exact for that release
 
 > **Status: 0.1, early.** It has run against a real library for a while, but expect rough edges. Issues and PRs are welcome.
 
+**Docs:** [Setup guide](docs/setup-guide.md) · [How it works](docs/architecture.md) (diagrams) · [Configuration](docs/configuration.md) · [Security](SECURITY.md)
+
 ## Features
 
 - **Automatic:** Sonarr/Radarr webhooks queue every import, and renames are followed.
