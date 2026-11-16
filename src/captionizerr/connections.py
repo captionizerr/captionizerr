@@ -96,7 +96,7 @@ def test_opensubtitles(user: str, password: str, ua: str) -> tuple[bool, str]:
         c.login()
         return True, "logged in to OpenSubtitles"
     except Exception as e:
-        return False, str(e)[:200]
+        return False, str(e)[:400]
 
 
 # ------------------------------------------------------------------ Sonarr/Radarr webhook
