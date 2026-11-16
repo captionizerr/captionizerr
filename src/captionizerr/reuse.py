@@ -39,6 +39,25 @@ def store_source(sources_dir: Path, output: Path, source: Path, lang: str = "en"
     base.with_suffix(".path").write_text(str(output), encoding="utf-8")
 
 
+def store_drops(sources_dir: Path, output: Path, starts: list[int]) -> None:
+    """Start times (ms) of source lines the translation leaves out on purpose (TV promos, adverts the
+    model confirmed): the editor shows them as skipped instead of as errors. `<key>.drops`."""
+    import json
+    base = source_copy_path(sources_dir, output)
+    base.parent.mkdir(parents=True, exist_ok=True)
+    base.with_suffix(".drops").write_text(json.dumps(sorted(set(starts))), encoding="utf-8")
+
+
+def stored_drops(sources_dir: Path, output: Path) -> set[int] | None:
+    """None when nothing was recorded (translations made before 0.2.9)."""
+    import json
+    f = source_copy_path(sources_dir, output).with_suffix(".drops")
+    try:
+        return {int(x) for x in json.loads(f.read_text(encoding="utf-8"))}
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 def stored_source(sources_dir: Path, output: Path) -> tuple[Path, str] | None:
     """(file, language) of the stored source for this translation, if any."""
     base = source_copy_path(sources_dir, output)

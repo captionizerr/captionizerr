@@ -17,6 +17,7 @@ button.icon{padding:5px 9px;font-size:14px;line-height:1}
 .row textarea{min-height:0;height:auto;font:14px/1.45 var(--sans);padding:6px 8px;resize:vertical}
 .row .tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px}
 .row .tools:empty{display:none}
+.row.skipped .src{opacity:.55} .row.skipped textarea{opacity:.6}
 .flag{font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:99px;background:var(--bad-soft);color:var(--bad)}
 .row .rt{display:none;gap:6px;margin-top:6px}
 .row .rt.open{display:flex}
@@ -58,9 +59,9 @@ const plain = t => t.replace(/<[^>]+>/g, '').replace(/\{\\[^}]*\}/g, '');
 // speed, 1.6x on cues under 2 s). Findings only the server can make (speaker label, untranslated
 // text, lost italics…) stay on a line until you change that line; saving re-checks everything.
 const GEOM = /^\d+ (lines|chars|cps)$|^empty$/;
-function flags(tr, d, src, server, original) {
+function flags(tr, d, src, server, original, skip) {
   const keep = tr.trim() === original.trim() ? (server || []).filter(f => !GEOM.test(f)) : [];
-  if (!tr.trim()) return src && /\p{L}/u.test(src) && !CREDITS.test(src) ? ['empty', ...keep] : keep;
+  if (!tr.trim()) return src && /\p{L}/u.test(src) && !CREDITS.test(src) && !skip ? ['empty', ...keep] : keep;
   const lines = plain(tr).split('\n'), out = [];
   if (lines.length > LIM.lines) out.push(lines.length + ' lines');
   const w = Math.max(...lines.map(l => l.length));
@@ -107,8 +108,11 @@ for (const r of ROWS) {
 requestAnimationFrame(() => view.forEach(v => fit(v.ta)));
 
 function paintFlags(v) {
-  const f = flags(v.ta.value, v.r.d, v.r.src, v.r.flags, v.r.tr);
-  v.fl.replaceChildren(...f.map(x => el('span', 'flag', x)));
+  const f = flags(v.ta.value, v.r.d, v.r.src, v.r.flags, v.r.tr, v.r.skip);
+  const skipped = v.r.skip && !v.ta.value.trim();
+  v.row.classList.toggle('skipped', skipped);
+  v.fl.replaceChildren(...f.map(x => el('span', 'flag', x)),
+    ...(skipped ? [el('span', 'pill', 'skipped on purpose: promo or advert')] : []));
   f.length ? flagged.set(v.r.id, 1) : flagged.delete(v.r.id);
 }
 function changed(v) {

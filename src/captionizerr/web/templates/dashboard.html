@@ -29,23 +29,25 @@
 <section class="card tw">
   <div class="toolbar" role="group" aria-label="Show">
     <h2 style="margin:0 8px 0 0">Translations</h2>
-    {% for key, label in (('', 'All'), ('attention', 'Needs attention'), ('active', 'In progress'), ('done', 'Done'), ('other', 'Other spend')) %}
+    {% for key, label in (('', 'All'), ('attention', 'Needs attention'), ('active', 'In progress'), ('done', 'Done'), ('other', 'Other activity')) %}
       <a class="chip {{ 'on' if view == key }}" href="/{{ '?state=' ~ key if key }}">{{ label }}{% if key == 'other' and side_count %} · {{ side_count }}{% endif %}</a>
     {% endfor %}
   </div>
   {% if view == 'other' %}<p class="small muted">Line re-translations in the editor, series notes, forced-track translations and re-syncs to speech.</p>{% endif %}
-  <table>
+  {% if hidden_replaced %}<p class="small muted">{{ hidden_replaced }} older translation{{ 's' if hidden_replaced != 1 }} of re-translated files {{ 'are' if hidden_replaced != 1 else 'is' }} hidden. <a href="/?{{ {'state': view, 'replaced': 1}|urlencode }}">Show them</a></p>
+  {% elif show_replaced and replaced %}<p class="small muted"><a href="/{{ '?state=' ~ view if view }}">Hide older translations that were translated again</a></p>{% endif %}
+  <table class="jobs">
     <thead><tr><th>When</th><th>Title</th><th>Lang</th><th>Model</th><th>State</th><th class="num">Cost</th><th></th></tr></thead>
     <tbody>
     {% for j in jobs %}
       <tr>
-        <td class="small muted" style="white-space:nowrap">{{ fmt_time(j.updated) }}</td>
-        <td><a href="/jobs/{{ j.id }}">{{ j.title }}</a><div class="small muted clamp" title="{{ j.detail }}">{% if j.id in deleted %}<span class="pill deleted">Video deleted</span> {% elif j.id in replaced %}Replaced by a newer translation. {% endif %}{{ j.detail }}</div></td>
-        <td class="mono">{{ j.lang }}</td>
-        <td class="mono small nowrap" title="{{ j.model }}">{{ (j.model|replace('claude-', '')) or '–' }}</td>
-        <td><span class="pill {{ j.state }}">{{ state_label.get(j.state, j.state) }}</span></td>
-        <td class="num">{{ j.cost_usd|money }}</td>
-        <td style="white-space:nowrap">{% if j.id not in deleted %}{% if j.id not in replaced and j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced','sync') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
+        <td class="small muted c-when" style="white-space:nowrap">{{ fmt_time(j.updated) }}<span class="m-only"> · {{ j.lang }} · {{ (j.model|replace('claude-', '')) or '–' }}</span></td>
+        <td class="c-title"><a href="/jobs/{{ j.id }}">{{ j.title }}</a><div class="small muted clamp" title="{{ j.detail|human }}">{% if j.id in deleted %}<span class="pill deleted">Video deleted</span> {% elif j.id in replaced %}Replaced by a newer translation. {% endif %}{{ j.detail|human }}</div></td>
+        <td class="mono c-lang">{{ j.lang }}</td>
+        <td class="mono small nowrap c-model" title="{{ j.model }}">{{ (j.model|replace('claude-', '')) or '–' }}</td>
+        <td class="c-state"><span class="pill {{ j.state }}">{{ state_label.get(j.state, j.state) }}</span></td>
+        <td class="num c-cost">{{ j.cost_usd|money }}</td>
+        <td class="c-act" style="white-space:nowrap">{% if j.id not in deleted %}{% if j.id not in replaced and j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced','sync') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
           {% if j.state in ('failed','needs_review','no_source','waiting_source') %}<form method="post" action="/jobs/{{ j.id }}/retry" class="inline"><button class="small">Retry</button></form>{% endif %}{% endif %}</td>
       </tr>
     {% else %}

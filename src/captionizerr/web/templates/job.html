@@ -3,9 +3,9 @@
 {% block content %}
 <p class="small"><a href="/">← Dashboard</a></p>
 <h1>{{ job.title }}</h1>
-<p class="sub"><span class="pill {{ job.state }}">{{ state_label.get(job.state, job.state) }}</span> · {{ job.lang|upper }} · from {{ job.source }}</p>
+<p class="sub"><span class="pill {{ job.state }}">{{ state_label.get(job.state, job.state) }}</span> · {{ job.lang|upper }} · {{ {'sonarr': 'imported by Sonarr', 'radarr': 'imported by Radarr', 'manual': 'started by hand', 'sync': 're-sync to speech', 'edit': 'editor', 'notes': 'series notes', 'forced': 'forced track', 'bazarr': 'via Bazarr'}.get(job.source, 'from ' ~ job.source) }}</p>
 <div class="grid">
-  <div class="card"><h2>Result</h2><p>{{ job.detail or '—' }}</p>
+  <div class="card"><h2>Result</h2><p>{{ (job.detail|human) or '—' }}</p>
     {% if job.output_path %}<p class="small muted">Wrote</p><p class="mono" style="word-break:break-all">{{ job.output_path }}</p>
       {% if deleted %}<p class="small"><span class="pill deleted">Video deleted</span> The video was removed on the server, so this translation can't be edited, shared or redone.</p>
       {% elif replaced_by %}<p class="small">This file was translated again later: see <a href="/jobs/{{ replaced_by }}">job {{ replaced_by }}</a>.</p>
@@ -27,7 +27,10 @@
     {% if deleted and not job.output_path %}<p class="small"><span class="pill deleted">Video deleted</span> The video was removed on the server.</p>
     {% elif job.state in ('failed','needs_review','no_source','paused_budget') %}<form method="post" action="/jobs/{{ job.id }}/retry"><button class="primary">Retry</button></form>{% endif %}
   </div>
-  <div class="card"><h2>Cost</h2><div class="big">${{ '%.4f'|format(job.cost_usd) }}</div>
+  {% if job.source == 'sync' %}<div class="card"><h2>Cost</h2><div class="big">Free</div>
+    <p class="small muted">Done by the Whisper speech-to-text service on your own hardware; no AI provider was used.</p>
+  </div>{% else %}
+  <div class="card"><h2>Cost</h2><div class="big">{{ job.cost_usd|money }}</div>
     <p class="small muted">Model: <span class="mono">{{ job.model or 'not recorded' }}</span></p>
     <table class="small"><tbody>
       <tr><td>Input tokens</td><td class="num">{{ usage.get('input_tokens', 0) }}</td></tr>
@@ -35,8 +38,19 @@
       <tr><td>Cache reads</td><td class="num">{{ usage.get('cache_read_tokens', 0) }}</td></tr>
       <tr><td>Cache writes</td><td class="num">{{ usage.get('cache_write_tokens', 0) }}</td></tr>
     </tbody></table>
-  </div>
+  </div>{% endif %}
   <div class="card"><h2>File</h2><p class="mono" style="word-break:break-all">{{ job.video_path }}</p>
     <p class="small muted">Created {{ fmt_time(job.created) }} · updated {{ fmt_time(job.updated) }}{% if job.series_key %} · series notes key <span class="mono">{{ job.series_key }}</span>{% endif %}</p></div>
 </div>
+{% if history|length > 1 %}
+<section class="card tw" style="margin-top:16px"><h2>History of this file</h2>
+  <table class="small"><tbody>
+  {% for h in history %}<tr{% if h.id == job.id %} class="current"{% endif %}>
+    <td class="muted nowrap">{{ fmt_time(h.created) }}</td>
+    <td>{% if h.id == job.id %}<b>{{ h.title }}</b> <span class="muted">(this job)</span>{% else %}<a href="/jobs/{{ h.id }}">{{ h.title }}</a>{% endif %}
+      <div class="muted clamp">{{ h.detail|human }}</div></td>
+    <td><span class="pill {{ h.state }}">{{ state_label.get(h.state, h.state) }}</span></td>
+    <td class="num">{{ 'free' if h.source == 'sync' else h.cost_usd|money }}</td></tr>{% endfor %}
+  </tbody></table></section>
+{% endif %}
 {% endblock %}

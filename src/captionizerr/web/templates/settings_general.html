@@ -15,10 +15,10 @@
   <section class="card">
     <h2>Translation style</h2>
     <div class="fields">
-      <label class="f">Swearing <select name="tone">{% for t in tones %}<option value="{{ t }}" {{ 'selected' if t == v.tone }}>{{ {'faithful': 'Faithful: as strong as the original', 'softened': 'Softened by one level', 'family': 'Family-friendly'}.get(t, t) }}</option>{% endfor %}</select></label>
+      <label class="f">Swearing <select name="tone">{% for t in tones %}<option value="{{ t }}" {{ 'selected' if t == v.tone }}>{{ {'faithful': 'Faithful', 'softened': 'Softened', 'family': 'Family-friendly'}.get(t, t) }}</option>{% endfor %}</select><span class="h">Faithful keeps it as strong as the original; Softened tones it down one level.</span></label>
       <label class="f">Songs and poems <select name="songs">{% for t in songs %}<option value="{{ t }}" {{ 'selected' if t == v.songs }}>{{ {'verse': 'Rhymed verse', 'literal': 'Literal', 'original': 'Keep the original', 'skip': 'Leave out'}.get(t, t) }}</option>{% endfor %}</select></label>
       <label class="f">Characters per line <input type="number" name="max_line" min="20" max="60" value="{{ v.max_line }}"><span class="h">42 is the common standard.</span></label>
-      <label class="f">Reading speed <input type="number" name="target_cps" min="10" max="30" step="0.5" value="{{ v.target_cps }}"><span class="h">Characters per second; 17–20 is comfortable.</span></label>
+      <label class="f">Reading speed <input type="number" name="target_cps" min="10" max="30" step="0.5" value="{{ v.target_cps|num }}"><span class="h">Characters per second; 17–20 is comfortable.</span></label>
       <label class="f check"><input type="checkbox" name="auto_notes" value="1" {{ 'checked' if v.auto_notes }}>
         <span>Draft series notes automatically<span class="h">Names, genders, formality and a glossary, on a series' first translation (about $0.05–0.15 once).</span></span></label>
     </div>
@@ -26,7 +26,7 @@
   <section class="card">
     <h2>Budget</h2>
     <div class="fields">
-      <label class="f">Monthly cap, USD <input type="number" name="monthly_cap_usd" min="0" step="0.5" value="{{ v.monthly_cap_usd }}"><span class="h">At the cap, new jobs pause until you raise it or the month resets.</span></label>
+      <label class="f">Monthly cap, USD <input type="number" name="monthly_cap_usd" min="0" step="0.5" value="{{ v.monthly_cap_usd|num }}"><span class="h">At the cap, new jobs pause until you raise it or the month resets.</span></label>
       <label class="f">Warn at, % of the cap <input type="number" name="alert_pct" min="10" max="100" value="{{ (v.alert_at * 100)|round|int }}"><span class="h">A notification is sent once per month.</span></label>
     </div>
   </section>

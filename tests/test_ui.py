@@ -415,7 +415,10 @@ def test_replaced_translation_has_no_edit_and_points_to_newer(ui):
     st.save_settings({"_setup_done": True})
     a = st.enqueue("manual", "Show S01E01", "/x/a.mkv", "ru", None); st.finish(a.id, "done", "first", "/x/a.captionizerr.ru.srt", 0.003, {}, "gpt-6-luna")
     b = st.enqueue("manual", "Show S01E01", "/x/a.mkv", "ru", None, redo=True); st.finish(b.id, "done", "second", "/x/a.captionizerr.ru.srt", 0.3, {}, "claude-opus-5-5")
-    page = c.get("/").text
+    page = c.get("/").text                                    # hidden by default, with a way to show it
+    assert "Replaced by a newer translation" not in page and "1 older translation that were translated again is hidden" not in page
+    assert "1 older translation" in page and "replaced=1" in page and "$0.30" in page and "$0.003" not in page
+    page = c.get("/?replaced=1").text
     assert page.count("Replaced by a newer translation") == 1 and page.count(">Edit<") == 1
     assert "$0.003" in page and "$0.30" in page
     jp = c.get(f"/jobs/{a.id}").text

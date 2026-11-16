@@ -3,7 +3,7 @@
 <section class="card">
   <h2>Storage and cleanup</h2>
   <p class="small muted">Runs daily: interrupted-extraction leftovers, cached source tracks unused for 60 days (1 GB cap), editor backups beyond the newest {{ keep.history }} per file or {{ keep.days }} days, and unpaid failed or skipped jobs. Our subtitle files whose video is gone are moved to <span class="mono">config/orphans</span> (after two sightings a day apart) and deleted from there after 30 days. A database snapshot is kept in <span class="mono">config/backup</span>. Nothing else in your library is touched.</p>
-  <div class="grid stats">{% for k, b in storage.items() %}<div class="stat"><span class="small muted">{{ k }}</span><b>{{ '%.1f'|format(b / 1048576) }} MB</b></div>{% endfor %}</div>
+  <div class="grid stats">{% for k, b in storage.items() %}<div class="stat"><span class="small muted">{{ k }}</span><b>{{ b|size }}</b></div>{% endfor %}</div>
   <p class="small muted">{% if last %}Last run {{ last_when }} · {{ last.get('seconds', 0) }} s{% if last.get('orphans_moved') %} · {{ last.orphans_moved }} orphan(s) moved{% endif %}{% else %}Not run yet{% endif %}.</p>
   <form method="post" action="/maintenance/run"><button>Run cleanup now</button></form>
 </section>

@@ -205,6 +205,11 @@ class Store:
                     "AND state IN ('done','needs_review') ORDER BY updated DESC LIMIT 1", (video_path, lang)).fetchone()
         return r[0] if r else ""
 
+    def jobs_for(self, video_path: str, lang: str, limit: int = 30) -> list[Job]:
+        """Everything that happened to one file's translation, oldest first."""
+        return [Job(**dict(r)) for r in self._q("SELECT * FROM jobs WHERE video_path=? AND lang=? ORDER BY created "
+                                                "LIMIT ?", (video_path, lang, limit)).fetchall()]
+
     def share(self, path: str) -> dict | None:
         r = self._q("SELECT * FROM shares WHERE path=?", (path,)).fetchone()
         return dict(r) if r else None

@@ -38,6 +38,81 @@ EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 from ..store import STATES
 
 
+_ORIGIN = {"embedded": "the built-in {L} track",
+           "embedded + sidecar ending": "the built-in {L} track, its missing ending from a downloaded subtitle",
+           "sidecar": "a downloaded {L} subtitle", "sidecar, re-timed": "a downloaded {L} subtitle (re-timed)",
+           "bazarr": "a {L} subtitle from Bazarr"}
+
+
+def human_detail(detail: str) -> str:
+    """A job's detail line in plain words. The stored text stays as the worker wrote it (stable for
+    tests and old rows); only what is shown changes."""
+    if not detail:
+        return ""
+
+    def src(m):
+        origin = m.group(3)
+        synced = origin.endswith(", synced to speech")
+        origin = origin.removesuffix(", synced to speech")
+        lang = LANG_NAMES.get(m.group(2), m.group(2))
+        what = _ORIGIN.get(origin, f"{lang} ({origin})").replace("{L}", lang)
+        return f"{m.group(1)} lines from {what}" + (", synced to the speech" if synced else "")
+    d = re.sub(r"(\d+) cues from ([a-z]{2,3}) \(([^)]*)\)", src, detail)
+    d = re.sub(r"(\d+) cues; ", r"\1 lines; ", d)
+
+    def checks(m):
+        n, left = int(m.group(1)), int(m.group(2))
+        if not n:
+            return "no lines needed fixing"
+        return (f"{n} line{'s' if n != 1 else ''} checked and fixed" if not left
+                else f"{n} lines checked, {left} still need{'s' if left == 1 else ''} a look")
+    d = re.sub(r"(\d+) flagged, (\d+) open", checks, d)
+    d = d.replace(" via Batch", " via the Batch API (half price)")
+    d = d.replace("translated lines follow", "translated lines moved with them")
+    return d
+
+
+def share_comment(model: str, history) -> str:
+    """The OpenSubtitles comment, saying where the subtitle really came from: the release's own
+    track, a completed one, or a downloaded one, and whether its timing was checked against speech."""
+    last = next((j for j in reversed(history) if j.source not in ("edit", "notes", "forced", "sync")
+                 and j.state in ("done", "needs_review")), None)
+    detail = last.detail if last else ""
+    m = re.search(r"cues from [a-z]{2,3} \(([^)]*)\)", detail)
+    origin = m.group(1) if m else "embedded"
+    synced = "synced to speech" in origin or any(
+        j.source == "sync" and j.state == "done" and "moved" in (j.detail or "") and j.created > (last.created if last else 0)
+        for j in history)
+    origin = origin.replace(", synced to speech", "")
+    if origin.startswith("embedded + sidecar"):
+        what = "of this release's own subtitles, with the missing ending completed from another subtitle"
+    elif origin.startswith("sidecar"):
+        what = "of a downloaded subtitle, re-timed to this release"
+    else:
+        what = "of this release's own subtitles, timed to the file"
+    return (f"AI translation ({model}) {what}" + ("; timing checked against the speech" if synced else "")
+            + "; reviewed by the uploader.")
+
+
+def human_size(n: int) -> str:
+    if n < 1024:
+        return f"{n} B" if n else "empty"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.0f} KB"
+    return f"{n / 1048576:.1f} MB" if n < 1024 ** 3 else f"{n / 1024 ** 3:.2f} GB"
+
+
+def short_title(path: str) -> str:
+    """"Northwind S02E05" from a video or subtitle file name; the plain stem when there is no SxxEyy."""
+    stem = Path(path).name.split(".captionizerr.")[0]
+    stem = re.sub(r"\.(mkv|mp4|m4v|avi|mov|ts|webm|srt|ass)$", "", stem, flags=re.I)
+    m = re.search(r"[Ss](\d{1,2})[Ee](\d{1,3})", stem)
+    if not m:
+        return stem
+    series = re.split(r"[\s._-]+[Ss]\d{1,2}[Ee]\d", stem)[0].replace(".", " ").strip(" -_")
+    return f"{series} S{int(m.group(1)):02d}E{int(m.group(2)):02d}".strip()
+
+
 def gone_videos(paths, roots) -> set[str]:
     """Video paths whose file no longer exists (the series or movie was deleted on the server).
     A path counts as gone only when its library root is reachable and not empty, so a dropped
@@ -103,6 +178,9 @@ def register(app: FastAPI) -> None:
     templates.env.globals.update(version=__version__, state_label=STATE_LABEL, lang_names=LANG_NAMES)
     templates.env.filters["money"] = lambda v: f"${v:.3f}" if 0 < (v or 0) < 0.1 else f"${(v or 0):.2f}"
     templates.env.filters["datefmt"] = lambda t: datetime.fromtimestamp(t).strftime("%d %b %Y") if t else ""
+    templates.env.filters["human"] = human_detail
+    templates.env.filters["size"] = human_size
+    templates.env.filters["num"] = lambda v: f"{v:g}" if isinstance(v, float) else v
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
     def render(request: Request, name: str, **ctx):
@@ -127,7 +205,7 @@ def register(app: FastAPI) -> None:
 
     # ------------------------------------------------------------------ dashboard
     @app.get("/")
-    def dashboard(request: Request, state: str = ""):
+    def dashboard(request: Request, state: str = "", replaced: str = ""):
         if getattr(app.state, "setup_needed", lambda: False)() and not request.query_params.get("msg"):
             return RedirectResponse("/setup", 307)
         all_jobs = store.list(300)
@@ -146,6 +224,7 @@ def register(app: FastAPI) -> None:
         counts = store.counts()
         spent, cap, reserved = store.spent(), s.monthly_cap_usd, store.reserved()
         # an older translation of a file that was translated again: its file is gone, so no Edit for it
+        show_replaced = bool(replaced)
         seen, replaced = set(), set()
         for j in jobs:                                   # newest first
             if j.source in side or j.state not in ("done", "needs_review"):
@@ -154,10 +233,15 @@ def register(app: FastAPI) -> None:
             if k in seen:
                 replaced.add(j.id)
             seen.add(k)
+        hidden_replaced = 0
+        if not show_replaced and view != "other":        # older versions of re-translated files: hidden by default
+            hidden_replaced = sum(1 for j in jobs if j.id in replaced)
+            jobs = [j for j in jobs if j.id not in replaced]
         jobs = jobs[:100]
         gone = gone_videos([j.video_path for j in jobs], s.library_roots)
         deleted = {j.id for j in jobs if j.video_path in gone}
         return render(request, "dashboard.html", jobs=jobs, counts=counts, replaced=replaced, deleted=deleted,
+                      hidden_replaced=hidden_replaced, show_replaced=show_replaced,
                       spent=spent, cap=cap,
                       reserved=reserved, pct=min(100, 100 * (spent + reserved) / cap) if cap else 0, month=month_now(),
                       months=store.spend_by_month(), view=view, avg=episode_estimate(),
@@ -174,6 +258,7 @@ def register(app: FastAPI) -> None:
         import json
         return render(request, "job.html", job=job, usage=json.loads(job.usage or "{}"), replaced_by=store.replaced_by(job),
                       deleted=bool(gone_videos([job.video_path], s.library_roots)),
+                      history=store.jobs_for(job.video_path, job.lang),
                       fmt_time=lambda t: datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M:%S"))
 
     @app.post("/jobs/{job_id}/retry")
@@ -474,6 +559,19 @@ def register(app: FastAPI) -> None:
         profile = s.profile(lang, src.lang if src else "en", (ser or {}).get("tone"))
         return video, target, tdoc, rows, profile, str(target.stat().st_mtime_ns)
 
+    def skipped_rows(path: str, video: Path, target: Path, lang: str, rows) -> set[int]:
+        """Rows with a source line but no translation that the pipeline left out on purpose (promos,
+        adverts). Recorded per translation since 0.2.9; for older files, an empty line counts as
+        intentional when the file's last translation finished with nothing open."""
+        drops = reuse.stored_drops(s.data_dir / "sources", target)
+        empty = [r for r in rows if r.src.strip() and not r.tr.strip()]
+        if drops is not None:
+            return {r.id for r in empty if r.start_ms in drops}
+        jobs = store.jobs_for(path, lang) or store.jobs_for(str(video), lang)
+        last = next((j for j in reversed(jobs) if j.source not in ("edit", "notes", "forced", "sync")
+                     and j.state in ("done", "needs_review")), None)
+        return {r.id for r in empty} if last is not None and last.state == "done" else set()
+
     @app.get("/edit")
     def edit_page(request: Request, path: str, lang: str, key: str = "", back: str = "", view: str = ""):
         key = valid_key(key) or ""
@@ -482,8 +580,11 @@ def register(app: FastAPI) -> None:
         except Preparing:
             return render(request, "preparing.html", back=local_path(back))
         flags = editor.flags_for(rows, profile)
+        skipped = skipped_rows(path, video, target, lang, rows)
+        for rid in skipped:                       # left out on purpose: not an error to fix
+            flags[rid] = [f for f in flags.get(rid, []) if f != "empty"]
         data = [{"id": r.id, "t": r.start_ms, "d": round(r.duration, 2), "src": r.src, "tr": r.tr,
-                 "extra": r.extra, "flags": flags.get(r.id, [])} for r in rows if not r.hidden]
+                 "extra": r.extra, "flags": flags.get(r.id, []), "skip": r.id in skipped} for r in rows if not r.hidden]
         stem = video.stem
         m = re.search(r"[Ss](\d{1,2})[Ee](\d{1,3})", stem)
         series = re.split(r"[\s._-]+[Ss]\d{1,2}[Ee]\d", stem)[0].replace(".", " ").strip(" -_") if m else ""
@@ -564,7 +665,7 @@ def register(app: FastAPI) -> None:
         except Exception as e:
             return JSONResponse({"error": f"{type(e).__name__}: {str(e)[:200]}"}, 502)
         c = price_of(prov.model, usage) or 0.0          # the model that did the work, not the Anthropic setting
-        store.record("edit", f"{target.name}: line {row_id} re-translated", str(b["path"]), str(b["lang"]), key,
+        store.record("edit", f"{short_title(target.name)}: line {row_id} re-translated", str(b["path"]), str(b["lang"]), key,
                      instruction or "re-translate", c, vars(usage), prov.model)
         r = next(r for r in rows if r.id == row_id)
         r.tr = text
@@ -610,8 +711,7 @@ def register(app: FastAPI) -> None:
         return render(request, "share.html", path=path, lang=lang, forced=bool(forced), back=safe_back(back),
                       fname=sub.name, configured=configured, guess=guess, guess_error=err, release=video.stem,
                       translator=f"CaptionizeRR (AI: {used})", hd=bool(re.search(r"(720|1080|2160)p", video.name)),
-                      comment=f"AI translation ({used}) of this release's own subtitles, timed to the file; "
-                              "reviewed by the uploader.",
+                      comment=share_comment(used, store.jobs_for(path, lang) or store.jobs_for(str(video), lang)),
                       episode_file=bool(re.search(r"[Ss]\d{1,3}[Ee]\d{1,4}", video.name)),
                       shared=shared, shared_when=datetime.fromtimestamp(shared["at"]).strftime("%d %b %Y") if shared else "")
 

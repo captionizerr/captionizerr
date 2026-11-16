@@ -309,6 +309,10 @@ class Worker:
         before = [(c.start_ms, c.end_ms) for c in src.cues]
         speechsync.apply(src.cues, moves)
         new = {b: (c.start_ms, c.end_ms) for b, c in zip(before, src.cues)}
+        drops = reuse.stored_drops(s.data_dir / "sources", out)
+        if drops is not None:                            # skipped lines move with the timing
+            moved_start = {b[0]: n[0] for b, n in new.items()}
+            reuse.store_drops(s.data_dir / "sources", out, [moved_start.get(d, d) for d in drops])
         doc = cuesmod.load(out)
         moved = 0
         for c in doc.cues:
@@ -365,6 +369,10 @@ class Worker:
             log.warning("job %s: no price known for %s; cost recorded as $0", job.id, used_model)
         try:
             reuse.store_source(s.data_dir / "sources", out, prep.source.path, prep.source.lang)
+            still_open = {i.index for i in res.issues_final}
+            reuse.store_drops(s.data_dir / "sources", out,
+                              [c.start_ms for c in prep.doc.cues if not c.is_tag_only and c.text.strip()
+                               and not (res.translations.get(c.index) or "").strip() and c.index not in still_open])
             if prep.previous:
                 maintenance.quarantine(s, prep.previous)        # replaced: out of the library, kept 30 days
         except Exception as e:
