@@ -21,7 +21,7 @@ class OpenAICompatProvider:
     supports_batch = False
 
     def __init__(self, base_url: str, model: str, api_key: str = "", max_output: int = 16000,
-                 timeout: float = 900, client: httpx.Client | None = None):
+                 timeout: float = 900, client: httpx.Client | None = None, effort: str = ""):
         if not base_url or not model:
             raise ProviderError("OpenAI-compatible provider needs a base URL and a model name")
         self.base_url, self.model, self.key = base_url.rstrip("/"), model, api_key
@@ -34,6 +34,7 @@ class OpenAICompatProvider:
         # adapt once if the server says otherwise, and remember for later requests.
         self.token_param = "max_completion_tokens" if "api.openai.com" in self.base_url else "max_tokens"
         self.send_temperature = True
+        self.effort = effort or ""           # reasoning_effort for reasoning models; dropped if the server rejects it
 
     def count_tokens(self, system: str, context: str, work: str) -> int:
         return int(len(system + context + work) / 3)
@@ -50,6 +51,8 @@ class OpenAICompatProvider:
             body = {"model": self.model, "messages": msgs, self.token_param: self.max_output}
             if self.send_temperature:
                 body["temperature"] = 0.3
+            if self.effort:
+                body["reasoning_effort"] = self.effort
             try:
                 r = self.client.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
             except httpx.HTTPError as e:
@@ -60,6 +63,9 @@ class OpenAICompatProvider:
             if re.search(rf"\b{self.token_param}\b", msg) and self.token_param not in tried:
                 tried.add(self.token_param)            # the server named the parameter we sent: use the other one
                 self.token_param = "max_tokens" if self.token_param == "max_completion_tokens" else "max_completion_tokens"
+            elif "reasoning_effort" in msg and self.effort:
+                self.notes_effort = f"effort {self.effort} not supported by this model; used its default"
+                self.effort = ""
             elif "temperature" in msg and self.send_temperature:
                 self.send_temperature = False
             else:
@@ -79,6 +85,8 @@ class OpenAICompatProvider:
         usage = Usage(input_tokens=max(0, (u.get("prompt_tokens") or 0) - cached),
                       output_tokens=u.get("completion_tokens") or 0, cache_read_tokens=cached)
         notes = ["hit max_tokens: output truncated"] if choice.get("finish_reason") == "length" else []
+        if getattr(self, "notes_effort", ""):
+            notes.append(self.notes_effort)
         return ProviderResult(text, usage, data.get("model") or self.model, choice.get("finish_reason"), data.get("id"), notes)
 
 

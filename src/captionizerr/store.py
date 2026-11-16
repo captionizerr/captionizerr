@@ -49,7 +49,7 @@ STATES = ("queued", "running", "batched", "waiting_source", "done", "needs_revie
 ACTIVE = ("queued", "running", "paused_budget", "batched", "waiting_source")
 # columns added after M1; created on start if missing
 MIGRATIONS = {"mode": "TEXT DEFAULT 'live'", "batch_id": "TEXT DEFAULT ''", "wait_since": "REAL DEFAULT 0",
-              "est_usd": "REAL DEFAULT 0", "model": "TEXT DEFAULT ''"}
+              "est_usd": "REAL DEFAULT 0", "model": "TEXT DEFAULT ''", "redo": "INTEGER DEFAULT 0"}
 
 
 def month_now() -> str:
@@ -77,6 +77,7 @@ class Job:
     wait_since: float = 0.0      # waiting_source: when we asked Bazarr
     est_usd: float = 0.0         # estimate of a submitted batch job (reserved against the cap until paid)
     model: str = ""              # the model that did the work (per-model cost averages)
+    redo: int = 0                # 1: replace our existing translation (old one goes to editor history)
 
 
 class Store:
@@ -99,16 +100,16 @@ class Store:
             return self.db.execute(sql, args)
 
     def enqueue(self, source: str, title: str, video_path: str, lang: str, series_key: str | None,
-                mode: str = "live") -> Job | None:
+                mode: str = "live", redo: bool = False) -> Job | None:
         """Add a job unless the same video+language is already active. Returns the new job or None."""
         dup = self._q(f"SELECT id FROM jobs WHERE video_path=? AND lang=? AND state IN ({','.join('?' * len(ACTIVE))})",
                       (video_path, lang, *ACTIVE)).fetchone()
         if dup:
             return None
         now = time.time()
-        cur = self._q("INSERT INTO jobs (created, updated, source, title, series_key, video_path, lang, state, mode) "
-                      "VALUES (?,?,?,?,?,?,?, 'queued', ?)", (now, now, source, title, series_key, video_path, lang,
-                                                             "batch" if mode == "batch" else "live"))
+        cur = self._q("INSERT INTO jobs (created, updated, source, title, series_key, video_path, lang, state, mode, redo) "
+                      "VALUES (?,?,?,?,?,?,?, 'queued', ?, ?)", (now, now, source, title, series_key, video_path, lang,
+                                                                "batch" if mode == "batch" else "live", int(redo)))
         return self.get(cur.lastrowid)
 
     def get(self, job_id: int) -> Job | None:
@@ -259,7 +260,9 @@ class Store:
                 (key, title, int(enabled), json.dumps(langs) if langs else "", tone or ""))
 
     def requeue(self, job_id: int) -> bool:
-        return self._q("UPDATE jobs SET state='queued', detail='', wait_since=0, updated=? WHERE id=? AND state IN "
+        # a needs_review job already wrote its file, so its retry must be allowed to replace it
+        return self._q("UPDATE jobs SET state='queued', detail='', wait_since=0, updated=?, "
+                       "redo=CASE WHEN state='needs_review' THEN 1 ELSE redo END WHERE id=? AND state IN "
                        "('failed','needs_review','no_source','paused_budget','waiting_source')", (time.time(), job_id)).rowcount == 1
 
     def avg_cost(self, default: float = 0.31, model: str | None = None, min_jobs: int = 1):

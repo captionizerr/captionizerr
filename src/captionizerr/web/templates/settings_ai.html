@@ -32,6 +32,8 @@
         <span class="h">On that machine set <span class="mono">OLLAMA_HOST=0.0.0.0</span> so CaptionizeRR can reach it.</span></label>
       <label class="f">Model <span class="row-inline"><select name="ollama_model" id="oll-model">{% if v.ollama_model %}<option selected>{{ v.ollama_model }}</option>{% else %}<option value="">Find models first</option>{% endif %}</select>
         <button type="button" class="small" id="oll-find">Find models</button></span><span class="h" id="oll-hint">27–32B models are the useful minimum for natural dialogue.</span></label>
+      <label class="f">Thinking <select name="ollama_effort">{% for e in ollama_efforts %}<option value="{{ e }}" {{ 'selected' if e == v.ollama_effort }}>{{ {'off': 'Off (fastest)', 'low': 'Low', 'medium': 'Medium', 'high': 'High'}[e] }}</option>{% endfor %}</select>
+        <span class="h">For thinking models (gpt-oss, Qwen 3, DeepSeek-R1). Slower, sometimes better on hard dialogue; models without it ignore it.</span></label>
       <label class="f">Context window <select name="ollama_num_ctx">{% for n in (8192, 16384, 32768, 65536) %}<option value="{{ n }}" {{ 'selected' if n == v.ollama_num_ctx }}>{{ n // 1024 }}k{{ ' (recommended)' if n == 16384 }}</option>{% endfor %}</select></label>
     </div>
     <div class="actions">{{ test('ollama', 'Test (one tiny request)') }}</div>
@@ -47,6 +49,8 @@
       <label class="f">Price in / out, $ per 1M tokens <span class="row-inline"><input type="number" name="openai_price_in" id="oa-in" min="0" step="0.001" value="{{ v.openai_price_in }}" aria-label="Input price"><input type="number" name="openai_price_out" id="oa-out" min="0" step="0.001" value="{{ v.openai_price_out }}" aria-label="Output price"></span>
         <input type="hidden" name="openai_price_source" id="oa-src" value="{{ v.openai_price_source }}">
         <span class="h" id="oa-info">{% if v.openai_price_source %}Prices from {{ v.openai_price_source }}.{% else %}Filled in automatically when you pick a model; you can change them.{% endif %}</span></label>
+      <label class="f">Effort <select name="openai_effort">{% for e in openai_efforts %}<option value="{{ e }}" {{ 'selected' if e == v.openai_effort }}>{{ e|capitalize if e else "Model's default" }}</option>{% endfor %}</select>
+        <span class="h">Reasoning effort for reasoning models (OpenAI's GPT-5/6 family, o-series). Higher thinks longer and costs more output tokens. Models without it ignore it.</span></label>
       <label class="f">Max output tokens <input type="number" name="openai_max_output" min="1000" max="200000" step="1000" value="{{ v.openai_max_output }}"><span class="h">Long episodes are split to fit.</span></label>
     </div>
     <div class="actions">{{ test('openai', 'Test (one tiny request)') }}</div>

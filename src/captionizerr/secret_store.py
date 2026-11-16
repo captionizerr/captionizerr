@@ -14,6 +14,7 @@ import hmac
 import json
 import os
 import secrets as _secrets
+import time
 from pathlib import Path
 
 # Settings field -> (environment variable, label)
@@ -87,11 +88,16 @@ class SecretStore:
             raise KeyError(field)
         data = self._load()
         data[field] = hash_password(value) if field == "ui_password" else value
+        data.setdefault("_saved_at", {})[field] = int(time.time())
         self._save(data)
+
+    def saved_at(self, field: str) -> int:
+        return int((self._load().get("_saved_at") or {}).get(field) or 0)
 
     def delete(self, field: str) -> None:
         data = self._load()
         if data.pop(field, None) is not None:
+            (data.get("_saved_at") or {}).pop(field, None)
             self._save(data)
 
 

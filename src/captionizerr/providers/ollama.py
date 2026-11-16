@@ -43,7 +43,7 @@ class OllamaProvider:
     supports_batch = False
 
     def __init__(self, url: str, model: str, num_ctx: int = 16384, max_output: int = 8000,
-                 timeout: float = 1800, client: httpx.Client | None = None):
+                 timeout: float = 1800, client: httpx.Client | None = None, effort: str = "off"):
         if not model:
             raise ProviderError("pick an Ollama model first")
         self.url, self.model = root(url), model
@@ -51,6 +51,8 @@ class OllamaProvider:
         # per cue: ~30 input + ~40 output tokens; leave ~4k for the rules and series notes
         self.max_cues = max(30, min(self.max_output // 40, (num_ctx - 4000) // 70))
         self.client = client or httpx.Client(timeout=timeout)
+        # Ollama's `think`: False, or a level for models that have one (gpt-oss); True for on/off-only models
+        self.think = False if effort in ("", "off") else effort
         register(model, 0.0, 0.0)          # local: costs nothing, but the ledger still records usage
 
     def count_tokens(self, system: str, context: str, work: str) -> int:
@@ -61,10 +63,13 @@ class OllamaProvider:
         if system.strip():
             msgs.append({"role": "system", "content": system})
         msgs.append({"role": "user", "content": (context.strip() + "\n\n" if context.strip() else "") + work})
-        body = {"model": self.model, "messages": msgs, "stream": False, "think": False,
+        body = {"model": self.model, "messages": msgs, "stream": False, "think": self.think,
                 "options": {"num_ctx": self.num_ctx, "num_predict": self.max_output, "temperature": 0.3}}
         try:
             r = self.client.post(f"{self.url}/api/chat", json=body)
+            if r.status_code == 400 and "think" in r.text and isinstance(body["think"], str):
+                body["think"] = True                          # on/off-only thinking models: no levels
+                r = self.client.post(f"{self.url}/api/chat", json=body)
             if r.status_code == 400 and "think" in r.text:      # models without a thinking switch
                 body.pop("think")
                 r = self.client.post(f"{self.url}/api/chat", json=body)

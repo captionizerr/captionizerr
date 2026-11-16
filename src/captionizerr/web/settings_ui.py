@@ -53,6 +53,15 @@ def _url(raw, what: str) -> str:
     return u
 
 
+OPENAI_EFFORTS = ("", "minimal", "low", "medium", "high")
+OLLAMA_EFFORTS = ("off", "low", "medium", "high")
+
+
+def _pick(v, allowed, default):
+    v = str(v if v is not None else default).strip().lower()
+    return v if v in allowed else default
+
+
 def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
     store, s = app.state.store, app.state.settings
     secrets = app.state.secrets
@@ -64,7 +73,11 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         for field, (var, label) in secret_store.SECRETS.items():
             src = s.secret_sources.get(field)
             has = bool(getattr(s, field, "")) or (field == "ui_password" and bool(s.ui_password_hash))
-            out[field] = {"label": label, "source": src, "set": has, "locked": src in ("file", "env"), "var": var}
+            val = str(getattr(s, field, "") or "")
+            # last 4 characters of an API key, like provider dashboards show; never for passwords or short values
+            tail = val[-4:] if field.endswith("_key") and field != "webhook_key" and len(val) >= 20 else ""
+            out[field] = {"label": label, "source": src, "set": has, "locked": src in ("file", "env"), "var": var,
+                          "tail": tail, "saved_at": secrets.saved_at(field) if src == "ui" else 0}
         return out
 
     def save(values: dict) -> None:
@@ -151,7 +164,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
     @app.get("/settings/ai")
     def ai(request: Request):
         models = [{"id": m, "in": p[0], "out": p[1], "ep": (16_000 * p[0] + 12_000 * p[1]) / 1e6} for m, p in PRICES.items()]
-        return page(request, "ai", models=models, efforts=EFFORTS)
+        return page(request, "ai", models=models, efforts=EFFORTS, openai_efforts=OPENAI_EFFORTS, ollama_efforts=OLLAMA_EFFORTS)
 
     @app.post("/settings/ai")
     async def ai_save(request: Request):
@@ -171,7 +184,8 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
             elif p == "ollama":
                 vals.update(ollama_url=_url(f.get("ollama_url"), "the Ollama address") or "http://localhost:11434",
                             ollama_model=str(f.get("ollama_model") or "").strip(),
-                            ollama_num_ctx=max(4096, min(131072, int(f.get("ollama_num_ctx") or 16384))))
+                            ollama_num_ctx=max(4096, min(131072, int(f.get("ollama_num_ctx") or 16384))),
+                            ollama_effort=_pick(f.get("ollama_effort"), OLLAMA_EFFORTS, "off"))
                 if not vals["ollama_model"]:
                     raise ValueError("click Find models and pick one")
             else:
@@ -180,7 +194,8 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
                             openai_price_in=max(0.0, float(f.get("openai_price_in") or 0)),
                             openai_price_out=max(0.0, float(f.get("openai_price_out") or 0)),
                             openai_price_source=str(f.get("openai_price_source") or "entered by hand")[:80],
-                            openai_max_output=max(1000, min(200000, int(f.get("openai_max_output") or 16000))))
+                            openai_max_output=max(1000, min(200000, int(f.get("openai_max_output") or 16000))),
+                            openai_effort=_pick(f.get("openai_effort"), OPENAI_EFFORTS, ""))
                 if not (vals["openai_base_url"] and vals["openai_model"]):
                     raise ValueError("enter the base URL and the model")
         except ValueError as e:
@@ -269,7 +284,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
             try:
                 from ..providers.ollama import OllamaProvider
                 m = g("ollama_model", s.ollama_model)
-                r = OllamaProvider(g("ollama_url", s.ollama_url), m, 4096, 50, timeout=300).complete("", "", "Reply with OK.")
+                r = OllamaProvider(g("ollama_url", s.ollama_url), m, 4096, 50, timeout=300, effort=_pick(f.get("ollama_effort"), OLLAMA_EFFORTS, "off")).complete("", "", "Reply with OK.")
                 ok, msg = True, f"{m} answered “{r.text.strip()[:30]}”"
             except Exception as e:
                 ok, msg = False, str(e)[:200]
@@ -277,7 +292,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
             try:
                 from ..providers.openai_compat import OpenAICompatProvider
                 base, model = g("openai_base_url", s.openai_base_url), g("openai_model", s.openai_model)
-                r = OpenAICompatProvider(base, model, effective(f, "openai_key"), 200, timeout=60).complete("", "", "Reply with OK.")
+                r = OpenAICompatProvider(base, model, effective(f, "openai_key"), 2000, timeout=60, effort=_pick(f.get("openai_effort"), OPENAI_EFFORTS, "")).complete("", "", "Reply with OK.")
                 ok, msg = True, f"model answered “{r.text.strip()[:30]}”"
                 from ..price_lookup import lookup
                 pr = lookup("openai", base, model, s.cache_dir)
@@ -430,7 +445,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         "opensubtitles_user": "OpenSubtitles user", "plex_path_map": "Plex path mapping", "plex_url": "Plex address",
         "provider": "AI provider", "public_url": "Public address", "radarr_url": "Radarr address", "sonarr_url": "Sonarr address",
         "songs": "Songs and poems", "source_langs": "Translate from", "target_cps": "Reading speed", "tone": "Swearing",
-        "ui_user": "Login user"}
+        "ui_user": "Login user", "openai_effort": "OpenAI-compatible effort", "ollama_effort": "Ollama thinking"}
 
     def overrides() -> list[dict]:
         env, saved = app.state.env_defaults, store.load_settings()

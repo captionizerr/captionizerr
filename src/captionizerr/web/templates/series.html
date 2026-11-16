@@ -17,7 +17,7 @@
     <tbody>
     {% for e in eps %}
       <tr>
-        <td>{% if e.missing %}<input type="checkbox" name="path" value="{{ e.path }}" data-s="{{ season }}" id="e{{ season }}-{{ e.episode }}" aria-label="Select S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}">
+        <td>{% if e.path %}<input type="checkbox" name="path" value="{{ e.path }}" {% if e.missing %}data-s="{{ season }}"{% else %}data-done="1"{% endif %} id="e{{ season }}-{{ e.episode }}" aria-label="Select S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}">
             <input type="hidden" name="label:{{ e.path }}" value="S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}">{% endif %}</td>
         <td class="mono"><label for="e{{ season }}-{{ e.episode }}">{{ '%02d'|format(e.episode) }}</label></td>
         <td>{{ e.title }}</td>
@@ -58,7 +58,9 @@ document.querySelectorAll('button[data-season]').forEach(b => b.addEventListener
   form.querySelectorAll(`input[data-s="${b.dataset.season}"]`).forEach(c => c.checked = true); upd(); }));
 form.addEventListener('submit', e => { const n = form.querySelectorAll('input[name=path]:checked').length;
   const half = e.submitter && e.submitter.value === 'batch', cost = (n*nlang*avg*(half ? 0.5 : 1)).toFixed(2);
-  if (n && !confirm(half ? `Add ${n} episode(s) to the backlog for about $${cost}? Results arrive within 24 hours.`
-                         : `Translate ${n} episode(s) for about $${cost}?`)) e.preventDefault(); });
+  const redo = form.querySelectorAll('input[name=path][data-done]:checked').length;
+  const note = redo ? `\n\n${redo} of them already have a translation: it will be replaced, including any edits you made. The previous version stays in the editor's history (Undo there).` : '';
+  if (n && !confirm((half ? `Add ${n} episode(s) to the backlog for about $${cost}? Results arrive within 24 hours.`
+                          : `Translate ${n} episode(s) for about $${cost}?`) + note)) e.preventDefault(); });
 </script>
 {% endblock %}

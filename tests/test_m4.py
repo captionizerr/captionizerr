@@ -807,3 +807,92 @@ def test_cli_uses_keys_saved_in_the_ui(tmp_path, monkeypatch):
     p = make_cli_provider(a)
     from captionizerr.pricing import price
     assert p.key == "sk-from-ui" and price("gpt-6-luna")[:2] == pytest.approx((0.1, 0.5))
+
+
+# ------------------------------------------------------------------ re-translate, effort, key display
+@ffmpeg
+def test_retranslate_replaces_our_file_and_keeps_history(tmp_path):
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    st, w, c = app.state.store, app.state.worker, TestClient(app)
+    v = make_video(tmp_path / "lib/Show/Season 1", "Show S01E01.mkv")
+    j = st.enqueue("manual", "Show S01E01", str(v), "ru", None)
+    w.process(st.next_queued())
+    out = Path(st.get(j.id).output_path)
+    out.write_text(out.read_text(encoding="utf-8") + "\n", encoding="utf-8")   # pretend the owner edited it
+    edited = out.read_text(encoding="utf-8")
+    # a plain re-enqueue is still skipped (webhook double-fire safety)
+    k = st.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    w.process(st.next_queued())
+    assert st.get(k.id).state == "skipped"
+    # Re-translate replaces it, and the edited version is in the editor's history
+    r = c.post(f"/jobs/{j.id}/retranslate", headers=SAME, follow_redirects=False)
+    assert r.status_code == 303 and "previous+version" in r.headers["location"]
+    nxt = st.next_queued(); assert nxt.redo == 1
+    w.process(nxt)
+    assert st.get(nxt.id).state in ("done", "needs_review")
+    from captionizerr.writer import history
+    assert any(h.read_text(encoding="utf-8") == edited for h in history(out, app.state.settings.history_dir))
+    # the series page's Translate on an already-translated episode is a redo too
+    c.post("/library/translate", data={"path": str(v), "series_key": "", "title": "Show"}, headers=SAME)
+    assert st.next_queued().redo == 1
+
+
+def test_needs_review_retry_may_replace_its_file(tmp_path):
+    st = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False).state.store
+    j = st.enqueue("manual", "x", "/x/a.mkv", "ru", None)
+    st.finish(j.id, "needs_review", "1 open")
+    assert st.requeue(j.id) and st.get(j.id).redo == 1
+
+
+def test_openai_effort_sent_and_dropped_when_unsupported():
+    from captionizerr.providers.openai_compat import OpenAICompatProvider
+    seen = []
+
+    def server(req):
+        b = json.loads(req.content); seen.append(b.get("reasoning_effort"))
+        if "reasoning_effort" in b and b["model"] == "plain":
+            return httpx.Response(400, json={"error": {"message": "Unrecognized request argument supplied: reasoning_effort"}})
+        return httpx.Response(200, json={"model": b["model"], "choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}],
+                                         "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+    cl = httpx.Client(transport=httpx.MockTransport(server))
+    OpenAICompatProvider("https://api.openai.com/v1", "gpt-6-luna", "k", client=cl, effort="low").complete("", "", "hi")
+    assert seen == ["low"]
+    seen.clear()
+    r = OpenAICompatProvider("https://x/v1", "plain", "k", client=cl, effort="high").complete("", "", "hi")
+    assert seen == ["high", None] and any("effort high not supported" in n for n in r.notes)
+    seen.clear()
+    OpenAICompatProvider("https://x/v1", "m", "k", client=cl).complete("", "", "hi")
+    assert seen == [None]                                      # default: not sent at all
+
+
+def test_ollama_thinking_levels_fall_back():
+    from captionizerr.providers.ollama import OllamaProvider
+    seen = []
+
+    def server(req):
+        b = json.loads(req.content); seen.append(b.get("think", "absent"))
+        if b["model"] == "onoff" and isinstance(b.get("think"), str):
+            return httpx.Response(400, text='{"error":"think value \\"medium\\" is not supported for this model"}')
+        if b["model"] == "nothink" and "think" in b and b["think"] is not False:
+            return httpx.Response(400, text='{"error":"model does not support think"}')
+        return httpx.Response(200, json={"message": {"content": "OK"}, "done_reason": "stop", "prompt_eval_count": 1, "eval_count": 1})
+    cl = httpx.Client(transport=httpx.MockTransport(server))
+    OllamaProvider("http://o:11434", "gpt-oss", client=cl, effort="medium").complete("", "", "hi"); assert seen == ["medium"]
+    seen.clear(); OllamaProvider("http://o:11434", "onoff", client=cl, effort="medium").complete("", "", "hi"); assert seen == ["medium", True]
+    seen.clear(); OllamaProvider("http://o:11434", "nothink", client=cl, effort="high").complete("", "", "hi"); assert seen == ["high", True, "absent"]
+    seen.clear(); OllamaProvider("http://o:11434", "m", client=cl).complete("", "", "hi"); assert seen == [False]
+
+
+def test_ai_page_shows_saved_key_clearly_and_effort_saves(tmp_path):
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    c = TestClient(app)
+    app.state.store.save_settings({"_setup_done": True})
+    c.post("/settings/ai", data={"provider": "openai", "openai_base_url": "https://api.openai.com/v1", "openai_model": "gpt-6-luna",
+                                 "openai_price_in": "0.1", "openai_price_out": "0.5", "openai_effort": "medium",
+                                 "secret:openai_key": "sk-test-0123456789abcdefWXYZ"}, headers=SAME)
+    s = app.state.settings
+    assert s.openai_effort == "medium" and s.openai_key.endswith("WXYZ")
+    page = c.get("/settings/ai").text
+    assert "✓ Saved" in page and "…WXYZ" in page and "sk-test-0123456789" not in page and "saved " in page
+    c.post("/settings/ai", data={"provider": "ollama", "ollama_model": "gpt-oss:20b", "ollama_effort": "bogus"}, headers=SAME)
+    assert s.ollama_effort == "off"                            # unknown values fall back safely

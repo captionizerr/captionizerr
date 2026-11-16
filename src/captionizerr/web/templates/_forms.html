@@ -6,13 +6,13 @@
   {% if i.locked %}
     <div class="lockline"><span class="pill done">Set on the server</span> <span class="small muted">from the {{ 'secret file' if i.source == 'file' else 'environment' }} (<span class="mono">{{ i.var }}{{ '_FILE' if i.source == 'file' }}</span>); change it there.</span></div>
   {% else %}
-    <div class="row-inline">
-      <input type="password" id="sec-{{ field }}" name="secret:{{ field }}" autocomplete="new-password" spellcheck="false"
-             placeholder="{{ 'Saved · type to replace' if i.set else placeholder }}">
-      {% if i.set %}<span class="pill done" title="Stored in config/secrets.json, never shown">Saved</span>
-        <button class="small linkish" formaction="/settings/secret/{{ field }}/remove" formnovalidate
-                name="next" value="{{ next }}" onclick="return confirm('Remove the saved {{ i.label }}?')">Remove</button>{% endif %}
-    </div>
+    <input type="password" id="sec-{{ field }}" name="secret:{{ field }}" autocomplete="new-password" spellcheck="false"
+           placeholder="{{ 'Type a new one to replace it' if i.set else placeholder }}">
+    {% if i.set %}<div class="savedline"><span class="pill done">✓ Saved</span>
+      <span class="small muted">{% if i.tail %}ends in <span class="mono">…{{ i.tail }}</span>{% endif %}{% if i.tail and i.saved_at %} · {% endif %}{% if i.saved_at %}saved {{ i.saved_at|datefmt }}{% endif %}{% if not i.tail and not i.saved_at %}stored on the server, never shown{% endif %}</span>
+      <button class="small linkish" formaction="/settings/secret/{{ field }}/remove" formnovalidate
+              name="next" value="{{ next }}" onclick="return confirm('Remove the saved {{ i.label }}?')">Remove</button></div>
+    {% else %}<div class="savedline"><span class="pill">Not set</span></div>{% endif %}
   {% endif %}
   {% if hint %}<span class="h">{{ hint|safe }}</span>{% endif %}
 </div>

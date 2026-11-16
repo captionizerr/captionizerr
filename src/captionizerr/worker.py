@@ -31,7 +31,7 @@ from .pricing import price
 from .profile import Profile
 from .prompt import context_block, episode_block, system_prompt
 from .store import Job, Store, month_now
-from .writer import WriteRefused, target_path, write_next_to
+from .writer import WriteRefused, replace_own, target_path, write_next_to
 
 log = logging.getLogger("captionizerr.worker")
 
@@ -139,7 +139,7 @@ class Worker:
         if not video.is_file():
             store.finish(job.id, "failed", f"video not found: {video}")
             return None
-        if target_path(video, job.lang, "srt").exists() or target_path(video, job.lang, "ass").exists():
+        if not job.redo and (target_path(video, job.lang, "srt").exists() or target_path(video, job.lang, "ass").exists()):
             store.finish(job.id, "skipped", "translation already exists")
             return None
         src = media.find_source(video, s.cache_dir, s.source_langs, job.lang, s.any_source)
@@ -226,7 +226,11 @@ class Worker:
         s, store = self.s, self.store
         out_text = cuesmod.render(prep.doc, res.translations)
         try:
-            out = write_next_to(prep.video, job.lang, prep.doc.fmt, out_text)
+            existing = target_path(prep.video, job.lang, prep.doc.fmt)
+            if job.redo and existing.exists():
+                out = replace_own(existing, out_text, s.history_dir)    # previous version stays in editor history
+            else:
+                out = write_next_to(prep.video, job.lang, prep.doc.fmt, out_text)
         except WriteRefused as e:
             store.finish(job.id, "skipped", str(e), cost_usd=res.cost() or 0, usage=vars(res.usage))
             return
@@ -268,7 +272,8 @@ class Worker:
         Small (tens of lines), always live. Never fails the main job. Returns its cost."""
         s = self.s
         try:
-            if target_path(prep.video, job.lang, "srt", True).exists() or target_path(prep.video, job.lang, "ass", True).exists():
+            if not job.redo and (target_path(prep.video, job.lang, "srt", True).exists()
+                                 or target_path(prep.video, job.lang, "ass", True).exists()):
                 return 0.0
             src = media.find_forced(prep.video, s.cache_dir, s.source_langs, job.lang)
             if not src:
@@ -280,7 +285,10 @@ class Worker:
             res = translate(doc, s.profile(job.lang, src.lang, prep.profile.tone), provider,
                             series_context=prep.context, title=f"{job.title} (forced: foreign-language lines and signs)",
                             log=lambda m: log.info("job %s forced %s", job.id, m.strip()))
-            out = write_next_to(prep.video, job.lang, doc.fmt, cuesmod.render(doc, res.translations), forced=True)
+            text = cuesmod.render(doc, res.translations)
+            existing = target_path(prep.video, job.lang, doc.fmt, True)
+            out = (replace_own(existing, text, self.s.history_dir) if job.redo and existing.exists()
+                   else write_next_to(prep.video, job.lang, doc.fmt, text, forced=True))
             c = res.cost() or 0.0
             self.store.record("forced", f"{job.title}: forced track", job.video_path, job.lang, job.series_key,
                               f"{len(res.translations)} lines → {out.name}", c, vars(res.usage),

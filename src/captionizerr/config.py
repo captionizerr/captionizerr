@@ -73,6 +73,7 @@ class Settings:
     provider: str = "anthropic"   # anthropic | ollama (local) | openai (any OpenAI-compatible endpoint)
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = ""
+    ollama_effort: str = "off"   # thinking: off | low | medium | high (models without it ignore it)
     ollama_num_ctx: int = 16384   # context window; Ollama's own default is far too small for subtitles
     ollama_max_output: int = 8000
     openai_base_url: str = "https://api.openai.com/v1"   # or OpenRouter, vLLM, LM Studio, http://ollama:11434/v1
@@ -82,6 +83,7 @@ class Settings:
     openai_price_out: float = 0.0
     openai_price_source: str = ""     # where the prices came from ("LiteLLM …", "OpenRouter (live)", "entered by hand")
     openai_max_output: int = 16000
+    openai_effort: str = ""      # reasoning_effort: '' = model default | minimal | low | medium | high
     # batch backlog
     batch_min_wait_s: int = 120   # collect backlog jobs this long before sending one batch
     # housekeeping
@@ -139,12 +141,14 @@ class Settings:
             provider=_env("PROVIDER", "anthropic"),
             ollama_url=_env("OLLAMA_URL", "http://localhost:11434"),
             ollama_model=_env("OLLAMA_MODEL"),
+            ollama_effort=_env("OLLAMA_EFFORT", "off") or "off",
             ollama_num_ctx=int(_env("OLLAMA_NUM_CTX", "16384") or 16384),
             openai_base_url=_env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             openai_key=_secret("OPENAI_API_KEY"),
             openai_model=_env("OPENAI_MODEL"),
             openai_price_in=float(_env("OPENAI_PRICE_IN", "0") or 0),
             openai_price_out=float(_env("OPENAI_PRICE_OUT", "0") or 0),
+            openai_effort=_env("OPENAI_EFFORT", ""),
             openai_max_output=int(_env("OPENAI_MAX_OUTPUT", "16000") or 16000),
         )
 
@@ -168,7 +172,7 @@ class Settings:
         "ntfy_url": "str", "ntfy_topic": "str", "public_url": "str", "jellyfin_url": "str",
         "jellyfin_path_map": "pairs", "plex_url": "str", "plex_path_map": "pairs", "sonarr_url": "str", "radarr_url": "str",
         "ui_user": "str", "opensubtitles_user": "str", "source_langs": "list", "any_source": "bool", "bazarr_url": "str", "auto_notes": "bool",
-        "provider": "str", "ollama_url": "str", "ollama_model": "str", "ollama_num_ctx": "int",
+        "provider": "str", "ollama_url": "str", "ollama_model": "str", "ollama_num_ctx": "int", "ollama_effort": "str", "openai_effort": "str",
         "ollama_max_output": "int", "openai_base_url": "str", "openai_model": "str", "openai_price_in": "float",
         "openai_price_out": "float", "openai_price_source": "str", "openai_max_output": "int",
     }

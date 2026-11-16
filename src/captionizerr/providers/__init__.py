@@ -10,10 +10,10 @@ def make_provider(s):
     if s.provider == "ollama":
         from .ollama import OllamaProvider
         register(s.ollama_model, 0.0, 0.0)
-        return OllamaProvider(s.ollama_url, s.ollama_model, s.ollama_num_ctx, s.ollama_max_output)
+        return OllamaProvider(s.ollama_url, s.ollama_model, s.ollama_num_ctx, s.ollama_max_output, effort=s.ollama_effort)
     if s.provider == "openai":
         from .openai_compat import OpenAICompatProvider
         register(s.openai_model, s.openai_price_in, s.openai_price_out)
-        return OpenAICompatProvider(s.openai_base_url, s.openai_model, s.openai_key, s.openai_max_output)
+        return OpenAICompatProvider(s.openai_base_url, s.openai_model, s.openai_key, s.openai_max_output, effort=s.openai_effort)
     from .anthropic_provider import AnthropicProvider
     return AnthropicProvider(model=s.model, effort=s.effort, api_key=getattr(s, "anthropic_key", "") or None)

@@ -76,6 +76,7 @@ def register(app: FastAPI) -> None:
     store, s = app.state.store, app.state.settings
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.globals.update(version=__version__, state_label=STATE_LABEL, lang_names=LANG_NAMES)
+    templates.env.filters["datefmt"] = lambda t: datetime.fromtimestamp(t).strftime("%d %b %Y") if t else ""
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
     def render(request: Request, name: str, **ctx):
@@ -141,6 +142,20 @@ def register(app: FastAPI) -> None:
         ok = store.requeue(job_id)
         app.state.worker.wake()
         return _redirect("/", f"Job {job_id} queued again." if ok else f"Job {job_id} can't be retried.", "ok" if ok else "warn")
+
+    @app.post("/jobs/{job_id}/retranslate")
+    def job_retranslate(request: Request, job_id: int):
+        """Translate the same video and language again, replacing our file (the old one goes to the editor's history)."""
+        _same_origin(request)
+        j = store.get(job_id)
+        if not j or j.source in ("edit", "notes", "forced"):
+            return _redirect("/", "Nothing to re-translate.", "warn")
+        new = store.enqueue("manual", j.title, j.video_path, j.lang, j.series_key, redo=True)
+        app.state.worker.wake()
+        if not new:
+            return _redirect(f"/jobs/{job_id}", "Already queued or running.", "warn")
+        return _redirect("/", f"Re-translating {j.title} ({j.lang}) with {s.active_model}, "
+                              f"about ${episode_estimate():.2f}. The previous version is kept in the editor's history.")
 
     @app.post("/jobs/resume")
     def jobs_resume(request: Request):
@@ -341,7 +356,9 @@ def register(app: FastAPI) -> None:
                 continue
             label = form.get(f"label:{p}") or Path(str(p)).stem
             for lang in langs_for(key):
-                job = store.enqueue("manual", f"{title} {label}".strip(), str(p), lang, key, mode)
+                vid = s.map_path(str(p))
+                redo = target_path(vid, lang, "srt").exists() or target_path(vid, lang, "ass").exists()
+                job = store.enqueue("manual", f"{title} {label}".strip(), str(p), lang, key, mode, redo=redo)
                 if job:
                     ids.append(job.id)
         app.state.worker.wake()
