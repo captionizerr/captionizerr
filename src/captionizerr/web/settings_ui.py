@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import secrets as pysecrets
 import time
-import urllib.parse
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request
@@ -350,7 +349,6 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         same_origin(request)
         if kind not in ("sonarr", "radarr"):
             raise HTTPException(404)
-        f = await request.form()
         url, key = getattr(s, f"{kind}_url"), getattr(s, f"{kind}_key")
         if not (url and key):
             return {"ok": False, "message": f"save the {kind.title()} address and API key first"}

@@ -21,7 +21,7 @@ from pathlib import Path
 from . import bible, cues as cuesmod
 from . import maintenance, media, reuse
 from .arr import Arr, radarr_id_for_path, sonarr_ids_for_path
-from .bazarr import Bazarr, BazarrError
+from .bazarr import Bazarr
 from .config import Settings
 from .jellyfin import refresh_all
 from .notify import ntfy
@@ -244,7 +244,7 @@ class Worker:
             via += (f"; re-timed from the previous release: {len(prep.reuse.translations)} lines reused "
                     f"({prep.reuse.method} match), {len(res.translations) - len(prep.reuse.translations)} translated")
         from .editor import FLAG_LABEL
-        open_ = "".join(f"; open: " + ", ".join(f"#{i.index} {FLAG_LABEL.get(i.kind, i.kind.replace('_', ' '))}"
+        open_ = "".join("; open: " + ", ".join(f"#{i.index} {FLAG_LABEL.get(i.kind, i.kind.replace('_', ' '))}"
                                                  for i in res.issues_final[:4]) if res.issues_final else "")
         detail = (f"{len(res.translations)} cues from {prep.source.lang} ({prep.source.origin}){via}; "
                   f"{len(res.issues_initial)} flagged, {len(res.issues_final)} open{open_}")

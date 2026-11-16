@@ -8,7 +8,7 @@ Saving writes SRT from the rows, so nothing unmatched is ever lost.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .cues import Cue, SubtitleDoc, _ts
 from .profile import Profile
@@ -66,7 +66,6 @@ def _geometry(text: str, duration: float, p: Profile) -> list[str]:
 def flags_for(rows: list["Row"], p: Profile) -> dict[int, list[str]]:
     """Per-row flags from the pipeline's own validator: the editor's "Flagged" list and a job's
     "needs review" can never disagree. Geometry labels are computed here; other kinds are named."""
-    from .cues import Cue
     from .validate import check
     out: dict[int, list[str]] = {r.id: [] for r in rows}
     cues, tr = [], {}

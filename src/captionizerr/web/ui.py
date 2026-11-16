@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import re
 import threading
-import time
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -24,12 +23,11 @@ from .. import __version__
 from ..arr import Arr, ArrError, radarr_movies, sonarr_episodes, sonarr_series
 from ..hooks import slug, valid_key
 from ..pricing import PRICES
-from ..profile import LANG_NAMES, SONG_RULES, TONE_RULES
+from ..profile import LANG_NAMES, TONE_RULES
 from ..store import month_now
 from .. import bible, cues as cuesmod, editor, media, reuse
 from ..jellyfin import refresh_all
 from ..pricing import cost as price_of
-from ..profile import Profile
 from ..writer import WriteRefused, replace_own, target_path
 
 log = logging.getLogger("captionizerr.web")

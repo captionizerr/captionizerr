@@ -9,7 +9,6 @@ from pathlib import Path
 from . import cues as cuesmod
 from . import media
 from .pipeline import translate
-from .pricing import cost
 from .profile import Profile
 from .providers.anthropic_provider import AnthropicProvider
 from .writer import write_next_to

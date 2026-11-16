@@ -28,7 +28,9 @@ Secrets from 1 or 2 show as "Set on the server" and can't be changed in the UI. 
 | `PROVIDER` | `anthropic` | `anthropic`, `ollama` or `openai` |
 | `MODEL` / `EFFORT` | `claude-opus-5-5` / `low` | Anthropic model and effort |
 | `OLLAMA_URL` / `OLLAMA_MODEL` / `OLLAMA_NUM_CTX` | `http://localhost:11434` / / `16384` | Local models |
+| `OLLAMA_EFFORT` | `off` | Thinking for thinking models: `off`, `low`, `medium`, `high` (falls back to on/off, or none, where a model has no levels) |
 | `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` | | Any OpenAI-compatible API |
+| `OPENAI_EFFORT` | *(empty)* | `reasoning_effort` for reasoning models: empty = model default, or `minimal`, `low`, `medium`, `high`. Dropped, with a note in the job, if the model rejects it |
 | `OPENAI_PRICE_IN` / `OPENAI_PRICE_OUT` / `OPENAI_MAX_OUTPUT` | `0` / `0` / `16000` | $/1M tokens for the budget (filled in automatically when you pick a model in the UI: OpenRouter live prices or the LiteLLM community list; $0 for local servers); output limit for chunking |
 | `MONTHLY_CAP_USD` / `ALERT_AT` | `20` / `0.8` | Budget cap and warning fraction |
 | `TONE` | `faithful` | Swearing: `faithful`, `softened`, `family` |

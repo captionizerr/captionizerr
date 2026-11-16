@@ -27,9 +27,12 @@ Because it translates the file's own track, the timing is exact for that release
 - **Quality checks:** every line is checked for reading speed, line length, untranslated leftovers, merged or shifted lines and lost positioning tags. Only flagged lines are sent back for a fix.
 - **Series notes:** a short "bible" of characters with gender and formality, a glossary and tone. It's drafted automatically from the first episode and editable, and every episode of the series uses it, so names stay consistent.
 - **Editor:** source and translation side by side, with reading-speed flags and per-line re-translate ("make it more casual"). Your corrections can be turned into series notes.
-- **Share on OpenSubtitles (opt-in):** after reviewing a file in the editor, upload it to OpenSubtitles.org with your account. It's always marked as an AI translation and never shared automatically.
+- **Re-translate:** run an episode again, for example after switching model. Your file is replaced, and the previous version stays in the editor's history.
+- **Share or download (opt-in):** after reviewing a file, upload it to OpenSubtitles.org with your account (always marked as an AI translation, with the episode's own IMDb ID found for you), or download it to share by hand. Nothing is ever shared automatically.
 - **Cost control:** an estimate before every job, a monthly cap (jobs pause and you're notified), and a **backlog at half price** through the Anthropic Batch API.
-- **Providers:** Anthropic (reference), **local models via Ollama** (free, private), or any OpenAI-compatible API (OpenAI, OpenRouter, DeepSeek, vLLM, LM Studio).
+- **Providers:** Anthropic (reference), **local models via Ollama** (free, private), or any OpenAI-compatible API (OpenAI, OpenRouter, DeepSeek, vLLM, LM Studio). Each has an effort or thinking setting.
+  - **Find models** lists your provider's models, and picking one fills in its price from public price lists, so the budget stays accurate.
+  - Every job records which model made it, and estimates follow the model in use.
 - **Ops:** Jellyfin, Emby and Plex rescans, ntfy notifications with a spot-check sample, Prometheus `/metrics`, daily housekeeping and a daily database snapshot.
 - **Quality check-set:** `captionizerr eval` re-translates excerpts you approved and scores them, so prompt or model changes are measured rather than guessed.
 
@@ -38,8 +41,8 @@ Because it translates the file's own track, the timing is exact for that release
 Captionizerr writes into your media library, so the writer is deliberately narrow:
 
 - It only ever **creates** files named `<video>.captionizerr.<lang>.srt|ass`, and only next to videos under `CAPTIONIZERR_LIBRARY_ROOTS`.
-- It never overwrites (exclusive create) and never touches any other file.
-- The editor can replace only its own files, and keeps the previous version outside the library.
+- New files are created exclusively (never overwriting anything), and no other file is ever touched.
+- Only the editor and **Re-translate** replace a file, and only Captionizerr's own. The previous version is kept outside the library.
 - Videos are opened read-only. ffmpeg writes only to a private temp folder, with `-n` (no overwrite).
 - The daily cleanup moves Captionizerr's own files whose video is gone (after an upgrade or delete) to `config/orphans`. It does so only after two sightings a day apart, and never more than 20 at once.
 

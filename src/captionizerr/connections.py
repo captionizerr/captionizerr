@@ -3,7 +3,6 @@ Sonarr/Radarr. Every test is read-only or free, returns (ok, human message), and
 from __future__ import annotations
 
 import json
-import time
 import urllib.error
 import urllib.request
 
