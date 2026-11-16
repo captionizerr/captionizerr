@@ -1,4 +1,5 @@
 
+import urllib.parse
 import pytest
 from fastapi.testclient import TestClient
 
@@ -420,3 +421,34 @@ def test_replaced_translation_has_no_edit_and_points_to_newer(ui):
     jp = c.get(f"/jobs/{a.id}").text
     assert f'href="/jobs/{b.id}"' in jp and "Open in editor" not in jp
     assert "Open in editor" in c.get(f"/jobs/{b.id}").text
+
+
+def test_deleted_video_is_marked_and_loses_actions(ui):
+    app, c, tmp = ui
+    st = app.state.store
+    st.save_settings({"_setup_done": True})
+    lib = tmp / "lib" / "Show"
+    lib.mkdir(parents=True)
+    kept = lib / "kept.mkv"; kept.write_bytes(b"x")
+    gone = str(lib / "gone.mkv")
+    a = st.enqueue("manual", "Gone S01E01", gone, "ru", None); st.finish(a.id, "done", "ok", gone[:-4] + ".captionizerr.ru.srt", 0.3, {}, "m")
+    b = st.enqueue("manual", "Kept S01E01", str(kept), "ru", None); st.finish(b.id, "done", "ok", str(kept)[:-4] + ".captionizerr.ru.srt", 0.3, {}, "m")
+    f = st.enqueue("manual", "Gone S01E02", str(lib / "gone2.mkv"), "ru", None); st.finish(f.id, "failed", "boom")
+    page = c.get("/").text
+    assert page.count("Video deleted") == 2 and page.count(">Edit<") == 1 and page.count(">Retry<") == 0
+    jp = c.get(f"/jobs/{a.id}").text
+    assert "Video deleted" in jp and "Open in editor" not in jp and "Re-translate" not in jp
+    assert "Video deleted" in c.get(f"/jobs/{f.id}").text and ">Retry<" not in c.get(f"/jobs/{f.id}").text
+    assert "Open in editor" in c.get(f"/jobs/{b.id}").text
+    r = c.post(f"/jobs/{a.id}/retranslate", headers={"Origin": "http://testserver"}, follow_redirects=False)
+    assert "deleted" in urllib.parse.unquote_plus(r.headers["location"]) and st.counts().get("queued", 0) == 0
+
+
+def test_unreachable_library_marks_nothing_deleted(ui):
+    app, c, tmp = ui
+    st = app.state.store
+    st.save_settings({"_setup_done": True})
+    p = str(tmp / "lib" / "Show" / "e.mkv")          # library root missing, e.g. the share isn't mounted
+    a = st.enqueue("manual", "Show S01E01", p, "ru", None); st.finish(a.id, "done", "ok", p[:-4] + ".captionizerr.ru.srt", 0.3, {}, "m")
+    page = c.get("/").text
+    assert "Video deleted" not in page and ">Edit<" in page

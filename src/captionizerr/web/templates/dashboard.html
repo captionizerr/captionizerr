@@ -40,13 +40,13 @@
     {% for j in jobs %}
       <tr>
         <td class="small muted" style="white-space:nowrap">{{ fmt_time(j.updated) }}</td>
-        <td><a href="/jobs/{{ j.id }}">{{ j.title }}</a><div class="small muted clamp" title="{{ j.detail }}">{% if j.id in replaced %}Replaced by a newer translation. {% endif %}{{ j.detail }}</div></td>
+        <td><a href="/jobs/{{ j.id }}">{{ j.title }}</a><div class="small muted clamp" title="{{ j.detail }}">{% if j.id in deleted %}<span class="pill deleted">Video deleted</span> {% elif j.id in replaced %}Replaced by a newer translation. {% endif %}{{ j.detail }}</div></td>
         <td class="mono">{{ j.lang }}</td>
         <td class="mono small nowrap" title="{{ j.model }}">{{ (j.model|replace('claude-', '')) or '–' }}</td>
         <td><span class="pill {{ j.state }}">{{ state_label.get(j.state, j.state) }}</span></td>
         <td class="num">{{ j.cost_usd|money }}</td>
-        <td style="white-space:nowrap">{% if j.id not in replaced and j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
-          {% if j.state in ('failed','needs_review','no_source','waiting_source') %}<form method="post" action="/jobs/{{ j.id }}/retry" class="inline"><button class="small">Retry</button></form>{% endif %}</td>
+        <td style="white-space:nowrap">{% if j.id not in deleted %}{% if j.id not in replaced and j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
+          {% if j.state in ('failed','needs_review','no_source','waiting_source') %}<form method="post" action="/jobs/{{ j.id }}/retry" class="inline"><button class="small">Retry</button></form>{% endif %}{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="7" class="muted">{% if view %}Nothing here.{% else %}No translations yet. They appear when Sonarr or Radarr imports something, or when you translate from the <a href="/library">Library</a>.{% endif %}</td></tr>

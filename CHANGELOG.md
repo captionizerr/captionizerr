@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Deleted videos:** when a series or movie is deleted on the server, its rows on the dashboard and its job pages are marked "Video deleted" and lose Edit, Retry, Download, Share and Re-translate. The rows stay so the month's spending still adds up. Nothing is marked while the library folder is unreachable (e.g. a network share that isn't mounted).
+
 ## 0.2.5 — 2026-11-16
 
 - **Dashboard:** an older translation of a file that was translated again is marked "Replaced by a newer translation" and loses its Edit button. Its job page links to the newer job.

@@ -7,6 +7,7 @@ UI has no login on a trusted LAN and some actions spend money.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 import urllib.parse
@@ -35,6 +36,29 @@ log = logging.getLogger("captionizerr.web")
 HERE = Path(__file__).parent
 EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 from ..store import STATES
+
+
+def gone_videos(paths, roots) -> set[str]:
+    """Video paths whose file no longer exists (the series or movie was deleted on the server).
+    A path counts as gone only when its library root is reachable and not empty, so a dropped
+    network mount doesn't make every row look deleted."""
+    alive: dict[str, bool] = {}
+
+    def root_ok(r: str) -> bool:
+        if r not in alive:
+            try:
+                with os.scandir(r) as it:
+                    alive[r] = any(True for _ in it)
+            except OSError:
+                alive[r] = False
+        return alive[r]
+
+    gone = set()
+    for p in {p for p in paths if p}:
+        root = next((r for r in roots if p.startswith(r.rstrip("/") + "/")), None)
+        if root and root_ok(root) and not os.path.exists(p):
+            gone.add(p)
+    return gone
 STATE_LABEL = {"queued": "Queued", "running": "Running", "batched": "In batch", "waiting_source": "Waiting for source", "done": "Done", "needs_review": "Needs review",
                "failed": "Failed", "paused_budget": "Paused (budget)", "skipped": "Skipped", "no_source": "No source"}
 # calibrated output/input ratio and default sizes, for the per-episode price hint on the providers page
@@ -130,7 +154,11 @@ def register(app: FastAPI) -> None:
             if k in seen:
                 replaced.add(j.id)
             seen.add(k)
-        return render(request, "dashboard.html", jobs=jobs[:100], counts=counts, replaced=replaced, spent=spent, cap=cap,
+        jobs = jobs[:100]
+        gone = gone_videos([j.video_path for j in jobs], s.library_roots)
+        deleted = {j.id for j in jobs if j.video_path in gone}
+        return render(request, "dashboard.html", jobs=jobs, counts=counts, replaced=replaced, deleted=deleted,
+                      spent=spent, cap=cap,
                       reserved=reserved, pct=min(100, 100 * (spent + reserved) / cap) if cap else 0, month=month_now(),
                       months=store.spend_by_month(), view=view, avg=episode_estimate(),
                       attention={st: counts.get(st, 0) for st in groups["attention"]},
@@ -145,6 +173,7 @@ def register(app: FastAPI) -> None:
             raise HTTPException(404)
         import json
         return render(request, "job.html", job=job, usage=json.loads(job.usage or "{}"), replaced_by=store.replaced_by(job),
+                      deleted=bool(gone_videos([job.video_path], s.library_roots)),
                       fmt_time=lambda t: datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M:%S"))
 
     @app.post("/jobs/{job_id}/retry")
@@ -161,6 +190,8 @@ def register(app: FastAPI) -> None:
         j = store.get(job_id)
         if not j or j.source in ("edit", "notes", "forced"):
             return _redirect("/", "Nothing to re-translate.", "warn")
+        if gone_videos([j.video_path], s.library_roots):
+            return _redirect(f"/jobs/{job_id}", "The video was deleted on the server, so there is nothing to translate.", "warn")
         new = store.enqueue("manual", j.title, j.video_path, j.lang, j.series_key, redo=True)
         app.state.worker.wake()
         if not new:
