@@ -21,6 +21,12 @@
   - A warning appears when $0 prices would leave the budget cap blind.
   - The built-in Anthropic prices are cross-checked against the published list.
 - OpenSubtitles login errors explain the one-time opensubtitles.org sign-in.
+- **Switching vendors or models keeps costs correct:**
+  - Each job records its model. "Per episode" estimates use the current model's own history, otherwise its price; before, they averaged across models.
+  - Editor line re-translations are priced by the model that did them; before, they were always priced as the Anthropic model.
+  - An open backlog batch is still collected after switching away from Anthropic.
+  - An unknown price is stated in the job's detail instead of silently counting $0, and dated snapshot model names are priced.
+  - The CLI uses the same keys (including keys saved in the UI) and price lookup as the service.
 
 ## 0.2.2
 
