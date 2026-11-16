@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Re-translate:**
+  - A button on a job's page, and the series page can now select already-translated episodes.
+  - The file (and its forced track) is replaced. The previous version stays in the editor's history.
+  - Retrying a "needs review" job may now replace its own file; before, it was skipped as "already exists".
+- **Effort for other providers:**
+  - OpenAI-compatible gets a reasoning effort setting (model default / minimal / low / medium / high). It's dropped, with a note, if a model rejects it.
+  - Ollama gets thinking off / low / medium / high, falling back to plain on/off or none for models without levels.
+- **API key fields:**
+  - Aligned with the other fields.
+  - They say **✓ Saved** or **Not set**, with the key's last four characters and the date it was saved.
+
 ## 0.2.3 — 2026-11-16
 
 - **Web UI:**
