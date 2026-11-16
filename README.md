@@ -108,7 +108,7 @@ Everything, including keys, can be set in the web UI. Environment variables and 
 
 ## How it works
 
-1. **Pick a source.** Embedded text track → sidecar → Bazarr (download, sync, wait). A track that stops early is checked against sidecars and replaced by a complete one. Image subtitles (PGS/VobSub) are not OCR'd.
+1. **Pick a source.** Embedded text track → sidecar → Bazarr (download, sync, wait). A track that stops early is checked against sidecars and replaced by a complete one. Image subtitles (PGS/VobSub) are not OCR'd. Not detected: a track missing its *beginning*, or one that stops early without a stretched last line and with under a quarter of the video left. When the cut-off track is ASS, or the only source is in a non-preferred language, a replacement is used whole (re-timed) instead of only for the missing ending.
 2. **Send the whole episode in one request.** Stable rules and series notes are prompt-cached, and each line carries its screen time so the model can manage reading speed.
 3. **Parse `N|text` lines.** Re-request skipped lines, validate, and run up to two fix rounds on flagged lines only.
 4. **Write `<video>.captionizerr.<lang>.<fmt>`.** Then tell Jellyfin to rescan and send an ntfy spot-check.

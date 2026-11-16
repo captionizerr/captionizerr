@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- **Incomplete source tracks:** a built-in subtitle track that stops early (its last line stretched over the rest of the video, or nothing for the last quarter) is now detected. A complete subtitle file next to the video in the same language is used instead; otherwise Bazarr is asked for one and the job waits up to `BAZARR_WAIT_HOURS`, then translates what there is, shortens the stretched line and goes to Needs review with a note saying where the source stops. Any source line longer than a minute is shortened. Found on Northwind season 2 WEB-DL releases, whose English CC tracks end 5–14 minutes early.
+## 0.2.7 — 2026-11-16
+
+- **Incomplete source tracks:** a built-in subtitle track that stops early (its last line stretched over the rest of the video, or nothing for the last quarter) is now detected. A complete subtitle file next to the video in the same language is used instead; otherwise Bazarr is asked for one and the job waits up to 3 hours, then translates what there is, shortens the stretched line and goes to Needs review with a note saying where the source stops. Any source line longer than a minute is shortened. Found on Northwind season 2 WEB-DL releases, whose English CC tracks end 5–14 minutes early.
+- **Edge cases of that check:** a long last line only counts as a cut when it reaches the end of the video (a song over the credits doesn't make a job wait); a line stretched over a minute in the middle of a track sends the job to review, since dialogue may be missing there; a Batch result is applied to the exact source it was built from, so a subtitle arriving while the batch runs can't shift the line numbers; a video that can't be read (e.g. a network-share hiccup) fails with a readable message.
 - **Downloaded subtitles are lined up before use:** the built-in track is kept for everything it covers (its timing is exact) and only the missing ending is taken from the downloaded subtitle, lined up on the lines both share in the 5 minutes before the cut (within 0.1 s on Northwind S02) (shift and stretch: a file made for 25 fps drifts by minutes otherwise, and Bazarr's sync only shifts). A file that doesn't line up closely is not used. The original file is never changed: the combined copy lives in the cache.
 
 ## 0.2.6 — 2026-11-16

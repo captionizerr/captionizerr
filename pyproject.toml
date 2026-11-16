@@ -1,6 +1,6 @@
 [project]
 name = "captionizerr"
-version = "0.2.6"
+version = "0.2.7"
 description = "LLM subtitle translation for the *arr stack: timed to the file, faithful in tone."
 readme = "README.md"
 license = "MIT"
