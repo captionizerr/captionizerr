@@ -1,7 +1,8 @@
 # Example: Captionizerr next to Sonarr/Radarr. Mount the media library at the SAME path
-# your *arr apps use, so the paths in their webhooks resolve here too
-# (otherwise set CAPTIONIZERR_PATH_MAP). Captionizerr only ever creates
-# `<video>.captionizerr.<lang>.srt|ass` files next to your videos.
+# your *arr apps use, so the paths in their webhooks resolve here too (otherwise set the
+# path maps in Settings). Captionizerr only ever creates `<video>.captionizerr.<lang>.srt|ass`
+# files next to your videos. After `docker compose up -d`, open http://<host>:8095 and the
+# setup wizard does the rest, API keys included.
 services:
   captionizerr:
     image: ghcr.io/captionizerr/captionizerr:latest
@@ -12,25 +13,25 @@ services:
         required: false
     environment:
       - TZ=Etc/UTC
-      # secrets as files (not visible in `docker inspect`); any CAPTIONIZERR_* secret supports *_FILE
-      - ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_api_key
-      - CAPTIONIZERR_WEBHOOK_KEY_FILE=/run/secrets/webhook_key
-    secrets: [anthropic_api_key, webhook_key]
-      - PUID=1000                 # informational: the image runs as uid 1000; make the library writable for it
+      - CAPTIONIZERR_LIBRARY_ROOTS=/data/media    # only videos under here are ever processed
+      # Optional, instead of typing keys in the UI: secrets as files (not visible in
+      # `docker inspect`). Uncomment these two lines and the two `secrets` blocks below.
+      # - ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_api_key
+      # - CAPTIONIZERR_WEBHOOK_KEY_FILE=/run/secrets/webhook_key
+    # secrets: [anthropic_api_key, webhook_key]
     ports:
       - "8095:8095"
     volumes:
-      - ./config:/config          # database, settings, series notes, cache, editor history
-      - /path/to/media:/data/media
+      - ./config:/config          # database, settings, keys entered in the UI, notes, cache
+      - /path/to/media:/data/media   # the image runs as uid 1000: it needs write access here
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
 
-# Files readable by uid 1000 only:  mkdir -m 700 secrets && umask 077 && printf %s 'sk-ant-…' > secrets/anthropic_api_key
-secrets:
-  anthropic_api_key:
-    file: ./secrets/anthropic_api_key
-  webhook_key:
-    file: ./secrets/webhook_key
+# secrets:                      # files readable by uid 1000 only, e.g.
+#   anthropic_api_key:          #   mkdir -m 700 secrets && (umask 077; printf %s 'sk-ant-…' > secrets/anthropic_api_key)
+#     file: ./secrets/anthropic_api_key
+#   webhook_key:
+#     file: ./secrets/webhook_key
