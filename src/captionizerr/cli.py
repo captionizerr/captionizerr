@@ -73,7 +73,8 @@ def cmd_eval_build(a) -> int:
 
 def cmd_eval(a) -> int:
     from . import evals
-    rep = evals.run(Path(a.cases), make_cli_provider(a), log=lambda m: print(m, file=sys.stderr) if a.verbose else None)
+    rep = evals.run(Path(a.cases), make_cli_provider(a), log=lambda m: print(m, file=sys.stderr) if a.verbose else None,
+                    only=a.only, keep=Path(a.keep) if a.keep else None)
     for r in rep["cases"]:
         print(f"{r['chrf']:6.1f}  flags {r['flags']:3d}  ${r['cost']:.3f}  {'(edited) ' if r['edited'] else ''}{r['case']}")
     print(f"overall chrF {rep['chrf']}  cost ${rep['cost']:.3f}  model {rep['model']}")
@@ -232,6 +233,8 @@ def main(argv=None) -> int:
     ev.add_argument("cases", nargs="?", default="/config/evals")
     add_provider_args(ev)
     ev.add_argument("--report", help="write the JSON result here")
+    ev.add_argument("--only", action="append", help="only cases whose name contains this (repeatable)")
+    ev.add_argument("--keep", help="save each translation here as <case>.json (private data)")
     ev.add_argument("-v", "--verbose", action="store_true")
     ev.set_defaults(fn=cmd_eval)
 

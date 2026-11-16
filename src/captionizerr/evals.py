@@ -93,10 +93,15 @@ def _edited_rows(data_dir: Path, target: Path, rows) -> list[int]:
     return [i for i, r in enumerate(rows) if r.start_ms in first and first[r.start_ms].strip() != r.tr.strip()]
 
 
-def run(cases: Path, provider, profile_for=None, log=lambda m: None) -> dict:
-    """Translate every case with `provider`; returns per-case and overall chrF, flags and cost."""
+def run(cases: Path, provider, profile_for=None, log=lambda m: None, only: list[str] | None = None,
+        keep: Path | None = None) -> dict:
+    """Translate every case with `provider`; returns per-case and overall chrF, flags and cost.
+    `only`: case names containing any of these strings. `keep`: write each translation to
+    keep/<case>.json (private data, like the cases themselves) for side-by-side reading."""
     results, hyps_all, refs_all, total = [], [], [], 0.0
     for d in sorted(p for p in Path(cases).iterdir() if (p / "case.json").is_file()):
+        if only and not any(o in d.name for o in only):
+            continue
         meta = json.loads((d / "case.json").read_text(encoding="utf-8"))
         src, ref = cuesmod.load(d / "source.srt"), cuesmod.load(d / "reference.srt")
         prof = profile_for(meta["lang"], meta.get("source_lang", "en")) if profile_for else \
@@ -104,6 +109,10 @@ def run(cases: Path, provider, profile_for=None, log=lambda m: None) -> dict:
         notes = (d / "notes.md").read_text(encoding="utf-8") if (d / "notes.md").is_file() else None
         res = translate(src, prof, provider, series_context=notes, title=meta.get("title"), log=log)
         hyp = [res.translations.get(c.index, "") for c in src.cues]
+        if keep is not None:
+            Path(keep).mkdir(parents=True, exist_ok=True)
+            (Path(keep) / f"{d.name}.json").write_text(json.dumps(
+                {"model": getattr(provider, "model", "?"), "lines": hyp}, ensure_ascii=False), encoding="utf-8")
         refs = [c.text for c in ref.cues]
         score = chrf(hyp, refs)
         c = res.cost() or 0.0

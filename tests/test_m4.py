@@ -1187,3 +1187,17 @@ def test_opening_the_database_elsewhere_leaves_a_running_job_alone(tmp_path):
     assert store.get(j.id).state == "running"
     create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)   # the service restarting
     assert store.get(j.id).state == "queued"
+
+
+def test_eval_only_and_keep(tmp_path):
+    from captionizerr import evals
+    for name in ("Show_S01E01_0", "Other_S01E02_0"):
+        d = tmp_path / "cases" / name
+        d.mkdir(parents=True)
+        (d / "case.json").write_text('{"lang": "ru", "title": "x"}', encoding="utf-8")
+        (d / "source.srt").write_text(SRT, encoding="utf-8")
+        (d / "reference.srt").write_text(SRT, encoding="utf-8")
+    rep = evals.run(tmp_path / "cases", FakeProvider(), only=["Show_"], keep=tmp_path / "keep")
+    assert [c["case"] for c in rep["cases"]] == ["Show_S01E01_0"]
+    kept = json.loads((tmp_path / "keep" / "Show_S01E01_0.json").read_text(encoding="utf-8"))
+    assert len(kept["lines"]) == len(cuesmod.load(tmp_path / "cases/Show_S01E01_0/source.srt").cues)
