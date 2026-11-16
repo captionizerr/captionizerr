@@ -9,7 +9,7 @@
 
 <p align="center">LLM subtitle translation for the *arr stack, timed to the file and faithful to the original.</p>
 
-Captionizerr watches Sonarr and Radarr. When an episode or film is imported, it takes the subtitle track that ships with that file and translates it with an LLM. The translation is written next to the video as `<video>.captionizerr.<lang>.srt`, where your media server picks it up as an extra subtitle track. Tested with Jellyfin; Plex and Emby use the same external-subtitle naming but haven't been tested yet.
+Captionizerr watches Sonarr and Radarr. When an episode or film is imported, it takes the subtitle track that ships with that file and translates it with an LLM. The translation is written next to the video as `<video>.captionizerr.<lang>.srt`, where your media server picks it up as an extra subtitle track. Tested with Jellyfin. Emby (same API) and Plex rescans are implemented but not yet tested against real servers.
 
 Because it translates the file's own track, the timing is exact for that release. Downloaded subtitles are often from another cut and drift. Because the model sees the whole episode at once, it knows who is speaking to whom. That gives correct grammatical gender and formal/informal address, jokes that land, swearing as strong as the original (or softened, your choice), and songs translated as rhymed verse.
 
@@ -17,15 +17,18 @@ Because it translates the file's own track, the timing is exact for that release
 
 ## Features
 
-- **Automatic:** Sonarr/Radarr webhooks queue every import. Renames and upgrades are followed.
+- **Automatic:** Sonarr/Radarr webhooks queue every import, and renames are followed.
+- **Upgrades are re-timed, not re-translated:** when a better release replaces a file, the previous translation (including your edits) is matched line by line onto the new release. Only new or changed lines go to the model, usually at $0.
 - **Any source language:** embedded text tracks first (exact timing), then subtitle files next to the video, then **Bazarr**. If a video has no usable subtitle, Captionizerr asks Bazarr to download and sync one, then translates it.
 - **SRT and ASS:** for anime, styles, signs, drawings and karaoke survive.
+- **Forced subtitles:** foreign-language scenes and signs (a forced track in the source) get their own `….<lang>.forced.srt`, which players show automatically.
 - **Quality checks:** every line is checked for reading speed, line length, untranslated leftovers, merged or shifted lines and lost positioning tags. Only flagged lines are sent back for a fix.
 - **Series notes:** a short "bible" of characters with gender and formality, a glossary and tone. It's drafted automatically from the first episode and editable, and every episode of the series uses it, so names stay consistent.
 - **Editor:** source and translation side by side, with reading-speed flags and per-line re-translate ("make it more casual"). Your corrections can be turned into series notes.
 - **Cost control:** an estimate before every job, a monthly cap (jobs pause and you're notified), and a **backlog at half price** through the Anthropic Batch API.
 - **Providers:** Anthropic (reference), **local models via Ollama** (free, private), or any OpenAI-compatible API (OpenAI, OpenRouter, DeepSeek, vLLM, LM Studio).
-- **Ops:** Jellyfin rescan, ntfy notifications with a spot-check sample, Prometheus `/metrics`, and daily housekeeping.
+- **Ops:** Jellyfin, Emby and Plex rescans, ntfy notifications with a spot-check sample, Prometheus `/metrics`, daily housekeeping and a daily database snapshot.
+- **Quality check-set:** `captionizerr eval` re-translates excerpts you approved and scores them, so prompt or model changes are measured rather than guessed.
 
 ## Safety
 
@@ -100,6 +103,11 @@ captionizerr probe "Show - S01E01.mkv"
 captionizerr translate "Show - S01E01.mkv" --lang de --write
 captionizerr translate episode.en.srt --lang ru --context notes.md --out episode.ru.srt --report run.json
 captionizerr serve --port 8095
+
+# quality check-set (private: cases contain copyrighted dialogue)
+captionizerr eval-build --data /config --out /config/evals      # from translations you approved or edited
+captionizerr eval /config/evals --provider ollama --model gemma3:12b
+captionizerr backfill-sources      # once, after upgrading from a version before 0.1
 ```
 
 ## Development

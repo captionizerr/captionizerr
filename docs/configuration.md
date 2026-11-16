@@ -26,6 +26,7 @@ Environment variables (prefix `CAPTIONIZERR_`) set the defaults. Values saved in
 | `SONARR_URL` / `SONARR_KEY`, `RADARR_URL` / `RADARR_KEY` | | Library page, Bazarr ID lookup |
 | `BAZARR_URL` / `BAZARR_KEY` | | Fallback source download |
 | `JELLYFIN_URL` / `JELLYFIN_KEY` / `JELLYFIN_PATH_MAP` | | Rescan after writing |
+| `PLEX_URL` / `PLEX_TOKEN` / `PLEX_PATH_MAP` | | Plex folder rescan after writing (Emby: use the Jellyfin settings) |
 | `NTFY_URL` / `NTFY_TOPIC` / `PUBLIC_URL` | | Notifications and the link in them |
 
 ## Files in `/config`
@@ -37,7 +38,12 @@ Environment variables (prefix `CAPTIONIZERR_`) set the defaults. Values saved in
 | `cache/` | extracted source tracks | 60 days unused, 1 GB cap |
 | `history/` | previous versions of edited files | newest 10 per file, 180 days |
 | `feedback/` | editor corrections per series | last 1000 |
-| `orphans/` | our files whose video disappeared | 30 days |
+| `orphans/` | our files whose video disappeared, and translations replaced after an upgrade | 30 days |
+| `sources/` | the source each translation was made from (re-timing, editor, evals) | 30 days after the translation is gone |
+| `backup/` | daily consistent database snapshot (newest 7): **back up this folder, not the live `captionizerr.db`** | 7 kept |
+| `evals/` | your quality check cases (private) | never |
+
+Back up everything in `/config` except `cache/`, `tmp/` and the live `captionizerr.db*` files. The UI shows which settings were changed there and override the environment, with a reset button.
 
 ## Monitoring
 
