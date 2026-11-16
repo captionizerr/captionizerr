@@ -345,3 +345,44 @@ def test_editor_doesnt_flag_dropped_credits():
     assert Row(1, 0, 3000, "- synced and corrected by chamallow -\n- www.addic7ed.com -", "").flags(p) == []
     assert Row(2, 0, 3000, "-", "").flags(p) == []
     assert Row(3, 0, 3000, "Where are you going?", "").flags(p) == ["empty"]
+
+
+def test_series_key_cannot_escape_folders(tmp_path):
+    from captionizerr import bible
+    from captionizerr.hooks import valid_key
+    assert valid_key("the-long-road-home-part-two") and valid_key("northwind")
+    for bad in ("../x", "..", "a/b", "a\\b", "", None, "Northwind", "x" * 200, "a--b", "-a"):
+        assert valid_key(bad) is None, bad
+    fb = tmp_path / "feedback"
+    bible.log_corrections(fb, "../../escaped", [{"src": "a", "before": "b", "after": "c"}])
+    assert not (tmp_path / "escaped.jsonl").exists() and not list(tmp_path.rglob("*.jsonl"))
+    assert bible.corrections(fb, "../../etc/passwd") == []
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+def test_editor_ignores_crafted_series_key(ui):
+    app, c, tmp = ui
+    video = make_video(tmp / "lib" / "Show" / "Season 1", "Show S01E01.mkv")
+    target = video.with_name("Show S01E01.captionizerr.ru.srt")
+    from test_service import SRT
+    target.write_text(SRT, encoding="utf-8")
+    import re as _re
+    token = _re.search(r'let token = "(\d+)"', c.get("/edit", params={"path": str(video), "lang": "ru"}).text).group(1)
+    r = c.post("/api/edit/save", json={"path": str(video), "lang": "ru", "key": "../../../evil", "token": token,
+                                       "edits": {"1": "x"}}, headers=SAME)
+    assert r.status_code == 200
+    assert not list(tmp.rglob("evil*")) and not (app.state.settings.feedback_dir / "../../../evil.jsonl").exists()
+
+
+def test_redirect_targets_stay_on_site():
+    from captionizerr.web.ui import local_path
+    assert local_path("/library/series/40") == "/library/series/40"
+    for bad in ("//evil.com", "/\\evil.com", "/\\/evil.com", "https://evil.com", "javascript:alert(1)",
+                "/ok\\..\\x", "/a\r\nLocation: x", "", None):
+        assert local_path(bad) == "/", bad
+
+
+def test_translate_back_param_is_sanitised(ui):
+    _, c, _ = ui
+    r = c.post("/library/translate", data={"back": "/\\evil.com"}, headers=SAME, follow_redirects=False)
+    assert r.headers["location"].startswith("/library") or r.headers["location"].startswith("/?")

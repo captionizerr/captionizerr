@@ -167,7 +167,7 @@ flowchart TD
 ```
 
 - **Server-provided secrets win.** A secret from a file or the environment shows as "Set on the server" in the UI and can't be changed or removed there.
-- **UI secrets are write-only.** They are stored with mode 600, never in the database, and never displayed again.
+- **UI secrets are write-only.** They are stored with mode 600, never in the database, and never displayed again. The one exception is **Show key** for a webhook key the UI generated itself, so it can be pasted into Sonarr or Radarr by hand.
 - **The UI password** is stored as a salted PBKDF2 hash.
 - **Never displayed anywhere:** keys don't appear in logs, the HTTP access log (off), API responses or the settings object's `repr`.
 

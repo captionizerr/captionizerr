@@ -437,5 +437,5 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
 
 
 def _next(form, default: str) -> str:
-    n = str(form.get("next") or "")
-    return n if n.startswith("/") and not n.startswith("//") else default
+    from .ui import local_path
+    return local_path(form.get("next"), default)

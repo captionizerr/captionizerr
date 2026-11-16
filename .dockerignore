@@ -4,3 +4,12 @@ runs
 tests
 **/__pycache__
 cz
+# never send local data or secrets into a build context
+.env
+*.env
+secrets
+config
+*.db
+.github
+docs
+deploy/secrets

@@ -26,6 +26,16 @@ def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "unknown"
 
 
+_KEY = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+
+
+def valid_key(key) -> str | None:
+    """A series key as slug() makes it, or None. Series keys become file names
+    (context/<key>.md, feedback/<key>.jsonl): never trust one from a request."""
+    k = str(key or "")
+    return k if len(k) <= 120 and _KEY.fullmatch(k) else None
+
+
 def _join(folder: str | None, rel: str | None, full: str | None) -> str | None:
     if full:
         return full

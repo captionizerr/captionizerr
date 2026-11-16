@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1
+
+Security and documentation fixes from a full review. Upgrading is recommended; nothing to change.
+
+- **Fixed (security):**
+  - A crafted editor request could use a series name to read `.md` files outside `config/context/` (sent to the AI as notes) or append to files outside `config/feedback/`. Series keys are now checked wherever they become file names.
+  - "Back"/"next" links accepted `/\host`, which browsers treat as another site (open redirect). They now accept local paths only, including in "Translate selected".
+- The image no longer carries pip build leftovers. `.dockerignore` and `.gitignore` keep `.env`, `secrets/`, `config/` and databases out of builds and commits.
+- **Docs:**
+  - The configuration page wrongly said secrets can only be set in the environment.
+  - SECURITY.md now describes the current protections and recommendations.
+  - The README reports the measured local-model comparison.
+
 ## 0.2.0
 
 **Set everything up in the browser.** A fresh install opens a setup wizard (login, AI provider and key, languages and budget, Sonarr/Radarr, media server); no config file is needed any more.

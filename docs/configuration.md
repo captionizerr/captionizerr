@@ -1,12 +1,24 @@
 # Configuration
 
-Environment variables (prefix `CAPTIONIZERR_`) set the defaults. **Every secret also accepts a `_FILE` variant** (`ANTHROPIC_API_KEY_FILE`, `CAPTIONIZERR_WEBHOOK_KEY_FILE`, `…_SONARR_KEY_FILE`, …) pointing to a file, e.g. a compose secret under `/run/secrets/`; it wins over the plain variable. Values saved in the web UI override them and are stored in `config/captionizerr.db`. **Secrets (keys, passwords) can only be set in the environment** and are never shown in the UI.
+Everything can be set in the web UI (the setup wizard and **Settings**). The environment variables below are **optional**, for automated or locked-down deploys.
+
+**Settings** (languages, model, URLs and so on):
+- Environment values are the defaults.
+- Values saved in the UI override them and are stored in `config/captionizerr.db`.
+- **Settings → System → Changed here** lists the overrides, with a reset button.
+
+**Secrets** (API keys, passwords) come from the first of:
+1. **`<NAME>_FILE`**: a file such as a compose secret under `/run/secrets/` (e.g. `ANTHROPIC_API_KEY_FILE`, `CAPTIONIZERR_WEBHOOK_KEY_FILE`). This keeps the secret out of the container environment and `docker inspect`.
+2. **`<NAME>`** in the environment.
+3. **The UI**: stored in `config/secrets.json` (mode 600, never in the database).
+
+Secrets from 1 or 2 show as "Set on the server" and can't be changed in the UI. No secret is ever displayed. The one exception is **Show key** for a webhook key the UI generated, because you may need to paste it into Sonarr or Radarr by hand. A webhook key is created automatically on first run if none is given, and a UI password is stored as a salted PBKDF2 hash.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | | Anthropic key (no prefix) |
-| `WEBHOOK_KEY` | | Shared secret for `/api/hooks/*` and the JSON API: `X-Api-Key` header, HTTP Basic password (any user), or `?apikey=` |
-| `UI_PASSWORD` / `UI_USER` | empty / `admin` | HTTP Basic login for the web UI; empty = no login |
+| `WEBHOOK_KEY` | generated on first run | Shared secret for `/api/hooks/*` and the JSON API: HTTP Basic password (any user), `X-Api-Key` header, or `?apikey=` |
+| `UI_PASSWORD` / `UI_USER` | empty / `admin` | HTTP Basic login for the web UI (or set it in Settings → Security); empty = no login |
 | `DATA_DIR` | `/config` | Database, notes, cache, history |
 | `LIBRARY_ROOTS` | `/downloads` | `;`-separated; only videos under these are processed |
 | `PATH_MAP` | | `arrprefix=ourprefix;…` when the *arr paths differ from ours |

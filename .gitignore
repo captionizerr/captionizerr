@@ -5,3 +5,6 @@ __pycache__/
 runs/
 *.env
 .env
+secrets/
+config/
+*.db

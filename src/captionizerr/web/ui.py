@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import __version__
 from ..arr import Arr, ArrError, radarr_movies, sonarr_episodes, sonarr_series
-from ..hooks import slug
+from ..hooks import slug, valid_key
 from ..pricing import PRICES
 from ..profile import LANG_NAMES, SONG_RULES, TONE_RULES
 from ..store import month_now
@@ -49,6 +49,15 @@ def _same_origin(request: Request) -> None:
     src = request.headers.get("origin") or request.headers.get("referer") or ""
     if not src or urllib.parse.urlparse(src).netloc != host:
         raise HTTPException(403, "cross-site request refused")
+
+
+def local_path(target, default: str = "/") -> str:
+    """A redirect/back target from a request: only a path on this site. Rejects other hosts in any
+    disguise browsers accept (//host, /\\host, scheme:, control characters)."""
+    t = str(target or "")
+    if not t.startswith("/") or t.startswith(("//", "/\\")) or "\\" in t or any(ord(c) < 32 for c in t):
+        return default
+    return t
 
 
 def _redirect(path: str, msg: str = "", level: str = "ok") -> RedirectResponse:
@@ -300,7 +309,7 @@ def register(app: FastAPI) -> None:
         _same_origin(request)
         form = await request.form()
         paths = form.getlist("path")
-        back = form.get("back") or "/library"
+        back = local_path(form.get("back"), "/library")
         key = form.get("series_key") or None
         title = form.get("title") or ""
         mode = "batch" if form.get("mode") == "batch" else "live"
@@ -370,10 +379,11 @@ def register(app: FastAPI) -> None:
 
     @app.get("/edit")
     def edit_page(request: Request, path: str, lang: str, key: str = "", back: str = ""):
+        key = valid_key(key) or ""
         try:
             video, target, tdoc, rows, profile, token = load_editor(path, lang, key or None)
         except Preparing:
-            return render(request, "preparing.html", back=back if back.startswith("/") and not back.startswith("//") else "/")
+            return render(request, "preparing.html", back=local_path(back))
         data = [{"id": r.id, "t": r.start_ms, "d": round(r.duration, 2), "src": r.src, "tr": r.tr,
                  "extra": r.extra, "flags": r.flags(profile)} for r in rows if not r.hidden]
         stem = video.stem
@@ -386,7 +396,7 @@ def register(app: FastAPI) -> None:
         heading = (f"{series} · Season {int(m.group(1))}, Episode {int(m.group(2))}" if m else stem)
         return render(request, "edit.html", rows=data, path=path, lang=lang, key=key, token=token,
                       heading=heading, ep_title=ep_title,
-                      back=back if back.startswith("/") and not back.startswith("//") else "/",
+                      back=local_path(back),
                       fname=target.name, profile=profile, flagged=sum(1 for d in data if d["flags"]),
                       has_source=any(r.src for r in rows))
 
@@ -416,7 +426,7 @@ def register(app: FastAPI) -> None:
         return await run_in_threadpool(_edit_save, b)
 
     def _edit_save(b: dict):
-        key = b.get("key") or None
+        key = valid_key(b.get("key"))
         video, target, tdoc, rows, profile, token = load_editor(str(b.get("path", "")), str(b.get("lang", "")), key)
         if b.get("token") != token:
             return JSONResponse({"error": "The file changed since you opened it. Reload to see the new version."}, 409)
@@ -437,7 +447,7 @@ def register(app: FastAPI) -> None:
         return await run_in_threadpool(_edit_retranslate, b)
 
     def _edit_retranslate(b: dict):
-        key = b.get("key") or None
+        key = valid_key(b.get("key"))
         video, target, tdoc, rows, profile, _ = load_editor(str(b.get("path", "")), str(b.get("lang", "")), key)
         apply_edits(rows, b.get("edits") or {})
         try:
@@ -480,7 +490,7 @@ def register(app: FastAPI) -> None:
                       s.opensubtitles_user_agent or f"Captionizerr v{__version__}")
 
     def safe_back(back: str) -> str:
-        return back if back.startswith("/") and not back.startswith("//") else "/"
+        return local_path(back)
 
     @app.get("/share")
     def share_page(request: Request, path: str, lang: str, forced: str = "", back: str = ""):

@@ -13,7 +13,7 @@ Captionizerr watches Sonarr and Radarr. When an episode or film is imported, it 
 
 Because it translates the file's own track, the timing is exact for that release. Downloaded subtitles are often from another cut and drift. Because the model sees the whole episode at once, it knows who is speaking to whom. That gives correct grammatical gender and formal/informal address, jokes that land, swearing as strong as the original (or softened, your choice), and songs translated as rhymed verse.
 
-> **Status: 0.1, early.** It has run against a real library for a while, but expect rough edges. Issues and PRs are welcome.
+> **Status: 0.2, early but in daily use** on a real library. Expect rough edges. Issues and PRs are welcome.
 
 **Docs:** [Setup guide](docs/setup-guide.md) · [How it works](docs/architecture.md) (diagrams) · [Configuration](docs/configuration.md) · [Security](SECURITY.md)
 
@@ -92,6 +92,8 @@ With Anthropic, a typical 45–60 minute episode is about 16k input and 12k outp
 | Claude Sonnet 5.5 | ~$0.15 | ~$0.08 |
 | Claude Haiku 5.5 | ~$0.01 | ~$0.004 |
 | Ollama (local) | $0 | — |
+
+Measured locally on 13 excerpts, against translations a viewer approved (chrF, higher is better): Opus 5.5 scored **72.5**, while Gemma 3 12B on a 16 GB Mac scored **50.8** at about ten times the time. Local models follow the plot but drop italics and speaker conventions and miss context.
 
 A film costs about twice an episode. Series notes cost $0.05–0.15 once per series. Opus at low effort was the quality reference in testing; Sonnet is a reasonable budget choice.
 

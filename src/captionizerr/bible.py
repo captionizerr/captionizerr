@@ -58,7 +58,8 @@ def generate_notes(provider, title: str, overview: str, lang: str, cues: list[Cu
 # ------------------------------------------------------------------ feedback from edits
 def log_corrections(feedback_dir: Path, series_key: str, items: list[dict]) -> None:
     """Append hand corrections (source, before, after) for later 'learn from corrections'."""
-    if not items or not series_key:
+    from .hooks import valid_key
+    if not items or not valid_key(series_key):
         return
     feedback_dir.mkdir(parents=True, exist_ok=True)
     with (feedback_dir / f"{series_key}.jsonl").open("a", encoding="utf-8") as f:
@@ -67,6 +68,9 @@ def log_corrections(feedback_dir: Path, series_key: str, items: list[dict]) -> N
 
 
 def corrections(feedback_dir: Path, series_key: str, limit: int = 200) -> list[dict]:
+    from .hooks import valid_key
+    if not valid_key(series_key):
+        return []
     f = feedback_dir / f"{series_key}.jsonl"
     if not f.is_file():
         return []

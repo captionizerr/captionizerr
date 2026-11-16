@@ -123,7 +123,8 @@ class Worker:
 
     # ------------------------------------------------------------ preparing a job
     def context_for(self, series_key: str | None) -> str | None:
-        if not series_key:
+        from .hooks import valid_key
+        if not valid_key(series_key):
             return None
         f = self.s.context_dir / f"{series_key}.md"
         return f.read_text(encoding="utf-8") if f.is_file() else None
