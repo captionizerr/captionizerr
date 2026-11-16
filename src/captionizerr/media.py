@@ -243,22 +243,29 @@ def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: st
     return None
 
 
-SPLICE_WINDOW_MS = 900_000   # line the tail up on the last 15 minutes before the cut
+# line the ending up on the last minutes before the cut (measured on Northwind S02: 5 min -> under 0.1 s,
+# 15 min -> up to 1.7 s, because a 25 fps version's scene cuts differ); wider only when lines are few
+SPLICE_WINDOWS = ((300_000, 10), (900_000, 15))
 
 
 def _spliced(embedded: Path, emb, side_path: Path, side, fit: tuple[float, float], cut: int,
              cache_dir: Path, lang: str) -> Path:
     """The embedded track up to where it stops (exact timing), then the sidecar's remaining lines,
-    lined up on the stretch just before the cut (a sidecar from another cut can drift a second or
+    lined up on the few minutes just before the cut (a sidecar from another cut can drift a second or
     two elsewhere, so a whole-file fit is only the fallback)."""
     import hashlib
     import pysubs2
     a, b = fit
-    near_ref = [c for c in emb if c.start_ms >= cut - SPLICE_WINDOW_MS]
-    near_side = [c for c in side if a * c.start_ms + b >= cut - SPLICE_WINDOW_MS - 60_000]
-    la, lb = fit_timing(near_ref, near_side, min_pairs=15) or fit
+    la, lb = fit
+    for window, pairs in SPLICE_WINDOWS:          # narrowest that has enough shared lines
+        near_ref = [c for c in emb if c.start_ms >= cut - window]
+        near_side = [c for c in side if a * c.start_ms + b >= cut - window - 60_000]
+        local = fit_timing(near_ref, near_side, min_pairs=pairs)
+        if local:
+            la, lb = local
+            break
     st1, st2 = embedded.stat(), side_path.stat()
-    key = hashlib.sha1(f"{embedded}|{st1.st_size}|{side_path}|{st2.st_size}|{int(st2.st_mtime)}|splice1"
+    key = hashlib.sha1(f"{embedded}|{st1.st_size}|{side_path}|{st2.st_size}|{int(st2.st_mtime)}|splice2"
                        .encode()).hexdigest()[:20]
     out = cache_dir / f"{key}.{lang}.spliced.srt"
     if out.is_file():
