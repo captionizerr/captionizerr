@@ -24,6 +24,15 @@ def make_cli_provider(a):
     from .pricing import price, register
     s = Settings.from_env()
     secret_store.apply(s, secret_store.SecretStore(s.data_dir / "secrets.json"))
+    db = s.data_dir / "captionizerr.db"
+    if db.is_file():                       # UI-saved settings (model, effort, base URL), read-only
+        import json
+        import sqlite3
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            s.apply({k: json.loads(v) for k, v in con.execute("SELECT key, value FROM settings") if not k.startswith("_")})
+        finally:
+            con.close()
     if a.provider == "ollama":
         from .providers.ollama import OllamaProvider
         return OllamaProvider(a.ollama_url, a.model, num_ctx=a.num_ctx)
@@ -38,14 +47,16 @@ def make_cli_provider(a):
                 print(f"price for {a.model}: ${p.inp:g} in / ${p.out:g} out per 1M tokens ({p.source})", file=sys.stderr)
             else:
                 print(f"warning: no price found for {a.model}; costs will show as 0", file=sys.stderr)
-        return OpenAICompatProvider(base, a.model, s.openai_key)
+        effort = {"xhigh": "high", "max": "high"}.get(a.effort, a.effort) if getattr(a, "effort_set", True) else s.openai_effort
+        return OpenAICompatProvider(base, a.model, s.openai_key, effort=effort)
     return AnthropicProvider(model=a.model, effort=a.effort, api_key=s.anthropic_key or None)
 
 
 def add_provider_args(p):
     p.add_argument("--provider", default="anthropic", choices=["anthropic", "ollama", "openai"])
     p.add_argument("--model", default="claude-opus-5-5", help="model id (Ollama: e.g. gemma3:12b)")
-    p.add_argument("--effort", default="low", choices=["low", "medium", "high", "xhigh", "max"])
+    p.add_argument("--effort", default=None, choices=["minimal", "low", "medium", "high", "xhigh", "max"],
+                   help="Anthropic: default low. OpenAI-compatible: default = the effort saved in the web UI")
     p.add_argument("--ollama-url", default="http://localhost:11434")
     p.add_argument("--num-ctx", type=int, default=16384)
     p.add_argument("--base-url", default="", help="OpenAI-compatible base URL")
@@ -230,6 +241,9 @@ def main(argv=None) -> int:
     sv.set_defaults(fn=cmd_serve)
 
     a = ap.parse_args(argv)
+    if hasattr(a, "effort"):
+        a.effort_set = a.effort is not None
+        a.effort = a.effort or "low"
     return a.fn(a)
 
 
