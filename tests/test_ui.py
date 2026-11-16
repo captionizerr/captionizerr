@@ -161,7 +161,7 @@ def test_editor_save_and_retranslate(ui):
     target.write_text(SRT.replace("Hello", "Привет"), encoding="utf-8")
     q = {"path": str(video), "lang": "ru", "key": "show"}
     r = c.get("/edit", params=q)
-    assert r.status_code == 200 and "Edit translation" in r.text
+    assert r.status_code == 200 and "Season 1, Episode 1" in r.text
     import re as _re
     token = _re.search(r'let token = "(\d+)"', r.text).group(1)
     # cross-site refused

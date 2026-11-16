@@ -22,8 +22,9 @@
 @media (max-width:700px){.row{grid-template-columns:1fr;gap:6px}}
 </style>
 <p class="small"><a href="{{ back }}">← Back</a></p>
-<h1>Edit translation</h1>
-<p class="sub mono" style="word-break:break-all">{{ fname }}</p>
+<h1>{{ heading }}</h1>
+<p class="sub">{% if ep_title %}“{{ ep_title }}” · {% endif %}{{ lang_names.get(lang, lang) }} translation</p>
+<p class="small muted mono" style="word-break:break-all;margin-top:-10px">{{ fname }}</p>
 {% if not has_source %}<div class="flash warn">The video has no English text track, so only the translation is shown.</div>{% endif %}
 
 <div class="bar-top">

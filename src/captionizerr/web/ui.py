@@ -6,6 +6,7 @@ UI has no login on a trusted LAN and some actions spend money.
 """
 from __future__ import annotations
 
+import re
 import time
 import urllib.parse
 from datetime import datetime
@@ -300,7 +301,16 @@ def register(app: FastAPI) -> None:
         video, target, tdoc, rows, profile, token = load_editor(path, lang, key or None)
         data = [{"id": r.id, "t": r.start_ms, "d": round(r.duration, 2), "src": r.src, "tr": r.tr,
                  "extra": r.extra, "flags": r.flags(profile)} for r in rows if not r.hidden]
+        stem = video.stem
+        m = re.search(r"[Ss](\d{1,2})[Ee](\d{1,3})", stem)
+        series = re.split(r"[\s._-]+[Ss]\d{1,2}[Ee]\d", stem)[0].replace(".", " ").strip(" -_") if m else ""
+        ep_title = ""
+        if m:
+            rest = stem[m.end():].strip(" -")
+            ep_title = re.sub(r"\s*(WEBDL|WEBRip|Bluray|HDTV|DVD|Remux|\d{3,4}p).*$", "", rest, flags=re.I).strip(" -")
+        heading = (f"{series} · Season {int(m.group(1))}, Episode {int(m.group(2))}" if m else stem)
         return render(request, "edit.html", rows=data, path=path, lang=lang, key=key, token=token,
+                      heading=heading, ep_title=ep_title,
                       back=back if back.startswith("/") and not back.startswith("//") else "/",
                       fname=target.name, profile=profile, flagged=sum(1 for d in data if d["flags"]),
                       has_source=any(r.src for r in rows))

@@ -21,7 +21,7 @@
             <input type="hidden" name="label:{{ e.path }}" value="S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}">{% endif %}</td>
         <td class="mono"><label for="e{{ season }}-{{ e.episode }}">{{ '%02d'|format(e.episode) }}</label></td>
         <td>{{ e.title }}</td>
-        {% for l in langs %}<td class="{{ 'yes' if e.status[l] else 'no' }}">{% if e.status[l] %}<a href="/edit?{{ {'path': e.path, 'lang': l, 'key': key, 'back': '/library/series/' ~ ser.id}|urlencode }}" title="Edit the {{ l }} translation" aria-label="Edit {{ l }} translation of episode {{ e.episode }}">✓</a>{% else %}–{% endif %}</td>{% endfor %}
+        {% for l in langs %}<td class="{{ 'yes' if e.status[l] else 'no' }}">{% if e.status[l] %}<a href="/edit?{{ {'path': e.path, 'lang': l, 'key': key, 'back': '/library/series/' ~ ser.id}|urlencode }}" title="Edit the {{ l }} translation of S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}" aria-label="Edit {{ l }} translation of episode {{ e.episode }}">✓</a>{% else %}–{% endif %}</td>{% endfor %}
       </tr>
     {% endfor %}
     </tbody>
