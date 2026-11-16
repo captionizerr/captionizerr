@@ -169,6 +169,22 @@ def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: st
     return None
 
 
+def end_confirmed(video: Path, lang: str, cut_ms: int, duration: float | None) -> bool:
+    """A complete sidecar in the same language ends about where the embedded track does: the
+    dialogue really ends there (only the last line was stretched over the credits)."""
+    from . import cues as cuesmod
+    for path, l, _sdh in sidecars(video):
+        if l != lang:
+            continue
+        try:
+            sc = cuesmod.load(path).cues
+        except Exception:
+            continue
+        if cut_off(sc, duration) is None and abs(last_line_ms(sc) - cut_ms) <= 60_000:
+            return True
+    return False
+
+
 def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
                 any_language: bool = True) -> Source | None:
     """Pick the subtitle to translate FROM, never in the target language.

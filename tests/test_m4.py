@@ -1071,3 +1071,21 @@ def test_cut_off_source_without_bazarr_goes_straight_to_review(tmp_path):
     job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
     w.process(store.next_queued())
     assert store.get(job.id).state == "needs_review" and "stops at 1:13" in store.get(job.id).detail
+
+
+@ffmpeg
+def test_stretched_last_line_confirmed_by_a_sidecar_is_just_shortened(tmp_path, monkeypatch):
+    s = settings(tmp_path, bazarr_url="http://bazarr", bazarr_key="k")
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    store, w = app.state.store, app.state.worker
+    v = _video_with(tmp_path / "lib/Show", "Show S01E01.mkv", _srt(25, last_len_s=65))
+    side = v.with_name("Show S01E01.en.hi.srt")
+    side.write_text(_srt(26), encoding="utf-8")          # complete, ends 3 s after the embedded track: same dialogue
+    old(side)
+    asked = []
+    monkeypatch.setattr(w, "_bazarr_request", lambda bz, job: asked.append(1) or True)
+    job = store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    w.process(store.next_queued())
+    j = store.get(job.id)
+    assert j.state == "done" and "(embedded)" in j.detail and "shortened" in j.detail and not asked
+    assert cuesmod.load(j.output_path).cues[-1].end_ms - cuesmod.load(j.output_path).cues[-1].start_ms <= 7000

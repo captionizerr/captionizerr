@@ -52,6 +52,7 @@ class Prepared:
     reuse: "reuse.Reuse | None" = None      # translations carried over from a replaced release
     previous: Path | None = None            # that release's (orphaned) translation file
     warning: str = ""                       # the source is incomplete: said in the job detail, job goes to review
+    note: str = ""                          # worth saying in the detail, no review needed
 
 
 class Worker:
@@ -158,6 +159,8 @@ class Worker:
         warning = ""
         duration = media.probe(video)[1]
         cut = media.cut_off(doc.cues, duration)
+        if cut is not None and src.origin == "embedded" and media.end_confirmed(video, src.lang, cut, duration):
+            cut = None                     # another subtitle ends there too: only the last line was stretched
         if cut is not None:
             where = f"{media.clock(cut)} of {media.clock(duration * 1000)}" if duration else media.clock(cut)
             if ask_bazarr and not job.wait_since and self._ask_bazarr_quietly(job):
@@ -168,14 +171,13 @@ class Worker:
             warning = (f"incomplete source: the {src.lang} subtitle ({src.origin}) stops at {where}, so the rest of "
                        f"the video has no subtitles. Put a complete {src.lang} subtitle next to the video "
                        f"(e.g. from Bazarr) and press Re-translate")
-        if media.clamp_long_cues(doc):
-            warning = warning or "a source line stayed on screen over a minute; it was shortened"
+        note = "a source line that stayed on screen over a minute was shortened" if media.clamp_long_cues(doc) else ""
         ser = store.series(job.series_key) if job.series_key else None
         profile = s.profile(job.lang, src.lang, (ser or {}).get("tone"))
         context = self.context_for(job.series_key)
         if context is None and s.auto_notes and job.series_key:
             context = self.make_notes(job, doc, provider)
-        prep = Prepared(video, doc, profile, context, src, warning=warning)
+        prep = Prepared(video, doc, profile, context, src, warning=warning, note=note)
         self.find_reuse(prep, job)
         return prep
 
@@ -267,6 +269,8 @@ class Worker:
                   f"{len(res.issues_initial)} flagged, {len(res.issues_final)} open{open_}")
         if prep.warning:
             detail = f"{prep.warning[0].upper()}{prep.warning[1:]}. " + detail
+        elif prep.note:
+            detail += f"; {prep.note}"
         if unpriced:   # never pretend it was free: say so where the owner will see it
             detail += f"; cost unknown: no price for {used_model} (set it in Settings → AI provider)"
             log.warning("job %s: no price known for %s; cost recorded as $0", job.id, used_model)
