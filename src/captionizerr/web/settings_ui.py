@@ -16,6 +16,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from .. import connections, secret_store
 from ..pricing import PRICES
@@ -227,6 +228,11 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
     async def test(request: Request, service: str):
         same_origin(request)
         f = await request.form()
+        return await run_in_threadpool(run_test, f, service)
+
+    def run_test(f, service: str) -> dict:
+        """Blocking network calls: run in a worker thread, never on the event loop (a Sonarr
+        webhook test calls back into this server while we wait)."""
         g = lambda k, d="": str(f.get(k) or d).strip()  # noqa: E731
         t0 = time.monotonic()
         if service in ("sonarr", "radarr"):
@@ -283,7 +289,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         if not url.startswith(("http://", "https://")):
             return JSONResponse({"error": "the address must start with http://"}, 400)
         try:
-            return {"models": ollama.list_models(url)}
+            return {"models": await run_in_threadpool(ollama.list_models, url)}
         except Exception as e:
             return JSONResponse({"error": str(e)[:200]}, 502)
 
@@ -296,7 +302,8 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         url, key = getattr(s, f"{kind}_url"), getattr(s, f"{kind}_key")
         if not (url and key):
             return {"ok": False, "message": f"save the {kind.title()} address and API key first"}
-        ok, msg = connections.connect_arr(kind, url, key, f"{hook_base(request)}/api/hooks/{kind}", s.webhook_key)
+        ok, msg = await run_in_threadpool(connections.connect_arr, kind, url, key,
+                                          f"{hook_base(request)}/api/hooks/{kind}", s.webhook_key)
         if ok and not s.public_url:
             save({"public_url": hook_base(request)})     # notifications link here too
         return {"ok": ok, "message": msg}
@@ -352,12 +359,17 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         new = pysecrets.token_urlsafe(24)
         secrets.set("webhook_key", new)
         s.webhook_key = new
-        done = []
-        for kind in ("sonarr", "radarr"):
-            if connections.arr_webhook_state(kind, getattr(s, f"{kind}_url"), getattr(s, f"{kind}_key")) == "ok":
-                ok, _ = connections.connect_arr(kind, getattr(s, f"{kind}_url"), getattr(s, f"{kind}_key"),
-                                                f"{hook_base(request)}/api/hooks/{kind}", new)
-                done.append(f"{kind.title()} {'updated' if ok else 'NOT updated'}")
+        base = hook_base(request)
+
+        def reconnect() -> list[str]:
+            done = []
+            for kind in ("sonarr", "radarr"):
+                if connections.arr_webhook_state(kind, getattr(s, f"{kind}_url"), getattr(s, f"{kind}_key")) == "ok":
+                    ok, _ = connections.connect_arr(kind, getattr(s, f"{kind}_url"), getattr(s, f"{kind}_key"),
+                                                    f"{base}/api/hooks/{kind}", new)
+                    done.append(f"{kind.title()} {'updated' if ok else 'NOT updated'}")
+            return done
+        done = await run_in_threadpool(reconnect)
         return redirect("/settings/security", "New webhook key. " + ("; ".join(done) + "." if done else
                                                                     "Update it wherever you pasted the old one."))
 

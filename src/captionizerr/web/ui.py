@@ -15,6 +15,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -412,6 +413,9 @@ def register(app: FastAPI) -> None:
     @app.post("/api/edit/save")
     async def edit_save(request: Request):
         b = await edit_body(request)
+        return await run_in_threadpool(_edit_save, b)
+
+    def _edit_save(b: dict):
         key = b.get("key") or None
         video, target, tdoc, rows, profile, token = load_editor(str(b.get("path", "")), str(b.get("lang", "")), key)
         if b.get("token") != token:
@@ -430,6 +434,9 @@ def register(app: FastAPI) -> None:
     @app.post("/api/edit/retranslate")
     async def edit_retranslate(request: Request):
         b = await edit_body(request)
+        return await run_in_threadpool(_edit_retranslate, b)
+
+    def _edit_retranslate(b: dict):
         key = b.get("key") or None
         video, target, tdoc, rows, profile, _ = load_editor(str(b.get("path", "")), str(b.get("lang", "")), key)
         apply_edits(rows, b.get("edits") or {})
@@ -508,12 +515,14 @@ def register(app: FastAPI) -> None:
         imdb = str(f.get("imdb_id", "")).strip()
         if not re.fullmatch(r"(tt)?\d{5,10}", imdb):
             return _redirect(back, "The IMDb ID looks like tt1234567.", "warn")
-        try:
+        def upload():
             c = os_client()
             c.login()
-            r = c.upload(sub, video, lang, imdb, str(f.get("release", ""))[:200], str(f.get("comment", ""))[:500],
+            return c.upload(sub, video, lang, imdb, str(f.get("release", ""))[:200], str(f.get("comment", ""))[:500],
                          str(f.get("translator", ""))[:100], forced=forced,
                          hd=bool(re.search(r"(720|1080|2160)p", video.name)))
+        try:
+            r = await run_in_threadpool(upload)
         except Exception as e:
             return _redirect(back, f"Not uploaded: {str(e)[:200]}", "warn")
         store.record_share(str(sub), r["url"], r["already"])
