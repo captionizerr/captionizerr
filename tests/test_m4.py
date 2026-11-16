@@ -643,7 +643,7 @@ def test_opensubtitles_login_errors_explain_themselves():
     class R:
         def __init__(self, status): self.status = status
         def LogIn(self, *a): return {"status": self.status, "token": "t"}
-    with pytest.raises(OpenSubtitlesError, match="opensubtitles.org"):
+    with pytest.raises(OpenSubtitlesError, match="sign in once"):
         Client("u", "p", "ua", proxy=R("401 Unauthorized")).login()
     with pytest.raises(OpenSubtitlesError, match="USER_AGENT"):
         Client("u", "p", "ua", proxy=R("414 Unknown User Agent")).login()

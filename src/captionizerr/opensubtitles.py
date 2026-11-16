@@ -94,9 +94,9 @@ class Client:
         status = str((r or {}).get("status", ""))
         if status.startswith("401"):
             raise OpenSubtitlesError(
-                "login refused (401). Uploads use the classic site's API, so this needs an opensubtitles.org "
-                "account. Accounts from opensubtitles.com appear to be separate; check the username and password "
-                "work at https://www.opensubtitles.org/en/login")
+                "login refused (401). Uploads use the classic site's API: sign in once at "
+                "https://www.opensubtitles.org/en/login with the same account (an opensubtitles.com account "
+                "works there too after that first sign-in), then test again")
         if status.startswith(("414", "415")):
             raise OpenSubtitlesError(f"OpenSubtitles doesn't accept this client name ({status}); set "
                                      "CAPTIONIZERR_OPENSUBTITLES_USER_AGENT to one they assigned you")
