@@ -424,10 +424,22 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
                                                                     "Update it wherever you pasted the old one."))
 
     @app.get("/settings/system")
-    def system(request: Request):
+    def system(request: Request, notes: str = ""):
         from .. import __version__, maintenance
+        from ..arr import ArrError
         last = store.load_settings().get("_maintenance_last") or {}
+        stale, stale_error = None, ""
+        if notes:
+            if not (s.sonarr_url and s.sonarr_key) and not (s.radarr_url and s.radarr_key):
+                stale_error = "Connect Sonarr or Radarr first: they are what this list is checked against."
+            else:
+                try:
+                    stale = maintenance.stale_notes(s, store, maintenance.known_keys(s))
+                except ArrError as e:
+                    stale_error = f"Couldn't reach Sonarr or Radarr ({str(e)[:120]}), so nothing is listed."
         return page(request, "system", storage=maintenance.storage(s), last=last, version=__version__,
+                    stale=stale, stale_error=stale_error,
+                    fmt_day=lambda t: datetime.fromtimestamp(t).strftime("%d %b %Y") if t else "–",
                     keep={"history": s.keep_history, "days": s.keep_days}, overridden=overrides(),
                     last_when=datetime.fromtimestamp(last["at"]).strftime("%d %b %H:%M") if last.get("at") else "")
 
@@ -469,6 +481,25 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
         for k in keys:
             setattr(s, k, getattr(app.state.env_defaults, k))
         return redirect("/settings/system", f"Back to the environment value: {', '.join(k.replace('_', ' ') for k in keys)}.")
+
+    @app.post("/settings/notes/forget")
+    async def notes_forget(request: Request):
+        same_origin(request)
+        from .. import maintenance
+        from ..arr import ArrError
+        from ..hooks import valid_key
+        form = await request.form()
+        key = valid_key(form.get("key"))
+        if not key:
+            return redirect("/settings/system?notes=1", "Unknown series.", "warn")
+        try:   # re-check: never delete notes of a series that is (back) in Sonarr or Radarr
+            known = await run_in_threadpool(maintenance.known_keys, s)
+        except ArrError as e:
+            return redirect("/settings/system?notes=1", f"Couldn't reach Sonarr or Radarr ({str(e)[:120]}); nothing deleted.", "warn")
+        if key in known:
+            return redirect("/settings/system?notes=1", "That series is in your library again; its notes were kept.", "warn")
+        maintenance.forget_series(s, store, key)
+        return redirect("/settings/system?notes=1", "Notes, corrections and settings deleted. Its translations and costs stay on the dashboard.")
 
     @app.post("/maintenance/run")
     def maintenance_run(request: Request):

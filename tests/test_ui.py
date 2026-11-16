@@ -452,3 +452,41 @@ def test_unreachable_library_marks_nothing_deleted(ui):
     a = st.enqueue("manual", "Show S01E01", p, "ru", None); st.finish(a.id, "done", "ok", p[:-4] + ".captionizerr.ru.srt", 0.3, {}, "m")
     page = c.get("/").text
     assert "Video deleted" not in page and ">Edit<" in page
+
+
+def test_notes_for_removed_series_listed_and_deleted(ui, monkeypatch):
+    from captionizerr import maintenance
+    from captionizerr.arr import ArrError
+    app, c, _ = ui
+    s, st = app.state.settings, app.state.store
+    st.save_settings({"_setup_done": True})
+    s.sonarr_url, s.sonarr_key = "http://sonarr.invalid", "k" * 32
+    s.context_dir.mkdir(parents=True, exist_ok=True); s.feedback_dir.mkdir(parents=True, exist_ok=True)
+    (s.context_dir / "northwind.md").write_text("notes")
+    (s.context_dir / "gone-show.md").write_text("old notes")
+    (s.feedback_dir / "gone-show.jsonl").write_text('{"a":1}\n{"a":2}\n')
+    st.save_series("gone-show", "Gone Show's Title", True, ["ru"], "")
+    known = {"northwind"}
+    monkeypatch.setattr(maintenance, "known_keys", lambda _s: known)
+    page = c.get("/settings/system").text
+    assert "Notes for removed series" in page and "gone-show" not in page          # nothing checked yet
+    page = c.get("/settings/system?notes=1").text
+    assert "Gone Show&#39;s Title" in page and ">northwind<" not in page and ">2<" in page
+    o = {"Origin": "http://testserver"}
+    known.add("gone-show")                                                          # re-added meanwhile
+    c.post("/settings/notes/forget", data={"key": "gone-show"}, headers=o)
+    assert (s.context_dir / "gone-show.md").exists()
+    known.discard("gone-show")
+    assert "Unknown series" in c.post("/settings/notes/forget", data={"key": "../etc"}, headers=o).text
+    c.post("/settings/notes/forget", data={"key": "gone-show"}, headers=o)
+    assert not (s.context_dir / "gone-show.md").exists() and not (s.feedback_dir / "gone-show.jsonl").exists()
+    assert st.series("gone-show") is None and (s.context_dir / "northwind.md").exists()
+    assert "None: every series" in c.get("/settings/system?notes=1").text
+
+    def down(_s):
+        raise ArrError("timed out")
+    monkeypatch.setattr(maintenance, "known_keys", down)
+    (s.context_dir / "x.md").write_text("n")
+    assert "Couldn't reach" in c.get("/settings/system?notes=1").text
+    c.post("/settings/notes/forget", data={"key": "x"}, headers=o)
+    assert (s.context_dir / "x.md").exists()

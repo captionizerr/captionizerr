@@ -274,6 +274,13 @@ class Store:
                 "title=excluded.title, enabled=excluded.enabled, langs=excluded.langs, tone=excluded.tone",
                 (key, title, int(enabled), json.dumps(langs) if langs else "", tone or ""))
 
+    def series_rows(self) -> dict[str, str]:
+        """key -> title of every series that has saved settings."""
+        return {r["key"]: r["title"] for r in self._q("SELECT key, title FROM series").fetchall()}
+
+    def delete_series(self, key: str) -> None:
+        self._q("DELETE FROM series WHERE key=?", (key,))
+
     def requeue(self, job_id: int) -> bool:
         # a needs_review job already wrote its file, so its retry must be allowed to replace it
         return self._q("UPDATE jobs SET state='queued', detail='', wait_since=0, updated=?, "

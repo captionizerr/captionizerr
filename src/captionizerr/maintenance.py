@@ -8,6 +8,8 @@ What grows, and how it is kept in check:
 - config/sources               the source each translation was made from (for re-timing after an upgrade)
                                -> removed 30 days after its translation file is gone
 - config/feedback              correction logs -> last 1000 lines per series
+- config/context, feedback,     notes, corrections and settings of a series are kept after it is deleted (reused if it
+  series settings              comes back); Settings > System lists ones no longer in Sonarr/Radarr, deleted only by hand
 - config/backup                daily consistent DB snapshot (newest 7): back up this folder, not the live db
 - jobs table                   unpaid skipped/no-source/failed rows older than `keep_days` (paid rows = ledger, kept)
 - library orphans              our `*.captionizerr.*` files whose video is gone (Sonarr/Radarr upgrade or
@@ -228,3 +230,41 @@ def run(s, store) -> dict:
     store.save_settings({"_maintenance_last": rep})
     log.info("maintenance: %s", json.dumps(rep))
     return rep
+
+
+def known_keys(s) -> set[str]:
+    """Series keys of everything Sonarr and Radarr still have. Raises ArrError when a configured
+    one can't be reached, so a down Sonarr never makes all notes look stale."""
+    from .arr import Arr
+    from .hooks import slug
+    keys: set[str] = set()
+    for url, key, path in ((s.sonarr_url, s.sonarr_key, "/series"), (s.radarr_url, s.radarr_key, "/movie")):
+        a = Arr(url, key)
+        if a.configured:
+            keys |= {slug(x.get("title") or "") for x in a.get(path)}
+    return keys
+
+
+def stale_notes(s, store, known: set[str]) -> list[dict]:
+    """Per-series data (notes, correction log, settings) whose series is no longer in Sonarr or Radarr."""
+    ctx, fb = Path(s.context_dir), Path(s.feedback_dir)
+    rows = store.series_rows()
+    keys = {p.stem for p in ctx.glob("*.md")} | {p.stem for p in fb.glob("*.jsonl")} | set(rows)
+    out = []
+    for k in sorted(keys - known):
+        n, f = ctx / f"{k}.md", fb / f"{k}.jsonl"
+        files = [x for x in (n, f) if x.is_file()]
+        out.append({"key": k, "title": rows.get(k) or k.replace("-", " ").title(),
+                    "notes": n.stat().st_size if n.is_file() else 0,
+                    "corrections": sum(1 for _ in f.open(encoding="utf-8")) if f.is_file() else 0,
+                    "settings": k in rows,
+                    "changed": max((x.stat().st_mtime for x in files), default=0)})
+    return out
+
+
+def forget_series(s, store, key: str) -> None:
+    """Delete one series' notes, correction log and settings (jobs and their costs stay)."""
+    for p in (Path(s.context_dir) / f"{key}.md", Path(s.feedback_dir) / f"{key}.jsonl"):
+        p.unlink(missing_ok=True)
+    store.delete_series(key)
+    log.info("notes and settings deleted for removed series %s", key)

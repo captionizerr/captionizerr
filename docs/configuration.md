@@ -50,10 +50,10 @@ Secrets from 1 or 2 show as "Set on the server" and can't be changed in the UI. 
 | Path | What | Cleanup |
 |---|---|---|
 | `captionizerr.db` | jobs, spend ledger, settings, per-series overrides | unpaid failed or skipped jobs after 180 days |
-| `context/<series>.md` | series notes | never (yours) |
+| `context/<series>.md` | series notes | never automatically; Settings → System → *Notes for removed series* deletes those of series no longer in Sonarr/Radarr |
 | `cache/` | extracted source tracks | 60 days unused, 1 GB cap |
 | `history/` | previous versions of edited files | newest 10 per file, 180 days |
-| `feedback/` | editor corrections per series | last 1000 |
+| `feedback/` | editor corrections per series | last 1000; removed with the notes above |
 | `orphans/` | our files whose video disappeared, and translations replaced after an upgrade | 30 days |
 | `sources/` | the source each translation was made from (re-timing, editor, evals) | 30 days after the translation is gone |
 | `secrets.json` | keys and passwords entered in the UI (mode 600; the UI password as a PBKDF2 hash) | never |

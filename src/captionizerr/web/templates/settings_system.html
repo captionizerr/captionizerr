@@ -7,6 +7,21 @@
   <p class="small muted">{% if last %}Last run {{ last_when }} · {{ last.get('seconds', 0) }} s{% if last.get('orphans_moved') %} · {{ last.orphans_moved }} orphan(s) moved{% endif %}{% else %}Not run yet{% endif %}.</p>
   <form method="post" action="/maintenance/run"><button>Run cleanup now</button></form>
 </section>
+<section class="card" id="notes">
+  <h2>Notes for removed series</h2>
+  <p class="small muted">Translator's notes, editor corrections and per-series settings stay when a series or movie is deleted, so they're reused if you download it again. Check here for ones whose series is no longer in Sonarr or Radarr. Nothing is deleted unless you press Delete.</p>
+  {% if stale_error %}<p class="small">{{ stale_error }}</p>
+  {% elif stale is none %}<form method="get" action="/settings/system#notes"><input type="hidden" name="notes" value="1"><button>Check</button></form>
+  {% elif not stale %}<p class="small">None: every series with notes is still in your library.</p>
+  {% else %}<div class="tw"><table class="small"><thead><tr><th>Series</th><th>Notes</th><th class="num">Corrections</th><th>Settings</th><th>Last changed</th><th></th></tr></thead><tbody>
+  {% for n in stale %}<tr><td>{{ n.title }}<div class="mono muted">{{ n.key }}</div></td>
+    <td class="nowrap">{{ ('%.1f KB'|format(n.notes / 1024)) if n.notes else '–' }}</td>
+    <td class="num">{{ n.corrections or '–' }}</td><td>{{ 'yes' if n.settings else '–' }}</td>
+    <td class="nowrap">{{ fmt_day(n.changed) }}</td>
+    <td><form method="post" action="/settings/notes/forget" class="inline" onsubmit="return confirm('Delete the notes, corrections and settings for ' + {{ n.title|tojson }} + '? This can\'t be undone. Its translations and costs stay.')">
+      <input type="hidden" name="key" value="{{ n.key }}"><button class="small">Delete</button></form></td></tr>{% endfor %}
+  </tbody></table></div>{% endif %}
+</section>
 {% if overridden %}<section class="card"><h2>Changed here</h2>
   <p class="small muted">Saved on these pages, overriding the server's environment settings. Reset one to use the environment value again.</p>
   <div class="tw"><table class="small"><thead><tr><th>Setting</th><th>Here</th><th>Environment</th><th></th></tr></thead><tbody>
