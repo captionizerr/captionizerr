@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2
+
+Documentation release: **the application is unchanged from 0.2.1** apart from the version number. No need to upgrade for fixes.
+
+- **Project website:** https://captionizerr.github.io/captionizerr/ (published from `site/` by GitHub Pages). It includes:
+  - a side-by-side example, with Captionizerr's real output for an original scene next to an illustrative literal translation;
+  - architecture diagrams, a UI tour, features, measured cost and quality, quick start, security and a FAQ.
+- The README and the repository homepage link to the website.
+
 ## 0.2.1
 
 Security and documentation fixes from a full review. Upgrading is recommended; nothing to change.
