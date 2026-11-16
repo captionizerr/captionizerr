@@ -10,6 +10,17 @@
   - The editor's flags now come from the pipeline's own validator, with the same tolerances, so the editor and the job status never disagree.
   - A job's detail names its open lines ("open: #296 …"), and **Review** opens the editor on the flagged lines.
 - `deploy/deploy.sh` waits for running translations before restarting (`--force` to skip).
+- **OpenAI-compatible providers:**
+  - Uses `max_completion_tokens` where required (newer OpenAI models such as `gpt-6-luna`), adapting to whichever parameter a server names, and drops an unsupported `temperature`.
+  - API errors are shown readably.
+  - The Base URL is prefilled with OpenAI's address.
+- **Automatic prices:**
+  - **Find models** lists your provider's models.
+  - Picking one (or pressing **Test**) fills in its price and shows the cost per episode.
+  - Sources: the built-in table (Anthropic), OpenRouter's live prices, the LiteLLM community price list, and $0 for local servers. They're cached for 24 h and used offline when stale.
+  - A warning appears when $0 prices would leave the budget cap blind.
+  - The built-in Anthropic prices are cross-checked against the published list.
+- OpenSubtitles login errors explain the one-time opensubtitles.org sign-in.
 
 ## 0.2.2
 
