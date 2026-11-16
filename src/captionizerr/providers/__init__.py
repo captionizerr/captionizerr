@@ -16,4 +16,4 @@ def make_provider(s):
         register(s.openai_model, s.openai_price_in, s.openai_price_out)
         return OpenAICompatProvider(s.openai_base_url, s.openai_model, s.openai_key, s.openai_max_output)
     from .anthropic_provider import AnthropicProvider
-    return AnthropicProvider(model=s.model, effort=s.effort)
+    return AnthropicProvider(model=s.model, effort=s.effort, api_key=getattr(s, "anthropic_key", "") or None)

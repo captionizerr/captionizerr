@@ -23,6 +23,32 @@ from .writer import move_sidecars
 log = logging.getLogger("captionizerr.app")
 
 
+class Throttle:
+    """Lock a client out after `limit` failed logins/keys within `window` seconds, for `lock` seconds.
+    In memory (resets on restart). Behind a reverse proxy all clients share its address, so a
+    flood of bad logins locks everyone out for a while: the safe direction."""
+
+    def __init__(self, limit: int = 10, window: float = 600, lock: float = 900):
+        self.limit, self.window, self.lock = limit, window, lock
+        self.fails: dict[str, list[float]] = {}
+        self.until: dict[str, float] = {}
+
+    def locked(self, who: str) -> bool:
+        return self.until.get(who, 0) > time.time()
+
+    def fail(self, who: str) -> None:
+        now = time.time()
+        recent = [t for t in self.fails.get(who, []) if now - t < self.window] + [now]
+        self.fails[who] = recent
+        if len(recent) >= self.limit:
+            self.until[who] = now + self.lock
+            self.fails.pop(who, None)
+            log.warning("auth: %s locked out for %d min after %d failures", who, self.lock // 60, len(recent))
+
+    def ok(self, who: str) -> None:
+        self.fails.pop(who, None)
+
+
 def create_app(settings: Settings | None = None, provider_factory=None, start_worker: bool = True) -> FastAPI:
     s = settings or Settings.from_env()
     (s.data_dir / "tmp").mkdir(parents=True, exist_ok=True)
@@ -47,29 +73,54 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
     # Optional login. Webhooks and API clients use the API key instead; health and metrics stay open
     # for monitoring; static files carry nothing private.
     OPEN = ("/health", "/metrics", "/static/", "/api/hooks/")
+    throttle = Throttle()
+
+    def basic_auth(request: Request) -> tuple[str, str] | None:
+        auth = request.headers.get("authorization", "")
+        if not auth.lower().startswith("basic "):
+            return None
+        try:
+            user, _, pw = base64.b64decode(auth[6:]).decode().partition(":")
+        except Exception:
+            return ("", "")
+        return user, pw
+
+    def client_id(request: Request) -> str:
+        return request.client.host if request.client else "?"
 
     @app.middleware("http")
     async def ui_login(request: Request, call_next):
         if not s.ui_password or request.url.path.startswith(OPEN):
             return await call_next(request)
+        who = client_id(request)
+        if throttle.locked(who):
+            return PlainTextResponse("too many failed logins; try again later", 429, headers={"Retry-After": "900"})
         given_key = request.query_params.get("apikey") or request.headers.get("X-Api-Key", "")
-        if request.url.path.startswith("/api/") and s.webhook_key and given_key \
-                and hmac.compare_digest(given_key, s.webhook_key):
-            return await call_next(request)
-        auth = request.headers.get("authorization", "")
-        if auth.lower().startswith("basic "):
-            try:
-                user, _, pw = base64.b64decode(auth[6:]).decode().partition(":")
-            except Exception:
-                user = pw = ""
-            if hmac.compare_digest(user, s.ui_user) and hmac.compare_digest(pw, s.ui_password):
+        if request.url.path.startswith("/api/") and s.webhook_key and given_key:
+            if hmac.compare_digest(given_key, s.webhook_key):
                 return await call_next(request)
+            throttle.fail(who)
+        creds = basic_auth(request)
+        if creds is not None:
+            if hmac.compare_digest(creds[0], s.ui_user) and hmac.compare_digest(creds[1], s.ui_password):
+                throttle.ok(who)
+                return await call_next(request)
+            throttle.fail(who)
         return PlainTextResponse("login required", 401, headers={"WWW-Authenticate": 'Basic realm="Captionizerr"'})
 
     def require_key(request: Request):
-        given = request.query_params.get("apikey") or request.headers.get("X-Api-Key", "")
+        """Webhooks and the JSON API: the key in the X-Api-Key header, as the password of HTTP Basic
+        auth (Sonarr/Radarr webhook Username/Password fields; any username), or ?apikey= (legacy:
+        URLs end up in logs)."""
+        who = client_id(request)
+        if throttle.locked(who):
+            raise HTTPException(status_code=429, detail="too many failed attempts; try again later")
+        creds = basic_auth(request)
+        given = request.headers.get("X-Api-Key", "") or (creds[1] if creds else "") or request.query_params.get("apikey") or ""
         if not s.webhook_key or not hmac.compare_digest(given, s.webhook_key):
+            throttle.fail(who)
             raise HTTPException(status_code=401, detail="invalid api key")
+        throttle.ok(who)
 
     def enqueue_items(source: str, items) -> list[int]:
         ids = []

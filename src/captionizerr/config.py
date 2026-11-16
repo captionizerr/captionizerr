@@ -10,12 +10,29 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(f"CAPTIONIZERR_{name}", default).strip()
 
 
+def read_secret(var: str) -> str:
+    """A secret from `<VAR>_FILE` (Docker/compose secrets: keeps it out of the container's
+    environment and `docker inspect`) or, failing that, from `<VAR>` itself."""
+    path = os.environ.get(f"{var}_FILE", "").strip()
+    if path:
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except OSError as e:
+            raise RuntimeError(f"{var}_FILE points to an unreadable file: {path} ({e.strerror})") from None
+    return os.environ.get(var, "").strip()
+
+
+def _secret(name: str) -> str:
+    return read_secret(f"CAPTIONIZERR_{name}")
+
+
 @dataclass
 class Settings:
     data_dir: Path = Path("/config")
-    webhook_key: str = ""
+    webhook_key: str = field(default="", repr=False)
+    anthropic_key: str = field(default="", repr=False)
     ui_user: str = "admin"
-    ui_password: str = ""        # set it to require a login for the web UI (HTTP Basic); empty = open (LAN only!)
+    ui_password: str = field(default="", repr=False)        # set it to require a login for the web UI (HTTP Basic); empty = open (LAN only!)
     languages: list[str] = field(default_factory=list)   # no default: chosen at first run
     model: str = "claude-opus-5-5"
     effort: str = "low"
@@ -32,23 +49,23 @@ class Settings:
     max_line: int = 42
     target_cps: float = 20.0
     sonarr_url: str = ""
-    sonarr_key: str = ""
+    sonarr_key: str = field(default="", repr=False)
     radarr_url: str = ""
-    radarr_key: str = ""
+    radarr_key: str = field(default="", repr=False)
     jellyfin_url: str = ""
-    jellyfin_key: str = ""
+    jellyfin_key: str = field(default="", repr=False)
     jellyfin_path_map: list[tuple[str, str]] = field(default_factory=list)   # (our path prefix, Jellyfin's)
     opensubtitles_user: str = ""
-    opensubtitles_password: str = ""
+    opensubtitles_password: str = field(default="", repr=False)
     opensubtitles_user_agent: str = ""      # default "Captionizerr v<version>"; OpenSubtitles may require a registered one
     plex_url: str = ""
-    plex_token: str = ""
+    plex_token: str = field(default="", repr=False)
     plex_path_map: list[tuple[str, str]] = field(default_factory=list)       # (our path prefix, Plex's)
     # sources
     source_langs: list[str] = field(default_factory=lambda: ["en"])   # translate FROM, in order of preference
     any_source: bool = True       # fall back to any other text track/sidecar language
     bazarr_url: str = ""
-    bazarr_key: str = ""
+    bazarr_key: str = field(default="", repr=False)
     bazarr_wait_hours: float = 3.0
     # AI provider
     provider: str = "anthropic"   # anthropic | ollama (local) | openai (any OpenAI-compatible endpoint)
@@ -57,7 +74,7 @@ class Settings:
     ollama_num_ctx: int = 16384   # context window; Ollama's own default is far too small for subtitles
     ollama_max_output: int = 8000
     openai_base_url: str = ""     # e.g. https://api.openai.com/v1, http://ollama:11434/v1
-    openai_key: str = ""
+    openai_key: str = field(default="", repr=False)
     openai_model: str = ""
     openai_price_in: float = 0.0  # $ per 1M tokens; 0 for local models
     openai_price_out: float = 0.0
@@ -80,9 +97,10 @@ class Settings:
         pm = pairs("PATH_MAP")
         return cls(
             data_dir=Path(_env("DATA_DIR", "/config")),
-            webhook_key=_env("WEBHOOK_KEY"),
+            webhook_key=_secret("WEBHOOK_KEY"),
+            anthropic_key=read_secret("ANTHROPIC_API_KEY"),
             ui_user=_env("UI_USER", "admin"),
-            ui_password=_env("UI_PASSWORD"),
+            ui_password=_secret("UI_PASSWORD"),
             languages=[x for x in _env("LANGUAGES").replace(" ", "").split(",") if x],
             model=_env("MODEL", "claude-opus-5-5"),
             effort=_env("EFFORT", "low"),
@@ -99,28 +117,28 @@ class Settings:
             max_line=int(_env("MAX_LINE", "42") or 42),
             target_cps=float(_env("TARGET_CPS", "20") or 20),
             sonarr_url=_env("SONARR_URL"),
-            sonarr_key=_env("SONARR_KEY"),
+            sonarr_key=_secret("SONARR_KEY"),
             radarr_url=_env("RADARR_URL"),
-            radarr_key=_env("RADARR_KEY"),
+            radarr_key=_secret("RADARR_KEY"),
             jellyfin_url=_env("JELLYFIN_URL"),
-            jellyfin_key=_env("JELLYFIN_KEY"),
+            jellyfin_key=_secret("JELLYFIN_KEY"),
             jellyfin_path_map=pairs("JELLYFIN_PATH_MAP"),
             opensubtitles_user=_env("OPENSUBTITLES_USER"),
-            opensubtitles_password=_env("OPENSUBTITLES_PASSWORD"),
+            opensubtitles_password=_secret("OPENSUBTITLES_PASSWORD"),
             opensubtitles_user_agent=_env("OPENSUBTITLES_USER_AGENT"),
             plex_url=_env("PLEX_URL"),
-            plex_token=_env("PLEX_TOKEN"),
+            plex_token=_secret("PLEX_TOKEN"),
             plex_path_map=pairs("PLEX_PATH_MAP"),
             source_langs=[x for x in _env("SOURCE_LANGS", "en").replace(" ", "").split(",") if x],
             any_source=_env("ANY_SOURCE", "1").lower() not in ("0", "false", "no", "off"),
             bazarr_url=_env("BAZARR_URL"),
-            bazarr_key=_env("BAZARR_KEY"),
+            bazarr_key=_secret("BAZARR_KEY"),
             provider=_env("PROVIDER", "anthropic"),
             ollama_url=_env("OLLAMA_URL", "http://localhost:11434"),
             ollama_model=_env("OLLAMA_MODEL"),
             ollama_num_ctx=int(_env("OLLAMA_NUM_CTX", "16384") or 16384),
             openai_base_url=_env("OPENAI_BASE_URL"),
-            openai_key=_env("OPENAI_API_KEY"),
+            openai_key=_secret("OPENAI_API_KEY"),
             openai_model=_env("OPENAI_MODEL"),
             openai_price_in=float(_env("OPENAI_PRICE_IN", "0") or 0),
             openai_price_out=float(_env("OPENAI_PRICE_OUT", "0") or 0),
@@ -174,7 +192,7 @@ class Settings:
 
     @property
     def secrets_status(self) -> dict[str, bool]:
-        return {"Anthropic API key": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        return {"Anthropic API key": bool(self.anthropic_key or os.environ.get("ANTHROPIC_API_KEY")),
                 "Webhook key": bool(self.webhook_key), "Sonarr API key": bool(self.sonarr_key),
                 "Radarr API key": bool(self.radarr_key), "Jellyfin API key": bool(self.jellyfin_key), "Plex token": bool(self.plex_token),
                 "OpenSubtitles login": bool(self.opensubtitles_user and self.opensubtitles_password),

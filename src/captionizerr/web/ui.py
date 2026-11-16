@@ -690,7 +690,7 @@ def register(app: FastAPI) -> None:
                 prov = app.state.worker.provider_factory()
             else:
                 from ..providers.anthropic_provider import AnthropicProvider
-                prov = AnthropicProvider(model=s.model, effort=s.effort)
+                prov = AnthropicProvider(model=s.model, effort=s.effort, api_key=s.anthropic_key or None)
             n = prov.count_tokens("", "", "Connection test from Captionizerr.")
         except Exception as e:
             return _redirect("/providers", f"{which} test failed: {type(e).__name__}: {str(e)[:160]}", "warn")

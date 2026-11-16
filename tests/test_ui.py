@@ -229,3 +229,32 @@ def test_settings_page_saves_everything(ui):
     s = app.state.settings
     assert s.source_langs == ["en", "ja"] and s.plex_url == "http://plex:32400" and s.plex_path_map == [("/data/", "/media/")]
     assert s.auto_notes is False                     # unticked checkbox
+
+
+def test_webhook_basic_auth_and_lockout(tmp_path):
+    s = Settings(data_dir=tmp_path / "config", webhook_key=KEY, ui_password="pw", library_roots=[str(tmp_path / "lib")])
+    c = TestClient(create_app(s, provider_factory=FakeProvider, start_worker=False))
+    test = {"eventType": "Test"}
+    assert c.post("/api/hooks/sonarr", json=test, auth=("sonarr", KEY)).status_code == 200      # Basic, any user
+    assert c.post("/api/hooks/sonarr", json=test, headers={"X-Api-Key": KEY}).status_code == 200
+    assert c.post("/api/hooks/sonarr", json=test, auth=("sonarr", "nope")).status_code == 401
+    for _ in range(10):
+        c.get("/", auth=("admin", "wrong"))
+    assert c.get("/", auth=("admin", "pw")).status_code == 429          # locked even with the right password
+    assert c.post(f"/api/hooks/sonarr?apikey={KEY}", json=test).status_code == 429
+
+
+def test_secrets_from_files(tmp_path, monkeypatch):
+    f = tmp_path / "wk"
+    f.write_text("from-file\n")
+    monkeypatch.setenv("CAPTIONIZERR_WEBHOOK_KEY_FILE", str(f))
+    monkeypatch.setenv("CAPTIONIZERR_WEBHOOK_KEY", "from-env")
+    a = tmp_path / "ak"
+    a.write_text("sk-ant-file")
+    monkeypatch.setenv("ANTHROPIC_API_KEY_FILE", str(a))
+    s = Settings.from_env()
+    assert s.webhook_key == "from-file" and s.anthropic_key == "sk-ant-file"
+    assert "from-file" not in repr(s) and "sk-ant" not in repr(s)
+    monkeypatch.setenv("CAPTIONIZERR_WEBHOOK_KEY_FILE", str(tmp_path / "missing"))
+    with pytest.raises(RuntimeError):
+        Settings.from_env()

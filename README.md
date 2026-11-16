@@ -59,8 +59,9 @@ Images: `ghcr.io/captionizerr/captionizerr` for linux/amd64 and linux/arm64 (Ras
 
 In each app: **Settings → Connect → + → Webhook**.
 
-- URL: `http://<captionizerr>:8095/api/hooks/sonarr?apikey=<CAPTIONIZERR_WEBHOOK_KEY>` (use `radarr` for Radarr)
+- URL: `http://<captionizerr>:8095/api/hooks/sonarr` (use `radarr` for Radarr)
 - Method: POST
+- Username: anything (e.g. `sonarr`); Password: your `CAPTIONIZERR_WEBHOOK_KEY`. This keeps the key out of the URL; `?apikey=<key>` in the URL still works but ends up in logs.
 - Triggers: **On Import**, **On Upgrade**, **On Rename**
 
 Mount the library at the same path the *arr apps use, or set `CAPTIONIZERR_PATH_MAP`. For the Library page (translate existing episodes and films) and the Bazarr fallback, also set the Sonarr/Radarr URLs and keys.

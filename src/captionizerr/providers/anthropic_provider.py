@@ -23,12 +23,16 @@ class AnthropicProvider:
 
     def __init__(self, model: str = "claude-opus-5-5", effort: str = "low",
                  max_tokens: int = 64000, client: anthropic.Anthropic | None = None,
-                 fallbacks: bool = True):
+                 fallbacks: bool = True, api_key: str | None = None):
         self.model = model
         self.effort = effort
         self.max_tokens = max_tokens
         self.fallbacks = fallbacks
-        self.client = client or anthropic.Anthropic()
+        if client is None:
+            from ..config import read_secret
+            key = api_key or read_secret("ANTHROPIC_API_KEY") or None   # also ANTHROPIC_API_KEY_FILE
+            client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
+        self.client = client
 
     def count_tokens(self, system: str, context: str, work: str) -> int:
         """Free endpoint; used for the pre-job cost estimate."""

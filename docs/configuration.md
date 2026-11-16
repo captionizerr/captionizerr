@@ -1,11 +1,11 @@
 # Configuration
 
-Environment variables (prefix `CAPTIONIZERR_`) set the defaults. Values saved in the web UI override them and are stored in `config/captionizerr.db`. **Secrets (keys, passwords) can only be set in the environment** and are never shown in the UI.
+Environment variables (prefix `CAPTIONIZERR_`) set the defaults. **Every secret also accepts a `_FILE` variant** (`ANTHROPIC_API_KEY_FILE`, `CAPTIONIZERR_WEBHOOK_KEY_FILE`, `…_SONARR_KEY_FILE`, …) pointing to a file, e.g. a compose secret under `/run/secrets/`; it wins over the plain variable. Values saved in the web UI override them and are stored in `config/captionizerr.db`. **Secrets (keys, passwords) can only be set in the environment** and are never shown in the UI.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | | Anthropic key (no prefix) |
-| `WEBHOOK_KEY` | | Shared secret for `/api/hooks/*` and the JSON API (`?apikey=` or `X-Api-Key`) |
+| `WEBHOOK_KEY` | | Shared secret for `/api/hooks/*` and the JSON API: `X-Api-Key` header, HTTP Basic password (any user), or `?apikey=` |
 | `UI_PASSWORD` / `UI_USER` | empty / `admin` | HTTP Basic login for the web UI; empty = no login |
 | `DATA_DIR` | `/config` | Database, notes, cache, history |
 | `LIBRARY_ROOTS` | `/downloads` | `;`-separated; only videos under these are processed |
