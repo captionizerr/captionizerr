@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job.id }} · Captionizerr{% endblock %}
+{% block content %}
+<p class="small"><a href="/">← Dashboard</a></p>
+<h1>{{ job.title }}</h1>
+<p class="sub"><span class="pill {{ job.state }}">{{ state_label.get(job.state, job.state) }}</span> · {{ job.lang|upper }} · from {{ job.source }}</p>
+<div class="grid">
+  <div class="card"><h2>Result</h2><p>{{ job.detail or '—' }}</p>
+    {% if job.output_path %}<p class="small muted">Wrote</p><p class="mono" style="word-break:break-all">{{ job.output_path }}</p>
+      {% if job.output_path.endswith(('.srt', '.ass')) %}<p><a class="btn" href="/edit?{{ {'path': job.video_path, 'lang': job.lang, 'key': job.series_key or '', 'back': '/jobs/' ~ job.id}|urlencode }}">Open in editor</a></p>{% endif %}{% endif %}
+    {% if job.state in ('failed','needs_review','no_source','paused_budget') %}<form method="post" action="/jobs/{{ job.id }}/retry"><button class="primary">Retry</button></form>{% endif %}
+  </div>
+  <div class="card"><h2>Cost</h2><div class="big">${{ '%.4f'|format(job.cost_usd) }}</div>
+    <table class="small"><tbody>
+      <tr><td>Input tokens</td><td class="num">{{ usage.get('input_tokens', 0) }}</td></tr>
+      <tr><td>Output tokens</td><td class="num">{{ usage.get('output_tokens', 0) }}</td></tr>
+      <tr><td>Cache reads</td><td class="num">{{ usage.get('cache_read_tokens', 0) }}</td></tr>
+      <tr><td>Cache writes</td><td class="num">{{ usage.get('cache_write_tokens', 0) }}</td></tr>
+    </tbody></table>
+  </div>
+  <div class="card"><h2>File</h2><p class="mono" style="word-break:break-all">{{ job.video_path }}</p>
+    <p class="small muted">Created {{ fmt_time(job.created) }} · updated {{ fmt_time(job.updated) }}{% if job.series_key %} · series notes key <span class="mono">{{ job.series_key }}</span>{% endif %}</p></div>
+</div>
+{% endblock %}

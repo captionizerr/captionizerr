@@ -1,0 +1,41 @@
+[project]
+name = "captionizerr"
+version = "0.1.0"
+description = "LLM subtitle translation for the *arr stack: timed to the file, faithful in tone."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+  "anthropic>=2.8,<3",
+  "httpx>=0.27",
+  "pysubs2>=1.9,<2",
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "jinja2>=3.1",
+  "python-multipart>=0.0.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/captionizerr/captionizerr"
+Issues = "https://github.com/captionizerr/captionizerr/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+captionizerr = "captionizerr.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+captionizerr = ["web/templates/*.html", "web/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+pythonpath = ["src"]

@@ -1,0 +1,24 @@
+<svg viewBox="0 0 1774 887" xmlns="http://www.w3.org/2000/svg" width="1774" height="887">
+  <title>CCRR geometric monogram — white and black variants</title>
+  <desc>Two editable monochromatic versions on a transparent canvas. Each monogram contains two C letters above two R letters.</desc>
+  <g id="white-monogram" fill="#ffffff">
+    <g id="white-top-row">
+      <path id="white-c-left" d="M443 127H288C195 127 120 202 120 295C120 388 195 464 288 464H344C410 464 443 440 443 378V365H290C251 365 220 334 220 295C220 256 251 223 290 223H443Z" />
+      <path id="white-c-right" d="M757 127H599C506 127 430 202 430 295C430 388 506 464 599 464H757V365H600C561 365 530 334 530 295C530 256 561 223 600 223H757Z" />
+    </g>
+    <g id="white-bottom-row" fill-rule="evenodd">
+      <path id="white-r-left" d="M126 464H329C398 464 444 509 444 577C444 627 418 664 371 682L447 781H335L256 686H220V781H126ZM220 550V609H323C342 609 355 597 355 579C355 562 342 550 323 550Z" />
+      <path id="white-r-right" d="M445 781V562C445 497 479 464 545 464H644C713 464 760 510 760 578C760 627 734 664 680 682L765 781H647L565 686H536V781ZM536 550V609H635C654 609 666 597 666 579C666 562 654 550 635 550Z" />
+    </g>
+  </g>
+  <g id="black-monogram" fill="#000000" transform="translate(887 0)">
+    <g id="black-top-row">
+      <path id="black-c-left" d="M443 127H288C195 127 120 202 120 295C120 388 195 464 288 464H344C410 464 443 440 443 378V365H290C251 365 220 334 220 295C220 256 251 223 290 223H443Z" />
+      <path id="black-c-right" d="M757 127H599C506 127 430 202 430 295C430 388 506 464 599 464H757V365H600C561 365 530 334 530 295C530 256 561 223 600 223H757Z" />
+    </g>
+    <g id="black-bottom-row" fill-rule="evenodd">
+      <path id="black-r-left" d="M126 464H329C398 464 444 509 444 577C444 627 418 664 371 682L447 781H335L256 686H220V781H126ZM220 550V609H323C342 609 355 597 355 579C355 562 342 550 323 550Z" />
+      <path id="black-r-right" d="M445 781V562C445 497 479 464 545 464H644C713 464 760 510 760 578C760 627 734 664 680 682L765 781H647L565 686H536V781ZM536 550V609H635C654 609 666 597 666 579C666 562 654 550 635 550Z" />
+    </g>
+  </g>
+</svg>

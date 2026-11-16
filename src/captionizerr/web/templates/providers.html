@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}AI providers · Captionizerr<script>
+document.getElementById('oll-find').addEventListener('click', async () => {
+  const hint = document.getElementById('oll-hint'), sel = document.getElementById('oll-model');
+  hint.textContent = 'Asking Ollama…';
+  try {
+    const r = await fetch('/providers/ollama/models', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url: document.getElementById('oll-url').value})});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    if (!j.models.length) { hint.textContent = 'Ollama answered but has no models. Run: ollama pull qwen3:32b'; return; }
+    const cur = sel.value; sel.replaceChildren();
+    for (const m of j.models) { const o = document.createElement('option'); o.value = m.name;
+      o.textContent = `${m.name} · ${m.params || '?'} · ${m.size_gb} GB`; o.selected = m.name === cur; sel.append(o); }
+    hint.textContent = `${j.models.length} model(s) found.`;
+  } catch (e) { hint.textContent = 'Could not reach Ollama: ' + e.message; }
+});
+</script>
+{% endblock %}
+{% block content %}
+<h1>AI providers</h1>
+<p class="sub">Keys live in the environment file on the server, never here. One provider translates at a time.</p>
+<div class="grid">
+  <div class="card"><h2>Anthropic {% if v.provider == 'anthropic' %}<span class="pill done">In use</span>{% endif %} <span class="pill {{ 'done' if secrets['Anthropic API key'] else 'failed' }}">{{ 'Key configured' if secrets['Anthropic API key'] else 'No key' }}</span></h2>
+    <p class="small muted">Reference provider: whole-episode translation, prompt caching, refusal fallback, and the Batch API for backlog at half price. The test uses the free token-counting endpoint.</p>
+    <div class="actions"><form method="post" action="/providers/test" class="inline"><input type="hidden" name="which" value="anthropic"><button class="primary">Test connection</button></form>
+    {% if v.provider != 'anthropic' %}<form method="post" action="/providers/use" class="inline"><input type="hidden" name="provider" value="anthropic"><button>Use Anthropic</button></form>{% endif %}</div></div>
+  <div class="card"><h2>Local model (Ollama) {% if v.provider == 'ollama' %}<span class="pill done">In use</span>{% endif %} <span class="pill">Free</span></h2>
+    <p class="small muted">Runs on your own hardware: nothing leaves the network and nothing is billed. Slower, and translation quality depends heavily on model size; 27–32B models are the useful minimum for natural dialogue, smaller ones are rough. Episodes go in chunks that fit the context window.</p>
+    <form method="post" action="/providers/ollama" id="oll">
+      <div class="fields">
+        <label class="f">Ollama address <input type="url" name="ollama_url" id="oll-url" value="{{ v.ollama_url }}" placeholder="http://ollama:11434"><span class="h">Where <span class="mono">ollama serve</span> listens. Set OLLAMA_HOST=0.0.0.0 on that machine so the Pi can reach it.</span></label>
+        <label class="f">Model <select name="ollama_model" id="oll-model">{% if v.ollama_model %}<option selected>{{ v.ollama_model }}</option>{% else %}<option value="">Find models first</option>{% endif %}</select>
+          <span class="h" id="oll-hint">Lists what is installed there (<span class="mono">ollama pull qwen3:32b</span> to add one).</span></label>
+        <label class="f">Context window, tokens <select name="ollama_num_ctx">{% for n in (8192, 16384, 32768, 65536) %}<option value="{{ n }}" {{ 'selected' if n == v.ollama_num_ctx }}>{{ n // 1024 }}k{{ ' (recommended)' if n == 16384 }}</option>{% endfor %}</select><span class="h">Bigger = larger chunks and better context, but more memory.</span></label>
+      </div>
+      <div class="actions"><button type="button" id="oll-find">Find models</button>
+        <button class="primary" name="provider" value="ollama">Save and use</button><button name="provider" value="{{ v.provider }}">Save only</button>
+        <button formaction="/providers/test" name="which" value="ollama">Test (one tiny request)</button></div>
+    </form></div>
+  <div class="card"><h2>OpenAI-compatible {% if v.provider == 'openai' %}<span class="pill done">In use</span>{% endif %} <span class="pill {{ 'done' if secrets['OpenAI-compatible API key'] else '' }}">{{ 'Key configured' if secrets['OpenAI-compatible API key'] else 'No key (fine for local servers)' }}</span></h2>
+    <p class="small muted">OpenAI, OpenRouter, DeepSeek, vLLM, LM Studio, Ollama: anything that serves <span class="mono">/chat/completions</span>. No Batch API, so backlog runs at full price. Long episodes go in chunks sized to the output limit. Small local models translate noticeably worse than the Anthropic models.</p>
+    <form method="post" action="/providers/save">
+      <div class="fields">
+        <label class="f">Base URL <input type="url" name="openai_base_url" value="{{ v.openai_base_url }}" placeholder="https://api.openai.com/v1"></label>
+        <label class="f">Model <input type="text" name="openai_model" value="{{ v.openai_model }}" placeholder="deepseek-chat · qwen3:32b"></label>
+        <label class="f">Input price, $ per 1M tokens <input type="number" name="openai_price_in" min="0" step="0.01" value="{{ v.openai_price_in }}"></label>
+        <label class="f">Output price, $ per 1M tokens <input type="number" name="openai_price_out" min="0" step="0.01" value="{{ v.openai_price_out }}"><span class="h">Used for the budget. 0 for local models.</span></label>
+        <label class="f">Max output tokens <input type="number" name="openai_max_output" min="1000" max="200000" step="1000" value="{{ v.openai_max_output }}"></label>
+      </div>
+      <div class="actions"><button class="primary" name="provider" value="openai">Save and use</button><button name="provider" value="{{ v.provider }}">Save only</button>
+        <button formaction="/providers/test" name="which" value="openai">Test (one tiny request)</button></div>
+    </form></div>
+</div>
+<div class="card tw"><h2>Anthropic models</h2>
+  <table>
+    <thead><tr><th>Model</th><th class="num">Input, $/1M</th><th class="num">Output, $/1M</th><th class="num">Typical episode*</th><th></th></tr></thead>
+    <tbody>{% for m in models %}<tr><td class="mono">{{ m.id }}</td><td class="num">{{ '%.2f'|format(m.in) }}</td><td class="num">{{ '%.2f'|format(m.out) }}</td><td class="num">${{ '%.2f'|format(m.ep) }}</td><td>{% if m.default %}<span class="pill done">In use</span>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="small muted">* About 16k input and 12k output tokens, as measured on Northwind at low effort. Higher effort adds thinking tokens (medium cost about twice as much). Change the model in Settings.</p>
+</div>
+<div class="card"><h2>Secrets</h2>
+  <table class="small"><tbody>{% for k, ok in secrets.items() %}<tr><td>{{ k }}</td><td class="{{ 'yes' if ok else 'no' }}">{{ 'configured' if ok else 'missing' }}</td></tr>{% endfor %}</tbody></table>
+</div>
+<script>
+document.getElementById('oll-find').addEventListener('click', async () => {
+  const hint = document.getElementById('oll-hint'), sel = document.getElementById('oll-model');
+  hint.textContent = 'Asking Ollama…';
+  try {
+    const r = await fetch('/providers/ollama/models', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url: document.getElementById('oll-url').value})});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    if (!j.models.length) { hint.textContent = 'Ollama answered but has no models. Run: ollama pull qwen3:32b'; return; }
+    const cur = sel.value; sel.replaceChildren();
+    for (const m of j.models) { const o = document.createElement('option'); o.value = m.name;
+      o.textContent = `${m.name} · ${m.params || '?'} · ${m.size_gb} GB`; o.selected = m.name === cur; sel.append(o); }
+    hint.textContent = `${j.models.length} model(s) found.`;
+  } catch (e) { hint.textContent = 'Could not reach Ollama: ' + e.message; }
+});
+</script>
+{% endblock %}

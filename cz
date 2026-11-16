@@ -1,0 +1,5 @@
+#!/bin/sh
+# Dev wrapper: runs the CLI from src/ without relying on .pth files
+# (macOS can re-flag .pth files as hidden, which Python then skips).
+here=$(cd "$(dirname "$0")" && pwd)
+PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" exec "$here/.venv/bin/python" -m captionizerr.cli "$@"

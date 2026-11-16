@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ ser.title }} · Captionizerr{% endblock %}
+{% block content %}
+<p class="small"><a href="/library">← Library</a></p>
+<h1>{{ ser.title }}</h1>
+<p class="sub">{{ ser.files }} episodes on disk · languages {{ langs|join(', ') }} · {{ 'automatic on import' if override.enabled else 'automatic translation off' }}</p>
+
+<form method="post" action="/library/translate" class="card tw" id="eps">
+  <input type="hidden" name="back" value="/library/series/{{ ser.id }}">
+  <input type="hidden" name="series_key" value="{{ key }}">
+  <input type="hidden" name="title" value="{{ ser.title }}">
+  {% for season, eps in seasons.items() %}
+  <h2 style="margin-top:{{ '0' if loop.first else '18px' }}">Season {{ season }}
+    <button type="button" class="small" data-season="{{ season }}">Select untranslated</button></h2>
+  <table>
+    <thead><tr><th></th><th>Ep</th><th>Title</th>{% for l in langs %}<th>{{ l }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for e in eps %}
+      <tr>
+        <td>{% if e.missing %}<input type="checkbox" name="path" value="{{ e.path }}" data-s="{{ season }}" id="e{{ season }}-{{ e.episode }}" aria-label="Select S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}">
+            <input type="hidden" name="label:{{ e.path }}" value="S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}">{% endif %}</td>
+        <td class="mono"><label for="e{{ season }}-{{ e.episode }}">{{ '%02d'|format(e.episode) }}</label></td>
+        <td>{{ e.title }}</td>
+        {% for l in langs %}<td class="{{ 'yes' if e.status[l] else 'no' }}">{% if e.status[l] %}<a href="/edit?{{ {'path': e.path, 'lang': l, 'key': key, 'back': '/library/series/' ~ ser.id}|urlencode }}" title="Edit the {{ l }} translation" aria-label="Edit {{ l }} translation of episode {{ e.episode }}">✓</a>{% else %}–{% endif %}</td>{% endfor %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+  <div class="actions"><button class="primary" id="go">Translate selected</button><button name="mode" value="batch" title="Half price through the Batch API; results within 24 hours">Add to backlog (½ price)</button><span class="small muted" id="est">Select episodes to see an estimate (about ${{ '%.2f'|format(avg) }} per episode and language).</span></div>
+</form>
+
+<form method="post" action="/library/series/{{ ser.id }}/settings" class="card" id="settings">
+  <h2>Series settings</h2>
+  {% if note %}<div class="flash ok" role="status">{{ note }}</div>{% endif %}
+  <input type="hidden" name="title" value="{{ ser.title }}">
+  <div class="fields">
+    <label class="f"><span><input type="checkbox" name="enabled" value="1" {{ 'checked' if override.enabled }}> Translate new imports automatically</span><span class="h">Off: webhooks for this series are ignored; you can still translate by hand.</span></label>
+    <label class="f">Languages <input type="text" name="langs" value="{{ override.langs|join(', ') }}" placeholder="{{ settings.languages|join(', ') }} (global default)"><span class="h">Comma-separated ISO codes. Empty uses the global setting.</span></label>
+    <label class="f">Tone for swearing <select name="tone"><option value="">Global ({{ settings.tone }})</option>{% for t in tones %}<option value="{{ t }}" {{ 'selected' if override.tone==t }}>{{ t }}</option>{% endfor %}</select></label>
+  </div>
+  <label class="f" style="margin-top:14px">Series notes <span class="h">Synopsis, names and how to render them, who uses formal or informal "you". Sent with every episode of this series; cached, so it costs little.</span>
+    <textarea name="context" placeholder="# {{ ser.title }}&#10;Short synopsis, main characters, glossary…">{{ context }}</textarea></label>
+  <div class="actions"><button class="primary">Save series settings</button>
+    <button formaction="/library/series/{{ ser.id }}/notes" formnovalidate title="Reads the series overview and one episode, about $0.05–0.15. The first run can take a minute while the English track is extracted.">Draft notes with AI</button>
+    {% if corrections %}<button formaction="/library/series/{{ ser.id }}/learn" formnovalidate title="Turns your edits in the editor into notes">Learn from {{ corrections }} correction{{ 's' if corrections > 1 }}</button>{% endif %}
+    {% if proposed %}<a class="btn" href="/library/series/{{ ser.id }}">Discard draft</a>{% endif %}
+  </div>
+  <p class="small muted">Click ✓ in the table to open that episode in the editor. New series get draft notes automatically on their first translation{{ '' if settings.auto_notes else ' (turned off)' }}.</p>
+</form>
+<script>
+const avg = {{ avg }}, nlang = {{ langs|length }};
+const est = document.getElementById('est'), form = document.getElementById('eps');
+function upd(){ const n = form.querySelectorAll('input[name=path]:checked').length;
+  est.textContent = n ? `${n} episode(s) × ${nlang} language(s) ≈ $${(n*nlang*avg).toFixed(2)}` : `Select episodes to see an estimate (about $${avg.toFixed(2)} per episode and language).`; }
+form.addEventListener('change', upd);
+document.querySelectorAll('button[data-season]').forEach(b => b.addEventListener('click', () => {
+  form.querySelectorAll(`input[data-s="${b.dataset.season}"]`).forEach(c => c.checked = true); upd(); }));
+form.addEventListener('submit', e => { const n = form.querySelectorAll('input[name=path]:checked').length;
+  const half = e.submitter && e.submitter.value === 'batch', cost = (n*nlang*avg*(half ? 0.5 : 1)).toFixed(2);
+  if (n && !confirm(half ? `Add ${n} episode(s) to the backlog for about $${cost}? Results arrive within 24 hours.`
+                         : `Translate ${n} episode(s) for about $${cost}?`)) e.preventDefault(); });
+</script>
+{% endblock %}

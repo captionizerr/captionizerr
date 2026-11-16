@@ -1,0 +1,23 @@
+# Example: Captionizerr next to Sonarr/Radarr. Mount the media library at the SAME path
+# your *arr apps use, so the paths in their webhooks resolve here too
+# (otherwise set CAPTIONIZERR_PATH_MAP). Captionizerr only ever creates
+# `<video>.captionizerr.<lang>.srt|ass` files next to your videos.
+services:
+  captionizerr:
+    image: ghcr.io/captionizerr/captionizerr:latest
+    container_name: captionizerr
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Etc/UTC
+      - PUID=1000                 # informational: the image runs as uid 1000; make the library writable for it
+    ports:
+      - "8095:8095"
+    volumes:
+      - ./config:/config          # database, settings, series notes, cache, editor history
+      - /path/to/media:/data/media
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

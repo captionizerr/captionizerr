@@ -1,0 +1,18 @@
+name: Bug report
+description: Something went wrong
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Version, provider and model
+      placeholder: "0.1.0, anthropic claude-opus-5-5"
+  - type: textarea
+    attributes:
+      label: Logs and job detail
+      description: "From `docker logs captionizerr` and the job page. Remove API keys and anything private. Please don't attach copyrighted subtitle files."
+      render: text

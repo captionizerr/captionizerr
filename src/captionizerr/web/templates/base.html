@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>{% block title %}Captionizerr{% endblock %}</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta name="theme-color" content="#14171c">
+<style>
+:root{
+  --bg:#f3f4f6; --surface:#ffffff; --fg:#14171c; --muted:#5d6572; --line:#dfe2e8; --ink:#14171c;
+  --accent:#9a6400; --accent-fill:#f5c94a; --accent-soft:#fdf3d6;
+  --ok:#1f7a4d; --ok-soft:#e2f3ea; --bad:#b4232a; --bad-soft:#fbe7e8; --warn:#8a5a00; --warn-soft:#fbf0d8;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Inter,Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0e1014; --surface:#171a20; --fg:#e8ebf0; --muted:#9ba3b1; --line:#2a2f38; --ink:#0a0b0e;
+  --accent:#f2c14e; --accent-fill:#f5c94a; --accent-soft:#2b2412;
+  --ok:#5fd39a; --ok-soft:#11261b; --bad:#ff8a8f; --bad-soft:#2d1416; --warn:#f2b45a; --warn-soft:#2a1f0e; color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 var(--sans)}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px))}
+header.top{background:var(--ink);color:#fff}
+header.top .wrap{display:flex;align-items:center;gap:20px;min-height:56px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff;font-weight:650;font-size:16px;letter-spacing:.01em}
+.brand svg{width:28px;height:28px;color:#fff}
+nav.main{display:flex;gap:2px;flex-wrap:wrap}
+nav.main a{color:#c9ced8;text-decoration:none;padding:8px 12px;border-radius:7px;font-weight:500}
+nav.main a:hover{color:#fff;background:#ffffff14}
+nav.main a.on{color:#14171c;background:var(--accent-fill)}
+.ver{margin-left:auto;color:#8c94a3;font:12px var(--mono)}
+main{padding-block:24px 64px}
+h1{font-size:22px;margin:0 0 4px} h2{font-size:16px;margin:0 0 10px}
+.sub{color:var(--muted);margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;min-width:0}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.flash{border-radius:8px;padding:10px 14px;margin-bottom:16px;border:1px solid}
+.flash.ok{background:var(--ok-soft);color:var(--ok);border-color:currentColor}
+.flash.warn{background:var(--warn-soft);color:var(--warn);border-color:currentColor}
+.tw{overflow-x:auto} table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+tr:last-child td{border-bottom:0}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.muted{color:var(--muted)} .small{font-size:12.5px} .mono{font-family:var(--mono);font-size:12.5px}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap;background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.pill.done{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.pill.failed,.pill.needs_review{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.pill.batched,.pill.waiting_source{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.pill.paused_budget,.pill.running{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.yes{color:var(--ok);font-weight:700} .no{color:var(--muted)}
+.bar{height:10px;background:var(--line);border-radius:99px;overflow:hidden;margin:10px 0 6px}
+.bar span{display:block;height:100%;background:var(--accent-fill)}
+.big{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums}
+button,.btn{font:600 13.5px var(--sans);padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer;text-decoration:none;display:inline-block}
+button.primary,.btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#14171c}
+button.small{padding:4px 10px;font-size:12.5px}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+form.inline{display:inline}
+label.f{display:grid;gap:4px;font-weight:600;font-size:13px}
+label.f span.h{font-weight:400;color:var(--muted);font-size:12.5px}
+input[type=text],input[type=number],input[type=url],select,textarea{font:14px var(--sans);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%}
+textarea{font-family:var(--mono);font-size:12.5px;min-height:220px;resize:vertical}
+.fields{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:12.5px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);text-decoration:none;color:var(--muted)}
+.chip.on{border-color:var(--accent);color:var(--fg);background:var(--accent-soft)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="/">{% include "_mark.html" %}Captionizerr</a>
+  <nav class="main" aria-label="Main">
+    <a href="/" class="{{ 'on' if nav=='dashboard' or nav=='job' }}">Dashboard</a>
+    <a href="/library" class="{{ 'on' if nav in ('library','series','edit') }}">Library</a>
+    <a href="/settings" class="{{ 'on' if nav=='settings' }}">Settings</a>
+    <a href="/providers" class="{{ 'on' if nav=='providers' }}">AI providers</a>
+  </nav>
+  <span class="ver">v{{ version }}</span>
+</div></header>
+<main class="wrap">
+{% if msg %}<div class="flash {{ lvl }}" role="status">{{ msg }}</div>{% endif %}
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

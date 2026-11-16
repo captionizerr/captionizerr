@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ fname }} · Captionizerr{% endblock %}
+{% block content %}
+<style>
+.bar-top{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line);margin-bottom:12px}
+.bar-top input[type=search]{flex:1 1 180px;min-width:0;font:14px var(--sans);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 10px}
+.bar-top .status{font-size:12.5px;color:var(--muted);flex-basis:100%}
+.rows{display:grid;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row.dirty{background:var(--accent-soft)}
+.row .meta{font:12px var(--mono);color:var(--muted);display:flex;gap:8px;align-items:center;margin-bottom:4px}
+.row .src{white-space:pre-wrap;font-size:13.5px}
+.row .src.none{color:var(--muted);font-style:italic}
+.row textarea{min-height:0;height:auto;font:14px/1.45 var(--sans);padding:6px 8px;resize:vertical}
+.row .tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.flag{font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:99px;background:var(--bad-soft);color:var(--bad)}
+.row .rt{display:none;gap:6px;margin-top:6px}
+.row .rt.open{display:flex}
+.row .rt input{flex:1;min-width:0;font:13px var(--sans);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:5px 8px}
+.hidden{display:none}
+@media (max-width:700px){.row{grid-template-columns:1fr;gap:6px}}
+</style>
+<p class="small"><a href="{{ back }}">← Back</a></p>
+<h1>Edit translation</h1>
+<p class="sub mono" style="word-break:break-all">{{ fname }}</p>
+{% if not has_source %}<div class="flash warn">The video has no English text track, so only the translation is shown.</div>{% endif %}
+
+<div class="bar-top">
+  <div class="chips" role="group" aria-label="Show">
+    <button type="button" class="chip on" data-f="all">All <span id="n-all"></span></button>
+    <button type="button" class="chip" data-f="flag">Flagged <span id="n-flag"></span></button>
+    <button type="button" class="chip" data-f="dirty">Changed <span id="n-dirty"></span></button>
+  </div>
+  <input type="search" id="q" placeholder="Search either language" aria-label="Search">
+  <button class="primary" id="save" disabled>Save</button>
+  <span class="status" id="status" role="status">Limits: {{ profile.max_line }} characters per line, {{ profile.max_lines }} lines, {{ profile.target_cps|int }} characters per second. ↻ asks the model again for one line (a cent or two). Cmd/Ctrl+S saves.</span>
+</div>
+<div class="rows" id="rows"></div>
+
+<script>
+const ROWS = {{ rows|tojson }};
+const CTX = {path: {{ path|tojson }}, lang: {{ lang|tojson }}, key: {{ key|tojson }}};
+let token = {{ token|tojson }};
+const LIM = {line: {{ profile.max_line }}, lines: {{ profile.max_lines }}, cps: {{ profile.target_cps }}};
+const dirty = new Map(), flagged = new Map();
+let filter = 'all';
+
+const plain = t => t.replace(/<[^>]+>/g, '').replace(/\{\\[^}]*\}/g, '');
+function flags(tr, d, src) {
+  if (!tr.trim()) return src && /[a-z]/i.test(src) ? ['empty'] : [];
+  const lines = plain(tr).split('\n'), out = [];
+  if (lines.length > LIM.lines) out.push(lines.length + ' lines');
+  const w = Math.max(...lines.map(l => l.length));
+  if (w > LIM.line) out.push(w + ' chars');
+  const cps = lines.join('').length / Math.max(d, 0.001);
+  if (cps > LIM.cps) out.push(Math.round(cps) + ' cps');
+  return out;
+}
+const ts = ms => { const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function fit(ta) { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; }
+
+const box = document.getElementById('rows'), status = document.getElementById('status'), saveBtn = document.getElementById('save');
+const view = new Map();
+for (const r of ROWS) {
+  const row = el('div', 'row'); row.id = 'r' + r.id;
+  const left = el('div'), right = el('div');
+  const meta = el('div', 'meta'); meta.append(el('span', null, '#' + r.id), el('span', null, ts(r.t)), el('span', null, r.d.toFixed(1) + 's'));
+  if (r.extra) meta.append(el('span', 'pill', 'no source cue'));
+  left.append(meta, el('div', 'src' + (r.src ? '' : ' none'), r.src || '(no matching source line)'));
+  const ta = el('textarea'); ta.value = r.tr; ta.rows = Math.max(1, r.tr.split('\n').length);
+  ta.setAttribute('aria-label', 'Translation of line ' + r.id); ta.lang = CTX.lang;
+  const tools = el('div', 'tools'), fl = el('span');
+  const rtBtn = el('button', 'small', '↻ Re-translate'); rtBtn.type = 'button';
+  const undo = el('button', 'small hidden', 'Undo'); undo.type = 'button';
+  const cost = el('span', 'small muted');
+  tools.append(fl, rtBtn, undo, cost);
+  const rt = el('div', 'rt'), ins = el('input'); ins.placeholder = 'Optional instruction, e.g. "more casual", "he is talking to his boss"';
+  ins.setAttribute('aria-label', 'Instruction for line ' + r.id);
+  const go = el('button', 'small primary', 'Ask'); go.type = 'button';
+  rt.append(ins, go);
+  right.append(ta, tools, rt);
+  row.append(left, right); box.append(row);
+  const v = {r, row, ta, fl, undo, cost, rt, ins, go};
+  view.set(r.id, v);
+  ta.addEventListener('input', () => { fit(ta); changed(v); });
+  rtBtn.addEventListener('click', () => { rt.classList.toggle('open'); if (rt.classList.contains('open')) ins.focus(); });
+  ins.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); retranslate(v); } });
+  go.addEventListener('click', () => retranslate(v));
+  undo.addEventListener('click', () => { ta.value = r.tr; fit(ta); changed(v); });
+  paintFlags(v);
+}
+requestAnimationFrame(() => view.forEach(v => fit(v.ta)));
+
+function paintFlags(v) {
+  const f = flags(v.ta.value, v.r.d, v.r.src);
+  v.fl.replaceChildren(...f.map(x => el('span', 'flag', x)));
+  f.length ? flagged.set(v.r.id, 1) : flagged.delete(v.r.id);
+}
+function changed(v) {
+  const isDirty = v.ta.value.trim() !== v.r.tr.trim();
+  isDirty ? dirty.set(v.r.id, v.ta.value) : dirty.delete(v.r.id);
+  v.row.classList.toggle('dirty', isDirty); v.undo.classList.toggle('hidden', !isDirty);
+  paintFlags(v); counts();
+}
+function counts() {
+  document.getElementById('n-all').textContent = ROWS.length;
+  document.getElementById('n-flag').textContent = flagged.size;
+  document.getElementById('n-dirty').textContent = dirty.size;
+  saveBtn.disabled = !dirty.size; saveBtn.textContent = dirty.size ? `Save ${dirty.size} change${dirty.size > 1 ? 's' : ''}` : 'Save';
+}
+function applyFilter() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  view.forEach(v => {
+    let show = filter === 'all' || (filter === 'flag' && flagged.has(v.r.id)) || (filter === 'dirty' && dirty.has(v.r.id));
+    if (show && q) show = (v.r.src + '\n' + v.ta.value).toLowerCase().includes(q);
+    v.row.classList.toggle('hidden', !show);
+  });
+}
+document.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => {
+  filter = b.dataset.f; document.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b)); applyFilter(); }));
+document.getElementById('q').addEventListener('input', applyFilter);
+counts();
+
+async function post(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...CTX, ...body})});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || j.detail || ('HTTP ' + r.status));
+  return j;
+}
+async function retranslate(v) {
+  v.go.disabled = true; v.go.textContent = 'Asking…';
+  try {
+    const j = await post('/api/edit/retranslate', {id: v.r.id, instruction: v.ins.value, edits: Object.fromEntries(dirty)});
+    v.ta.value = j.text; fit(v.ta); changed(v);
+    v.cost.textContent = '$' + j.cost.toFixed(3);
+    v.rt.classList.remove('open');
+  } catch (e) { status.textContent = 'Re-translate failed: ' + e.message; }
+  v.go.disabled = false; v.go.textContent = 'Ask';
+}
+async function save() {
+  if (!dirty.size) return;
+  saveBtn.disabled = true; status.textContent = 'Saving…';
+  try {
+    const j = await post('/api/edit/save', {token, edits: Object.fromEntries(dirty)});
+    token = j.token;
+    for (const id of [...dirty.keys()]) { const v = view.get(id); v.r.tr = v.ta.value.trim(); changed(v); }
+    status.textContent = `Saved ${j.saved} line${j.saved === 1 ? '' : 's'}. The previous version is kept in history, and Jellyfin was told to rescan.`;
+  } catch (e) { status.textContent = 'Not saved: ' + e.message; }
+  counts();
+}
+saveBtn.addEventListener('click', save);
+document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); } });
+window.addEventListener('beforeunload', e => { if (dirty.size) { e.preventDefault(); e.returnValue = ''; } });
+</script>
+{% endblock %}

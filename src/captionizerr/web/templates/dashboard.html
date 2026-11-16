@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Captionizerr{% endblock %}
+{% block content %}
+{% if not settings.languages %}<div class="flash warn" role="status"><b>Almost ready:</b> choose the languages to translate into in <a href="/settings">Settings</a>. Until then imports are not translated.</div>{% endif %}
+<h1>Dashboard</h1>
+<p class="sub">Translations into {{ settings.languages|map('upper')|join(', ') }} with {{ settings.model }} ({{ settings.effort }} effort). New Sonarr and Radarr imports are translated automatically.</p>
+<div class="grid">
+  <div class="card">
+    <h2>Budget, {{ month }}</h2>
+    <div class="big">${{ '%.2f'|format(spent) }} <span class="muted small">of ${{ '%.2f'|format(cap) }}</span></div>
+    <div class="bar" role="progressbar" aria-valuenow="{{ pct|round|int }}" aria-valuemin="0" aria-valuemax="100"><span style="width:{{ pct }}%"></span></div>
+    <div class="small muted">About {{ ((cap - spent) / avg)|round(0, 'floor')|int if avg else '–' }} more episodes this month at ${{ '%.2f'|format(avg) }} each.</div>
+    {% if counts.get('paused_budget') %}
+    <form method="post" action="/jobs/resume" class="actions"><button class="primary">Resume {{ counts.get('paused_budget') }} paused job(s)</button><span class="small muted">Raise the cap in Settings first.</span></form>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>Jobs</h2>
+    <div class="chips">
+      <a class="chip {{ 'on' if not filter_state }}" href="/">All</a>
+      {% for st in states if counts.get(st) %}<a class="chip {{ 'on' if filter_state==st }}" href="/?state={{ st }}">{{ state_label[st] }} · {{ counts.get(st) }}</a>{% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <h2>Spend by month</h2>
+    {% if months %}<table><tbody>{% for m, total, n in months %}<tr><td>{{ m }}</td><td class="num">{{ n }} job{{ "s" if n != 1 }}</td><td class="num">${{ '%.2f'|format(total) }}</td></tr>{% endfor %}</tbody></table>
+    {% else %}<p class="muted small">No spend yet.</p>{% endif %}
+  </div>
+</div>
+<div class="card tw">
+  <table>
+    <thead><tr><th>#</th><th>Updated</th><th>Title</th><th>Lang</th><th>State</th><th class="num">Cost</th><th></th></tr></thead>
+    <tbody>
+    {% for j in jobs %}
+      <tr>
+        <td class="mono"><a href="/jobs/{{ j.id }}">{{ j.id }}</a></td>
+        <td class="small muted">{{ fmt_time(j.updated) }}</td>
+        <td><a href="/jobs/{{ j.id }}">{{ j.title }}</a><div class="small muted">{{ j.detail }}</div></td>
+        <td class="mono">{{ j.lang }}</td>
+        <td><span class="pill {{ j.state }}">{{ state_label.get(j.state, j.state) }}</span></td>
+        <td class="num">${{ '%.2f'|format(j.cost_usd) }}</td>
+        <td>{% if j.state in ('failed','needs_review','no_source') %}<form method="post" action="/jobs/{{ j.id }}/retry" class="inline"><button class="small">Retry</button></form>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted">No jobs yet. They appear when Sonarr or Radarr imports something, or when you translate from the Library.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<script>setTimeout(()=>{ if(!document.querySelector(':focus')) location.reload() }, 30000)</script>
+{% endblock %}

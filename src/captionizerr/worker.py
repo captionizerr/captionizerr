@@ -1,0 +1,402 @@
+"""Background worker.
+
+One thread, one loop. Each pass:
+- runs the periodic ticks: send collected backlog jobs as one Message Batch, poll open batches,
+  re-check jobs waiting for Bazarr, and the daily housekeeping;
+- takes the next live job (batch-mode jobs too when the provider has no Batch API) and runs it.
+
+A job is prepared the same way for live and batch: pick a source subtitle, build the profile
+and series context, check the budget. Live jobs then call the model; batch jobs send the same
+main request in a batch and finish when the result comes back (missing cues and fixes run live).
+"""
+from __future__ import annotations
+
+import logging
+import random
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+from . import bible, cues as cuesmod
+from . import maintenance, media
+from .arr import Arr, radarr_id_for_path, sonarr_ids_for_path
+from .bazarr import Bazarr, BazarrError
+from .config import Settings
+from .jellyfin import media_updated
+from .notify import ntfy
+from .pipeline import cues_to_send, first_request, translate
+from .pricing import cost as price_of
+from .pricing import price
+from .profile import Profile
+from .prompt import context_block, episode_block, system_prompt
+from .store import Job, Store, month_now
+from .writer import WriteRefused, target_path, write_next_to
+
+log = logging.getLogger("captionizerr.worker")
+
+TICK_BATCH_POLL = 300        # seconds between batch status checks
+TICK_WAITING = 300           # between checks for a Bazarr download
+SIDECAR_SETTLE = 120         # a new sidecar must be this old (Bazarr syncs right after download)
+MAINTENANCE_EVERY = 86400
+
+
+@dataclass
+class Prepared:
+    video: Path
+    doc: cuesmod.SubtitleDoc
+    profile: Profile
+    context: str | None
+    source: media.Source
+
+
+class Worker:
+    def __init__(self, settings: Settings, store: Store, provider_factory):
+        self.s, self.store, self.provider_factory = settings, store, provider_factory
+        self._wake = threading.Event()
+        self._stop = threading.Event()
+        self.current: Job | None = None
+        self._last: dict[str, float] = {}
+
+    # ------------------------------------------------------------ lifecycle
+    def start(self):
+        t = threading.Thread(target=self._loop, name="captionizerr-worker", daemon=True)
+        t.start()
+        return t
+
+    def wake(self):
+        self._wake.set()
+
+    def stop(self):
+        self._stop.set()
+        self._wake.set()
+
+    def batch_capable(self) -> bool:
+        try:
+            return bool(getattr(self.provider_factory(), "supports_batch", False))
+        except Exception:
+            return False
+
+    def _loop(self):
+        last_month = month_now()
+        while not self._stop.is_set():
+            if month_now() != last_month:          # new month: budget resets, resume paused jobs
+                last_month = month_now()
+                n = self.store.resume_paused()
+                if n:
+                    log.info("new month: resumed %d paused jobs", n)
+            self.ticks()
+            job = self.store.next_queued(include_batch=not self.batch_capable())
+            if job is None:
+                self._wake.wait(timeout=30)
+                self._wake.clear()
+                continue
+            self.current = job
+            try:
+                self.process(job)
+            except Exception as e:                  # never let one job kill the worker
+                log.exception("job %s crashed", job.id)
+                self.store.finish(job.id, "failed", f"{type(e).__name__}: {e}")
+            finally:
+                self.current = None
+
+    def ticks(self, force: bool = False):
+        now = time.time()
+        for name, fn, every in (("batch_submit", self.submit_batch, 0), ("batch_poll", self.poll_batches, TICK_BATCH_POLL),
+                                ("waiting", self.check_waiting, TICK_WAITING), ("maintenance", self.maybe_maintain, 0)):
+            if not force and every and now - self._last.get(name, 0) < every:
+                continue
+            self._last[name] = now
+            try:
+                fn()
+            except Exception:
+                log.exception("tick %s failed", name)
+
+    # ------------------------------------------------------------ preparing a job
+    def context_for(self, series_key: str | None) -> str | None:
+        if not series_key:
+            return None
+        f = self.s.context_dir / f"{series_key}.md"
+        return f.read_text(encoding="utf-8") if f.is_file() else None
+
+    def prepare(self, job: Job, provider) -> Prepared | None:
+        """Everything before the model call. Returns None when the job was finished or parked here."""
+        s, store = self.s, self.store
+        video = s.map_path(job.video_path)
+        if not s.in_library(video):
+            store.finish(job.id, "failed", f"refused: not a video under the library roots {s.library_roots}")
+            return None
+        if not video.is_file():
+            store.finish(job.id, "failed", f"video not found: {video}")
+            return None
+        if target_path(video, job.lang, "srt").exists() or target_path(video, job.lang, "ass").exists():
+            store.finish(job.id, "skipped", "translation already exists")
+            return None
+        src = media.find_source(video, s.cache_dir, s.source_langs, job.lang, s.any_source)
+        if src and src.origin == "sidecar" and time.time() - src.path.stat().st_mtime < SIDECAR_SETTLE:
+            store.set_waiting(job.id, f"{src.path.name} is brand new; waiting for Bazarr's sync to finish")
+            return None
+        if not src:
+            self.ask_bazarr(job, video)
+            return None
+        doc = cuesmod.load(src.path)
+        if not cues_to_send(doc):
+            store.finish(job.id, "no_source", f"the {src.lang} subtitle ({src.origin}) has no dialogue lines")
+            return None
+        ser = store.series(job.series_key) if job.series_key else None
+        profile = s.profile(job.lang, src.lang, (ser or {}).get("tone"))
+        context = self.context_for(job.series_key)
+        if context is None and s.auto_notes and job.series_key:
+            context = self.make_notes(job, doc, provider)
+        return Prepared(video, doc, profile, context, src)
+
+    def estimate(self, provider, doc, profile, context) -> float:
+        """Free token count of the real prompt, plus output at the calibrated ratio (0.85x episode input)."""
+        episode = episode_block(cues_to_send(doc))
+        try:
+            n_in = provider.count_tokens(system_prompt(profile), context_block(context), episode)
+            n_ep = provider.count_tokens("", "", episode)
+        except Exception:
+            n_in = n_ep = int(len(episode) / 2.5)
+        p_in, p_out, _ = price(provider.model) or (4.0, 20.0, 0.2)
+        return (n_in * 1.15 * p_in + n_ep * 0.85 * 1.1 * p_out) / 1_000_000
+
+    def over_budget(self, job: Job, est: float, reserved: float = 0.0) -> bool:
+        s, store = self.s, self.store
+        spent = store.spent()
+        if spent + reserved + est <= s.monthly_cap_usd:
+            return False
+        store.set_state(job.id, "paused_budget",
+                        f"estimate ${est:.2f} would exceed the ${s.monthly_cap_usd:.2f} cap (spent ${spent:.2f})")
+        if store.alert_once("cap"):
+            ntfy(s.ntfy_url, s.ntfy_topic, "Captionizerr: monthly budget reached",
+                 f"Spent ${spent:.2f} of ${s.monthly_cap_usd:.2f}. New translations are paused until the cap is "
+                 f"raised or the month resets. Paused: {job.title}.", priority=4, tags=["warning"],
+                 click=s.public_url or None)
+        return True
+
+    # ------------------------------------------------------------ live job
+    def process(self, job: Job):
+        provider = self.provider_factory()
+        prep = self.prepare(job, provider)
+        if prep is None:
+            return
+        est = self.estimate(provider, prep.doc, prep.profile, prep.context)
+        if self.over_budget(job, est):
+            return
+        self.store.set_state(job.id, "running", f"translating {len(prep.doc.cues)} cues from {prep.source.lang} "
+                                                f"({prep.source.origin}), est ${est:.2f}")
+        res = translate(prep.doc, prep.profile, provider, series_context=prep.context, title=job.title,
+                        log=lambda m: log.info("job %s %s", job.id, m.strip()))
+        self.finalize(job, prep, res)
+
+    def finalize(self, job: Job, prep: Prepared, res):
+        s, store = self.s, self.store
+        out_text = cuesmod.render(prep.doc, res.translations)
+        try:
+            out = write_next_to(prep.video, job.lang, prep.doc.fmt, out_text)
+        except WriteRefused as e:
+            store.finish(job.id, "skipped", str(e), cost_usd=res.cost() or 0, usage=vars(res.usage))
+            return
+        state = "needs_review" if res.needs_review else "done"
+        cost = res.cost() or 0.0
+        via = " via Batch" if any(st.batch for st in res.steps) else ""
+        detail = (f"{len(res.translations)} cues from {prep.source.lang} ({prep.source.origin}){via}; "
+                  f"{len(res.issues_initial)} flagged, {len(res.issues_final)} open")
+        store.finish(job.id, state, detail, str(out), cost, vars(res.usage))
+        media_updated(s.jellyfin_url, s.jellyfin_key, [job.video_path], s.jellyfin_path_map)
+        self.notify_done(job, prep.doc, res, state, cost)
+        total = store.spent()
+        if total >= s.alert_at * s.monthly_cap_usd and store.alert_once("warn"):
+            ntfy(s.ntfy_url, s.ntfy_topic, "Captionizerr: budget at "
+                 f"{100 * total / s.monthly_cap_usd:.0f}%", f"Spent ${total:.2f} of ${s.monthly_cap_usd:.2f} this month.",
+                 priority=3, tags=["moneybag"])
+
+    # ------------------------------------------------------------ backlog via the Batch API
+    def submit_batch(self):
+        """Send every collected backlog job as one batch once the newest is `batch_min_wait_s` old
+        (so a season ticked in the UI goes out together and shares the cached series context)."""
+        jobs = self.store.queued_batch()
+        if not jobs or not self.batch_capable():
+            return
+        if time.time() - max(j.created for j in jobs) < self.s.batch_min_wait_s:
+            return
+        provider = self.provider_factory()
+        items, sent, reserved = [], [], 0.0
+        for job in jobs:
+            if not self.store.claim(job.id, "queued", "running", "preparing for batch"):
+                continue
+            try:
+                prep = self.prepare(job, provider)
+                if prep is None:
+                    continue
+                est = self.estimate(provider, prep.doc, prep.profile, prep.context) / 2
+                if self.over_budget(job, est, reserved):
+                    continue
+                reserved += est
+                items.append((str(job.id), provider.batch_params(*first_request(prep.doc, prep.profile,
+                                                                                prep.context, job.title))))
+                sent.append((job, est))
+            except Exception as e:
+                log.exception("batch prep failed for job %s", job.id)
+                self.store.finish(job.id, "failed", f"{type(e).__name__}: {e}")
+        if not items:
+            return
+        try:
+            bid = provider.submit_batch(items)
+        except Exception as e:
+            for job, _ in sent:
+                self.store.finish(job.id, "failed", f"batch submit failed: {e}")
+            return
+        for job, est in sent:
+            self.store.set_batched(job.id, bid, f"in batch {bid} (est ${est:.2f}); results within 24 h")
+        log.info("submitted batch %s with %d jobs, est $%.2f", bid, len(sent), reserved)
+
+    def poll_batches(self):
+        groups = self.store.batched()
+        if not groups:
+            return
+        provider = self.provider_factory()
+        for bid, jobs in groups.items():
+            try:
+                if provider.batch_status(bid) != "ended":
+                    continue
+                results = provider.batch_results(bid)
+            except Exception as e:
+                log.warning("batch %s: %s", bid, e)
+                continue
+            for job in jobs:
+                self.finish_batched(job, results.get(str(job.id)), provider)
+
+    def finish_batched(self, job: Job, result, provider):
+        store = self.store
+        if not store.claim(job.id, "batched", "running", "batch result arrived; checking and fixing"):
+            return
+        if result is None or isinstance(result, Exception):
+            # refusals (no fallback inside a batch), expiry and errors: run it live instead
+            store.to_live(job.id, f"batch: {result or 'no result'}; retrying live")
+            self.wake()
+            return
+        try:
+            prep = self.prepare(job, provider)
+            if prep is None:
+                return
+            res = translate(prep.doc, prep.profile, provider, series_context=prep.context, title=job.title,
+                            log=lambda m: log.info("job %s %s", job.id, m.strip()), first=result)
+            self.finalize(job, prep, res)
+        except Exception as e:
+            log.exception("batch job %s failed", job.id)
+            store.finish(job.id, "failed", f"{type(e).__name__}: {e}",
+                         cost_usd=price_of(result.model, result.usage, True) or 0)
+
+    # ------------------------------------------------------------ Bazarr fallback
+    def ask_bazarr(self, job: Job, video: Path):
+        s, store = self.s, self.store
+        want = ", ".join(s.source_langs)
+        bz = Bazarr(s.bazarr_url, s.bazarr_key)
+        if not bz.configured:
+            store.finish(job.id, "no_source", f"no text subtitle in {want} (or any other language) in or next to the "
+                                              "file; set up Bazarr to fetch one")
+            return
+        if job.wait_since:
+            if time.time() - job.wait_since > s.bazarr_wait_hours * 3600:
+                store.finish(job.id, "no_source", f"Bazarr found no {want} subtitle within {s.bazarr_wait_hours:g} h")
+            else:
+                store.set_waiting(job.id, f"waiting for Bazarr to download a {want} subtitle")
+            return
+        try:
+            asked = self._bazarr_request(bz, job)
+        except Exception as e:
+            store.finish(job.id, "no_source", f"no source subtitle, and asking Bazarr failed: {e}")
+            return
+        if not asked:
+            store.finish(job.id, "no_source", "no source subtitle; Sonarr/Radarr don't know this file, so Bazarr can't search")
+            return
+        store.set_waiting(job.id, f"asked Bazarr for a {want} subtitle; checking every few minutes")
+
+    def _bazarr_request(self, bz: Bazarr, job: Job) -> bool:
+        s = self.s
+        langs = [l for l in s.source_langs if l != job.lang][:2] or ["en"]
+        if s.sonarr_url and s.sonarr_key and job.source != "radarr":
+            ids = sonarr_ids_for_path(Arr(s.sonarr_url, s.sonarr_key), job.video_path)
+            if ids:
+                for l in langs:
+                    bz.request_episode(ids[0], ids[1], l)
+                return True
+        if s.radarr_url and s.radarr_key and job.source != "sonarr":
+            rid = radarr_id_for_path(Arr(s.radarr_url, s.radarr_key), job.video_path)
+            if rid:
+                for l in langs:
+                    bz.request_movie(rid, l)
+                return True
+        return False
+
+    def check_waiting(self):
+        s = self.s
+        for job in self.store.waiting():
+            video = s.map_path(job.video_path)
+            if not video.is_file():
+                self.store.finish(job.id, "failed", f"video not found: {video}")
+                continue
+            side = [p for p, l, _ in media.sidecars(video) if l != job.lang]
+            settled = [p for p in side if time.time() - p.stat().st_mtime >= SIDECAR_SETTLE]
+            if settled:
+                self.store.claim(job.id, "waiting_source", "queued", f"source arrived: {settled[0].name}")
+                self.wake()
+            elif job.wait_since and time.time() - job.wait_since > s.bazarr_wait_hours * 3600:
+                self.store.finish(job.id, "no_source",
+                                  f"Bazarr found no {', '.join(s.source_langs)} subtitle within {s.bazarr_wait_hours:g} h")
+
+    # ------------------------------------------------------------ housekeeping
+    def maybe_maintain(self):
+        last = (self.store.load_settings().get("_maintenance_last") or {}).get("at", 0)
+        if time.time() - last >= MAINTENANCE_EVERY:
+            maintenance.run(self.s, self.store)
+
+    # ------------------------------------------------------------ series notes
+    def make_notes(self, job: Job, doc, provider) -> str | None:
+        """First episode of a series without notes: draft them from the overview + this episode."""
+        s, store = self.s, self.store
+        if store.spent() + 0.5 > s.monthly_cap_usd:
+            return None
+        title = (store.series(job.series_key) or {}).get("title") or job.title.rsplit(" S", 1)[0]
+        overview = ""
+        if s.sonarr_url and s.sonarr_key:
+            try:
+                from .arr import sonarr_series
+                from .hooks import slug
+                for x in sonarr_series(Arr(s.sonarr_url, s.sonarr_key)):
+                    if slug(x["title"]) == job.series_key:
+                        title, overview = x["title"], x["overview"]
+                        break
+            except Exception as e:                       # notes are a bonus, never block the job
+                log.warning("notes: Sonarr lookup failed: %s", e)
+        try:
+            text, res = bible.generate_notes(provider, title, overview, job.lang, doc.cues)
+        except Exception as e:
+            log.warning("notes: generation failed for %s: %s", job.series_key, e)
+            return None
+        if not text.strip():
+            return None
+        s.context_dir.mkdir(parents=True, exist_ok=True)
+        f = s.context_dir / f"{job.series_key}.md"
+        if f.exists():                                   # someone wrote notes meanwhile: theirs win
+            return f.read_text(encoding="utf-8")
+        f.write_text(text.strip() + "\n", encoding="utf-8")
+        store.record("notes", f"{title}: series notes drafted", job.video_path, job.lang, job.series_key,
+                     "auto-generated from the overview and this episode; edit them on the series page",
+                     price_of(res.model, res.usage) or 0.0, vars(res.usage))
+        return text
+
+    def notify_done(self, job: Job, doc, res, state: str, cost: float):
+        by = {c.index: c for c in doc.cues}
+        flagged = [i.index for i in res.issues_initial if res.translations.get(i.index)]
+        pool = [n for n, t in res.translations.items() if t and n in by and len(by[n].text) > 15]
+        pick = list(dict.fromkeys(flagged[:4] + random.sample(pool, min(10, len(pool)))))[:10]
+        lines = [f"• {by[n].text.replace(chr(10), ' ')}\n  → {res.translations[n].replace(chr(10), ' ')}" for n in sorted(pick)]
+        head = "needs review: " + "; ".join(f"#{i.index} {i.kind}" for i in res.issues_final[:5]) + "\n\n" \
+            if state == "needs_review" else ""
+        ntfy(self.s.ntfy_url, self.s.ntfy_topic,
+             f"Subtitles ({job.lang}) ready: {job.title}",
+             f"{head}${cost:.2f} · spot-check:\n\n" + "\n".join(lines),
+             priority=4 if state == "needs_review" else 2, tags=["speech_balloon"], click=self.s.public_url or None)
