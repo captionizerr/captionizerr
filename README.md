@@ -15,7 +15,7 @@ Because it translates the file's own track, the timing is exact for that release
 
 > **Status: 0.2, early but in daily use** on a real library. Expect rough edges. Issues and PRs are welcome.
 
-**Docs:** [Setup guide](docs/setup-guide.md) · [How it works](docs/architecture.md) (diagrams) · [Configuration](docs/configuration.md) · [Security](SECURITY.md)
+**Website:** [captionizerr.github.io/captionizerr](https://captionizerr.github.io/captionizerr/) · **Docs:** [Setup guide](docs/setup-guide.md) · [How it works](docs/architecture.md) (diagrams) · [Configuration](docs/configuration.md) · [Security](SECURITY.md)
 
 ## Features
 

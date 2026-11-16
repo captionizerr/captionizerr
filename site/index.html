@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Captionizerr: LLM subtitle translation for the *arr stack</title>
+<meta name="description" content="Captionizerr translates the subtitles that ship with your videos using an LLM: timed to the exact file, faithful in tone, automatic on every Sonarr and Radarr import.">
+<meta property="og:title" content="Captionizerr">
+<meta property="og:description" content="LLM subtitle translation for the *arr stack: timed to the file, faithful to the original.">
+<meta property="og:image" content="img/icon-512.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#14171c">
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --fg:#14171c; --muted:#5d6572; --line:#dfe2e8; --ink:#14171c;
+  --accent:#9a6400; --accent-fill:#f5c94a; --accent-soft:#fdf3d6; --ok:#1f7a4d; --ok-soft:#e2f3ea;
+  --bad:#b4232a; --bad-soft:#fbe7e8; --code:#0f1216; --code-fg:#e8ebf0;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; --sans:system-ui,-apple-system,"Segoe UI",Inter,Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e1014; --surface:#171a20; --fg:#e8ebf0; --muted:#9ba3b1; --line:#2a2f38; --ink:#0a0b0e;
+  --accent:#f2c14e; --accent-soft:#2b2412; --ok:#5fd39a; --ok-soft:#11261b; --bad:#ff8a8f; --bad-soft:#2d1416; --code:#0a0c10;
+  color-scheme:dark}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 var(--sans)}
+a{color:inherit} a:hover{color:var(--accent)}
+.wrap{max-width:1100px;margin:0 auto;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px))}
+header.top{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--ink) 92%,transparent);backdrop-filter:blur(8px);color:#fff}
+header.top .wrap{display:flex;align-items:center;gap:18px;min-height:58px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff;font-weight:700;font-size:17px}
+.brand svg{width:28px;height:28px}
+nav.main{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto}
+nav.main a{color:#c9ced8;text-decoration:none;padding:7px 10px;border-radius:7px;font-size:14px;font-weight:600}
+nav.main a:hover{color:#fff;background:#ffffff14}
+nav.main a.gh{color:#14171c;background:var(--accent-fill)}
+section{padding:72px 0;border-bottom:1px solid var(--line)}
+h1{font-size:clamp(32px,5vw,52px);line-height:1.1;margin:0 0 18px;letter-spacing:-.02em}
+h2{font-size:clamp(24px,3.2vw,32px);margin:0 0 8px;letter-spacing:-.01em}
+h3{font-size:18px;margin:0 0 6px}
+.lead{font-size:clamp(17px,2vw,20px);color:var(--muted);max-width:760px;margin:0 0 28px}
+.kicker{color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:13px;margin-bottom:8px}
+.hero{padding:88px 0 64px}
+.hero .mark{width:84px;height:84px;color:var(--fg);margin-bottom:22px}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:26px}
+.btn{display:inline-block;padding:12px 20px;border-radius:9px;font-weight:700;text-decoration:none;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#14171c}
+.btn:hover{color:inherit;filter:brightness(1.05)}
+.facts{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-size:13px;font-weight:600;padding:4px 11px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--surface)}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0}
+.card p{margin:0;color:var(--muted)}
+.card.problem h3{color:var(--bad)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td.bad{color:var(--bad)} td.good{color:var(--ok);font-weight:600}
+td .why{display:block;color:var(--muted);font-size:13.5px;font-weight:400;margin-top:4px}
+.mono{font-family:var(--mono);font-size:14px}
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;margin:18px 0;overflow-x:auto}
+.diagram pre.mermaid{visibility:hidden;height:0;margin:0;padding:0}
+.diagram .mermaid-out{text-align:center;min-width:0}
+.diagram .mermaid-out svg{max-width:100%;height:auto}
+.diagram figcaption{color:var(--muted);font-size:14px;margin-top:10px}
+.steps{counter-reset:s;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin:20px 0}
+.steps .card{position:relative;padding-top:44px}
+.steps .card::before{counter-increment:s;content:counter(s);position:absolute;top:14px;left:20px;width:24px;height:24px;border-radius:99px;background:var(--accent-fill);color:#14171c;font-weight:800;font-size:13px;display:grid;place-items:center}
+.shots{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(min(100%,480px),1fr))}
+.shots figure{margin:0}
+.shots img{width:100%;border-radius:10px;border:1px solid var(--line);display:block;cursor:zoom-in;background:#0e1014}
+.shots figcaption{font-size:14px;color:var(--muted);margin-top:8px}
+pre{background:var(--code);color:var(--code-fg);padding:16px 18px;border-radius:10px;overflow-x:auto;font:13.5px/1.55 var(--mono);margin:12px 0;position:relative}
+pre .c{color:#7d8696}
+.copy{position:absolute;top:8px;right:8px;font:600 12px var(--sans);padding:4px 10px;border-radius:6px;border:1px solid #333a45;background:#1d2129;color:#c9ced8;cursor:pointer}
+.features .card h3{display:flex;gap:8px;align-items:baseline}
+.two{display:grid;gap:24px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start}
+.check{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.check li{padding-left:26px;position:relative;color:var(--muted)} .check li b{color:var(--fg)}
+.check li::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:800}
+details{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-bottom:10px}
+details summary{cursor:pointer;font-weight:700}
+details p{color:var(--muted);margin:10px 0 0}
+.note{font-size:14px;color:var(--muted)}
+footer{padding:36px 0 56px;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between}
+dialog{border:0;padding:0;background:transparent;max-width:96vw}
+dialog img{max-width:96vw;max-height:92vh;border-radius:10px}
+dialog::backdrop{background:#000c}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media (max-width:640px){section{padding:52px 0} nav.main a:not(.gh){display:none}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="#top" aria-label="Captionizerr home">
+    <svg viewBox="92.5 104 700 700" aria-hidden="true"><g fill="currentColor"><path d="M443 127H288C195 127 120 202 120 295C120 388 195 464 288 464H344C410 464 443 440 443 378V365H290C251 365 220 334 220 295C220 256 251 223 290 223H443Z"/><path d="M757 127H599C506 127 430 202 430 295C430 388 506 464 599 464H757V365H600C561 365 530 334 530 295C530 256 561 223 600 223H757Z"/><g fill-rule="evenodd"><path d="M126 464H329C398 464 444 509 444 577C444 627 418 664 371 682L447 781H335L256 686H220V781H126ZM220 550V609H323C342 609 355 597 355 579C355 562 342 550 323 550Z"/><path d="M445 781V562C445 497 479 464 545 464H644C713 464 760 510 760 578C760 627 734 664 680 682L765 781H647L565 686H536V781ZM536 550V609H635C654 609 666 597 666 579C666 562 654 550 635 550Z"/></g></g></svg>
+    Captionizerr</a>
+  <nav class="main" aria-label="Sections">
+    <a href="#examples">Examples</a><a href="#how">How it works</a><a href="#tour">Tour</a><a href="#features">Features</a><a href="#start">Quick start</a><a href="#faq">FAQ</a>
+    <a class="gh" href="https://github.com/captionizerr/captionizerr">GitHub</a>
+  </nav>
+</div></header>
+
+<main id="top">
+<section class="hero"><div class="wrap">
+  <svg class="mark" viewBox="92.5 104 700 700" role="img" aria-label="Captionizerr logo"><g fill="currentColor"><path d="M443 127H288C195 127 120 202 120 295C120 388 195 464 288 464H344C410 464 443 440 443 378V365H290C251 365 220 334 220 295C220 256 251 223 290 223H443Z"/><path d="M757 127H599C506 127 430 202 430 295C430 388 506 464 599 464H757V365H600C561 365 530 334 530 295C530 256 561 223 600 223H757Z"/><g fill-rule="evenodd"><path d="M126 464H329C398 464 444 509 444 577C444 627 418 664 371 682L447 781H335L256 686H220V781H126ZM220 550V609H323C342 609 355 597 355 579C355 562 342 550 323 550Z"/><path d="M445 781V562C445 497 479 464 545 464H644C713 464 760 510 760 578C760 627 734 664 680 682L765 781H647L565 686H536V781ZM536 550V609H635C654 609 666 597 666 579C666 562 654 550 635 550Z"/></g></g></svg>
+  <h1>Subtitles in your language,<br>timed to your file.</h1>
+  <p class="lead">Captionizerr translates the subtitle track that ships with each video using an LLM, automatically on every Sonarr and Radarr import. The timing is exact for your release, and the translation keeps the original's voice: who speaks to whom, the jokes, the swearing, the songs.</p>
+  <div class="cta">
+    <a class="btn primary" href="#start">Get started in 5 minutes</a>
+    <a class="btn" href="https://github.com/captionizerr/captionizerr">View on GitHub</a>
+  </div>
+  <div class="facts">
+    <span class="pill">MIT licensed</span><span class="pill">Docker · amd64 + arm64</span><span class="pill">Sonarr · Radarr · Bazarr</span><span class="pill">Jellyfin · Emby · Plex</span><span class="pill">Anthropic · Ollama · OpenAI-compatible</span>
+  </div>
+</div></section>
+
+<section id="why"><div class="wrap">
+  <div class="kicker">Why</div>
+  <h2>Two common ways to get subtitles in your language, and where each falls short</h2>
+  <p class="lead">Captionizerr takes a third path: it translates the subtitle file that came with your video, with the whole episode in view.</p>
+  <div class="grid">
+    <div class="card problem"><h3>Downloaded subtitles drift</h3><p>Community subtitles are often timed to a different release or cut. They run seconds early or late, or don't exist in your language at all.</p></div>
+    <div class="card problem"><h3>Machine translation flattens</h3><p>Line-by-line translation can't know who's speaking. You get the wrong grammatical gender, the wrong "you", softened swearing, literal idioms, and songs turned into prose.</p></div>
+    <div class="card"><h3>Captionizerr: neither problem</h3><p>It starts from your video's own subtitle track, so the timing is exact. The model reads the whole episode at once, plus series notes on characters and names.</p></div>
+  </div>
+</div></section>
+
+<section id="examples"><div class="wrap">
+  <div class="kicker">Examples</div>
+  <h2>The same scene, translated two ways</h2>
+  <p class="lead">An original scene written for this page, translated English → Russian. Officer Linda Moss knocks on the door of a farmer she has never met, Dale Pruitt. Her partner Hank waits in the car.</p>
+  <div class="tw"><table>
+    <thead><tr><th>English source</th><th>Literal machine translation <span class="note">(illustrative)</span></th><th>Captionizerr <span class="note">(real output)</span></th></tr></thead>
+    <tbody>
+      <tr><td>Sorry, I was sure you'd be asleep by now.<br><span class="note">Linda, to the stranger</span></td>
+        <td class="bad">Извини, я был уверен, что ты уже спишь.<span class="why">Masculine "был уверен" for a woman; familiar "ты" to a stranger</span></td>
+        <td class="good">Простите, я была уверена, что вы уже спите.<span class="why">Feminine "была уверена", polite "вы": the model knows who's speaking to whom</span></td></tr>
+      <tr><td>Well, shit. That's a hell of a way to start a Monday.<br><span class="note">Dale</span></td>
+        <td class="bad">Ну, дерьмо. Это адский способ начать понедельник.<span class="why">Word-for-word calque; nobody talks like this</span></td>
+        <td class="good">Ну, твою мать. Чертовски хорошее начало понедельника.<span class="why">As strong as the original, in natural speech (or softened, if you choose)</span></td></tr>
+      <tr><td>Your nephew's car was found in the river this morning.</td>
+        <td class="bad">Машину твоего племянника нашли утром в реке.<span class="why">Drops back to "ты" mid-conversation</span></td>
+        <td class="good">Машину вашего племянника нашли утром в реке.<span class="why">Stays formal, consistently</span></td></tr>
+      <tr><td>Ricky? He's not a bad apple. He's the whole damn orchard.</td>
+        <td class="bad">Рикки? Он не плохое яблоко. Он весь чёртов сад.<span class="why">The idiom doesn't exist in Russian, so the joke dies</span></td>
+        <td class="good">Рикки? Он не паршивая овца. Он всё чёртово стадо.<span class="why">Adapted to the Russian idiom ("black sheep → the whole flock"), so the joke still lands</span></td></tr>
+      <tr><td><i>♪ Oh, the river's cold and the night is long / I'll keep you warm with an old sad song ♪</i></td>
+        <td class="bad"><i>♪ О, река холодная, и ночь длинная / Я согрею тебя старой грустной песней ♪</i><span class="why">Prose; the rhyme is gone</span></td>
+        <td class="good"><i>♪ Холодна река, ночь длинна, темна / Песней старой согрею тебя до дна ♪</i><span class="why">Rhymed verse in italics. Not perfect: "до дна" is a stretch; the editor's ↻ would offer another take</span></td></tr>
+      <tr><td>You coming or not, Hank?<br><span class="note">Linda, to her partner</span></td>
+        <td>Ты идёшь или нет, Хэнк?</td>
+        <td class="good">Ты идёшь или нет, Хэнк?<span class="why">Now "ты" is right: the series notes say Linda and Hank are on first-name terms</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">The right column is Captionizerr's actual output for this scene (Claude Opus 5.5, low effort, with the series notes, 0 flagged lines, under 1¢), unedited: the same file as in the editor screenshot below. The middle column illustrates typical errors of sentence-by-sentence translation and was not produced by a specific product.</p>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <div class="kicker">How it works</div>
+  <h2>From import to subtitle, without you</h2>
+  <div class="steps">
+    <div class="card"><h3>Sonarr imports an episode</h3><p>Its webhook tells Captionizerr right away, and Radarr does the same for films. You can also pick anything from the Library.</p></div>
+    <div class="card"><h3>Captionizerr translates</h3><p>It uses the video's own subtitle track, falling back to Bazarr when there is none. The whole episode goes in one request, then a validator checks every line.</p></div>
+    <div class="card"><h3>The track appears</h3><p><span class="mono">Episode.captionizerr.ru.srt</span> is written next to the video, and your media server rescans that folder.</p></div>
+  </div>
+
+  <figure class="diagram"><pre class="mermaid">
+flowchart TD
+    subgraph d0_Arr["Your *arr stack"]
+        d0_S[Sonarr]
+        d0_R[Radarr]
+        d0_B[Bazarr]
+    end
+    subgraph d0_CZ["Captionizerr"]
+        d0_W[Web UI + API]
+        d0_Q[Job queue]
+        d0_P[Translation pipeline]
+    end
+    d0_L[(Media library)]
+    d0_AI[[AI provider]]
+    d0_M[Jellyfin / Emby / Plex]
+    d0_S -->|webhook| d0_W
+    d0_R -->|webhook| d0_W
+    d0_W --> d0_Q --> d0_P
+    d0_P -->|reads track| d0_L
+    d0_P -->|no subtitle? ask| d0_B
+    d0_B -->|downloads + syncs| d0_L
+    d0_P <-->|translate| d0_AI
+    d0_P -->|writes .captionizerr.lang.srt| d0_L
+    d0_P -->|rescan| d0_M
+    style d0_P fill:#FF9900,color:#fff
+    style d0_L fill:#3B48CC,color:#fff
+  </pre><figcaption>The big picture. The only thing ever written into your library is Captionizerr's own subtitle file.</figcaption></figure>
+
+  <div class="two">
+    <figure class="diagram"><pre class="mermaid">
+flowchart TD
+    d1_A([Import webhook]) --> d1_C{Source subtitle?}
+    d1_C -->|Embedded text track| d1_E[Extract]
+    d1_C -->|File next to video| d1_F[Use it]
+    d1_C -->|None| d1_G[Ask Bazarr]
+    d1_G -->|file arrives| d1_C
+    d1_E --> d1_I{Budget OK?}
+    d1_F --> d1_I
+    d1_I -->|No| d1_J[[Pause + notify]]
+    d1_I -->|Yes| d1_K[Translate]
+    d1_K --> d1_M[Write + rescan]
+    style d1_K fill:#FF9900,color:#fff
+    style d1_J fill:#D13212,color:#fff
+    </pre><figcaption>One job: find a source, check the budget, translate.</figcaption></figure>
+    <figure class="diagram"><pre class="mermaid">
+flowchart TD
+    d2_A[Whole episode in one request] --> d2_E[Validator]
+    d2_E --> d2_F{Flagged lines?}
+    d2_F -->|Yes, up to 2 rounds| d2_G[Fix only those]
+    d2_G --> d2_E
+    d2_F -->|No| d2_H([Done])
+    d2_F -->|Still flagged| d2_I([Needs review])
+    style d2_A fill:#FF9900,color:#fff
+    </pre><figcaption>Quality loop: reading speed, line length, leftovers, merged lines, italics and tags.</figcaption></figure>
+  </div>
+
+  <div class="two">
+    <div class="card"><h3>Upgrades are re-timed, not re-translated</h3><p>When Sonarr replaces a WEB-DL with a Blu-ray, Captionizerr matches the previous translation line by line onto the new release, keeping your edits. Only new or changed lines go to the model, usually at $0.</p></div>
+    <div class="card"><h3>Backlog at half price</h3><p>Tick a whole season and choose <b>Add to backlog</b>. It goes out as one Anthropic Batch request at 50% of the price, usually back within the hour. Open batches count against your budget until they're paid.</p></div>
+  </div>
+</div></section>
+
+<section id="tour"><div class="wrap">
+  <div class="kicker">Tour</div>
+  <h2>A web UI that does the setup for you</h2>
+  <p class="lead">No config file needed. Keys, connections and webhooks are set up in the browser, and each connection has a Test button. Screenshots use demo data; click one to enlarge it.</p>
+  <div class="shots">
+    <figure><img src="img/dashboard.png" alt="Dashboard with needs-attention, in-progress and budget cards, and a list of translations" loading="lazy"><figcaption><b>Dashboard:</b> what needs attention, what's in progress, the budget, and every translation with an Edit button.</figcaption></figure>
+    <figure><img src="img/editor.png" alt="Side-by-side editor: English lines left, Russian translation right, with a re-translate button per line" loading="lazy"><figcaption><b>Editor:</b> source and translation side by side. ↻ re-translates one line, optionally with an instruction ("more casual").</figcaption></figure>
+    <figure><img src="img/wizard.png" alt="Setup wizard step: choose AI provider and enter API key" loading="lazy"><figcaption><b>Setup wizard:</b> provider, key and a free key test, in a few clicks.</figcaption></figure>
+    <figure><img src="img/connections.png" alt="Connections settings: Sonarr and Radarr with Test and Set up webhook buttons" loading="lazy"><figcaption><b>Connections:</b> <i>Set up webhook</i> adds Captionizerr's webhook to Sonarr/Radarr for you.</figcaption></figure>
+  </div>
+</div></section>
+
+<section id="features"><div class="wrap">
+  <div class="kicker">Features</div>
+  <h2>Everything in the box</h2>
+  <div class="grid features" style="margin-top:20px">
+    <div class="card"><h3>Automatic</h3><p>Webhooks on import, upgrade and rename. Choose per series whether it's translated, and into which languages.</p></div>
+    <div class="card"><h3>Any source language</h3><p>Embedded text track first, then a subtitle file next to the video, then Bazarr (download and sync). English can be a target too.</p></div>
+    <div class="card"><h3>SRT and ASS</h3><p>Anime-friendly: styles, signs, drawings and karaoke survive. Forced tracks (foreign-language scenes) get their own <span class="mono">.forced</span> file.</p></div>
+    <div class="card"><h3>Series notes</h3><p>A short "bible" drafted from the first episode: characters with gender and formality, a glossary and the tone. It keeps names consistent across episodes.</p></div>
+    <div class="card"><h3>Editor + learning</h3><p>Fix lines yourself or with ↻. "Learn from corrections" turns your edits into series notes.</p></div>
+    <div class="card"><h3>Cost control</h3><p>An estimate before every job, a monthly cap that pauses and notifies, and Batch at half price for the backlog.</p></div>
+    <div class="card"><h3>Your choice of AI</h3><p>Anthropic Claude (the quality reference), local models via Ollama (free and private), or any OpenAI-compatible API.</p></div>
+    <div class="card"><h3>Media servers</h3><p>Jellyfin, Emby and Plex are told to rescan as soon as a file is written.</p></div>
+    <div class="card"><h3>Share, opt-in</h3><p>After review, upload a translation to OpenSubtitles, always marked as an AI translation. Never automatic.</p></div>
+    <div class="card"><h3>Ops-ready</h3><p>Prometheus <span class="mono">/metrics</span>, ntfy spot-checks, daily housekeeping and a daily database snapshot.</p></div>
+    <div class="card"><h3>Measurable quality</h3><p><span class="mono">captionizerr eval</span> re-translates excerpts you approved and scores them, so prompt or model changes are measured, not guessed.</p></div>
+    <div class="card"><h3>Safe by design</h3><p>It only ever creates its own <span class="mono">*.captionizerr.*</span> files and never overwrites or deletes anything else.</p></div>
+  </div>
+</div></section>
+
+<section id="cost"><div class="wrap">
+  <div class="kicker">Cost and quality</div>
+  <h2>Cents per episode, measured</h2>
+  <div class="two" style="margin-top:20px">
+    <div class="tw"><table>
+      <thead><tr><th>Model</th><th>Per episode</th><th>Backlog (−50%)</th></tr></thead>
+      <tbody>
+        <tr><td>Claude Opus 5.5 <span class="note">(default)</span></td><td>~$0.31</td><td>~$0.16</td></tr>
+        <tr><td>Claude Sonnet 5.5</td><td>~$0.15</td><td>~$0.08</td></tr>
+        <tr><td>Claude Haiku 5.5</td><td>~$0.01</td><td>~$0.004</td></tr>
+        <tr><td>Ollama (local)</td><td>$0</td><td>n/a</td></tr>
+      </tbody></table></div>
+    <div class="card">
+      <h3>Opus vs a local 12B model</h3>
+      <p>13 excerpts, scored against translations a viewer approved (chrF, higher is better):</p>
+      <p style="margin-top:10px"><b style="color:var(--fg)">Claude Opus 5.5: 72.5</b> · 0 flagged lines · about 1 min<br><b style="color:var(--fg)">Gemma 3 12B (16 GB Mac): 50.8</b> · 2 flagged · 11.5 min</p>
+      <p style="margin-top:10px">The local model follows the plot, but keeps hearing-impaired tags, drops italics and misses context. Use 27B+ models for natural dialogue.</p>
+    </div>
+  </div>
+  <p class="note">A typical 45–60 minute episode is about 16k input and 12k output tokens. A film costs about twice an episode. Series notes cost $0.05–0.15 once per series.</p>
+</div></section>
+
+<section id="start"><div class="wrap">
+  <div class="kicker">Quick start</div>
+  <h2>Running in five minutes</h2>
+  <p class="lead">You need Docker and Sonarr and/or Radarr. Mount your media at the same path your *arr apps use.</p>
+  <pre><button class="copy" type="button">Copy</button>mkdir captionizerr &amp;&amp; cd captionizerr
+curl -LO https://raw.githubusercontent.com/captionizerr/captionizerr/main/deploy/docker-compose.yml
+<span class="c"># edit the media volume in docker-compose.yml, then:</span>
+docker compose up -d</pre>
+  <p>Open <span class="mono">http://&lt;host&gt;:8095</span>. The setup wizard walks you through it:</p>
+  <div class="steps">
+    <div class="card"><h3>Login</h3><p>Optional; recommended if others can reach the port.</p></div>
+    <div class="card"><h3>AI provider</h3><p>Paste an Anthropic key and press <i>Test key</i> (free), or pick a local Ollama model.</p></div>
+    <div class="card"><h3>Languages</h3><p>e.g. <span class="mono">de</span> or <span class="mono">ru, uk</span>, plus a monthly budget.</p></div>
+    <div class="card"><h3>Sonarr / Radarr</h3><p>Address and key, <i>Test</i>, then <i>Set up webhook</i>.</p></div>
+    <div class="card"><h3>Media server</h3><p>Jellyfin/Emby or Plex, and optionally Bazarr.</p></div>
+  </div>
+  <p>The image <span class="mono">ghcr.io/captionizerr/captionizerr</span> runs on amd64 and arm64 (a Raspberry Pi 4/5 is plenty). Full guide: <a href="https://github.com/captionizerr/captionizerr/blob/main/docs/setup-guide.md">setup guide</a> · <a href="https://github.com/captionizerr/captionizerr/blob/main/docs/configuration.md">configuration</a>.</p>
+</div></section>
+
+<section id="security"><div class="wrap">
+  <div class="kicker">Security and safety</div>
+  <h2>Your library and your keys stay yours</h2>
+  <div class="two" style="margin-top:20px">
+    <ul class="check">
+      <li><b>Narrow writer.</b> It only creates its own <span class="mono">*.captionizerr.&lt;lang&gt;.srt|ass</span> files, next to videos under your library roots. Nothing is ever overwritten or deleted.</li>
+      <li><b>Write-only keys.</b> Keys typed in the UI are stored with mode 600, never in the database, and never shown again. Keys from files or the environment take precedence.</li>
+      <li><b>Hashed password.</b> The UI password is a salted PBKDF2 hash. Ten failed attempts lock an address out for 15 minutes.</li>
+    </ul>
+    <ul class="check">
+      <li><b>Authenticated webhooks.</b> They use HTTP Basic, so the key never goes in a URL.</li>
+      <li><b>Cross-site protection.</b> Requests from other tabs are refused, input paths are confined to the library, and redirects stay local.</li>
+      <li><b>Non-root image.</b> It runs as uid 1000 and contains no secrets. Secrets as files (<span class="mono">*_FILE</span>) keep keys out of <span class="mono">docker inspect</span>.</li>
+    </ul>
+  </div>
+  <p class="note" style="margin-top:16px">Made for home networks: put it behind HTTPS and a login before exposing it anywhere. See <a href="https://github.com/captionizerr/captionizerr/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <div class="kicker">FAQ</div>
+  <h2>Questions</h2>
+  <details><summary>Will it overwrite my existing subtitles?</summary><p>No. It only writes files named <span class="mono">&lt;video&gt;.captionizerr.&lt;lang&gt;.srt</span>, with exclusive create, and never touches other files. If its own translation already exists, the job is skipped. The editor can replace only Captionizerr's own files, and backs up the previous version first.</p></details>
+  <details><summary>What if a video only has image subtitles (PGS/VobSub)?</summary><p>Image subtitles aren't OCR'd. With Bazarr connected, Captionizerr asks Bazarr to download and sync a text subtitle, waits for it, then translates. Without Bazarr the job ends as "No source".</p></details>
+  <details><summary>Which languages work?</summary><p>Any language the model knows, in both directions; English can be a target too, e.g. from a Japanese track. Built-in style rules exist for Russian, Ukrainian, German, Spanish and English. Chinese, Japanese and Korean targets get shorter lines and a slower reading speed. The untranslated-text check is strongest for Cyrillic targets; for other languages it catches lines left identical to the source.</p></details>
+  <details><summary>Can I avoid the cloud entirely?</summary><p>Yes. Choose <b>Local model (Ollama)</b> in Settings. Nothing leaves your network and nothing is billed. Quality depends heavily on model size; see the measurements above.</p></details>
+  <details><summary>How do I stop it spending money?</summary><p>Set a monthly cap. Jobs pause at the cap and you get a notification. Every job is estimated before it runs (token counting is free), and you can turn automatic translation off per series. Batch requests already in flight count against the cap.</p></details>
+  <details><summary>Does it work with Plex and Emby?</summary><p>Jellyfin is tested daily. Emby uses the same rescan API and Plex has its own folder refresh; both are implemented but not yet tested against real servers. Feedback is welcome.</p></details>
+  <details><summary>Can I share translations?</summary><p>Optionally, one file at a time, to OpenSubtitles, after you've reviewed it, and always flagged as an AI translation. Translations are derivative works of the dialogue, so check the site's rules first.</p></details>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <span>Captionizerr · MIT licensed · not affiliated with Sonarr, Radarr, Bazarr, Jellyfin, Plex, Anthropic or Ollama</span>
+  <span><a href="https://github.com/captionizerr/captionizerr">GitHub</a> · <a href="https://github.com/captionizerr/captionizerr/blob/main/docs/architecture.md">Architecture</a> · <a href="https://github.com/captionizerr/captionizerr/releases">Releases</a> · <a href="https://github.com/captionizerr/captionizerr/issues">Issues</a></span>
+</div></footer>
+
+<dialog id="zoom" aria-label="Screenshot"><img alt=""></dialog>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "neutral", securityLevel: "strict" });
+// Render each diagram with its own explicit id. Separate mermaid.run() calls restart its id
+// counter, so two diagrams end up sharing an id and the second draws into the first.
+let i = 0;
+for (const el of document.querySelectorAll("pre.mermaid")) {
+  const { svg } = await mermaid.render(`cz-diagram-${i++}`, el.textContent);
+  const fig = document.createElement("div");
+  fig.className = "mermaid-out";
+  fig.innerHTML = svg;
+  el.replaceWith(fig);
+}
+</script>
+<script>
+document.querySelectorAll("pre .copy").forEach(b => b.addEventListener("click", async () => {
+  const text = b.parentElement.innerText.replace(/^Copy\n?/, "").replace(/^Copied\n?/, "");
+  try { await navigator.clipboard.writeText(text); b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy", 1500); } catch {}
+}));
+const dlg = document.getElementById("zoom");
+document.querySelectorAll(".shots img").forEach(img => img.addEventListener("click", () => {
+  dlg.querySelector("img").src = img.src; dlg.querySelector("img").alt = img.alt; dlg.showModal(); }));
+dlg.addEventListener("click", () => dlg.close());
+</script>
+</body>
+</html>
