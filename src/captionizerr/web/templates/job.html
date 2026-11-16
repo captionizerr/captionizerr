@@ -11,6 +11,7 @@
     {% if job.state in ('failed','needs_review','no_source','paused_budget') %}<form method="post" action="/jobs/{{ job.id }}/retry"><button class="primary">Retry</button></form>{% endif %}
   </div>
   <div class="card"><h2>Cost</h2><div class="big">${{ '%.4f'|format(job.cost_usd) }}</div>
+    <p class="small muted">Model: <span class="mono">{{ job.model or 'not recorded' }}</span></p>
     <table class="small"><tbody>
       <tr><td>Input tokens</td><td class="num">{{ usage.get('input_tokens', 0) }}</td></tr>
       <tr><td>Output tokens</td><td class="num">{{ usage.get('output_tokens', 0) }}</td></tr>

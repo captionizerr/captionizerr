@@ -386,3 +386,15 @@ def test_translate_back_param_is_sanitised(ui):
     _, c, _ = ui
     r = c.post("/library/translate", data={"back": "/\\evil.com"}, headers=SAME, follow_redirects=False)
     assert r.headers["location"].startswith("/library") or r.headers["location"].startswith("/?")
+
+
+def test_translations_list_shows_the_model(ui):
+    app, c, _ = ui
+    st = app.state.store
+    j = st.enqueue("manual", "Show S01E01", "/x/a.mkv", "ru", None)
+    st.finish(j.id, "done", "ok", "", 0.31, {}, "claude-opus-5-5")
+    k = st.enqueue("manual", "Show S01E02", "/x/b.mkv", "ru", None)
+    st.finish(k.id, "done", "ok", "", 0.008, {}, "gpt-6-luna")
+    page = c.get("/").text
+    assert "<th>Model</th>" in page and ">opus-5-5<" in page and ">gpt-6-luna<" in page
+    assert "gpt-6-luna" in c.get(f"/jobs/{k.id}").text

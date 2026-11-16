@@ -35,20 +35,21 @@
   </div>
   {% if view == 'other' %}<p class="small muted">Line re-translations in the editor, series notes and forced-track translations.</p>{% endif %}
   <table>
-    <thead><tr><th>When</th><th>Title</th><th>Lang</th><th>State</th><th class="num">Cost</th><th></th></tr></thead>
+    <thead><tr><th>When</th><th>Title</th><th>Lang</th><th>Model</th><th>State</th><th class="num">Cost</th><th></th></tr></thead>
     <tbody>
     {% for j in jobs %}
       <tr>
         <td class="small muted" style="white-space:nowrap">{{ fmt_time(j.updated) }}</td>
         <td><a href="/jobs/{{ j.id }}">{{ j.title }}</a><div class="small muted">{{ j.detail }}</div></td>
         <td class="mono">{{ j.lang }}</td>
+        <td class="mono small" title="{{ j.model }}">{{ (j.model|replace('claude-', '')) or '–' }}</td>
         <td><span class="pill {{ j.state }}">{{ state_label.get(j.state, j.state) }}</span></td>
         <td class="num">${{ '%.2f'|format(j.cost_usd) }}</td>
         <td style="white-space:nowrap">{% if j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
           {% if j.state in ('failed','needs_review','no_source','waiting_source') %}<form method="post" action="/jobs/{{ j.id }}/retry" class="inline"><button class="small">Retry</button></form>{% endif %}</td>
       </tr>
     {% else %}
-      <tr><td colspan="6" class="muted">{% if view %}Nothing here.{% else %}No translations yet. They appear when Sonarr or Radarr imports something, or when you translate from the <a href="/library">Library</a>.{% endif %}</td></tr>
+      <tr><td colspan="7" class="muted">{% if view %}Nothing here.{% else %}No translations yet. They appear when Sonarr or Radarr imports something, or when you translate from the <a href="/library">Library</a>.{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
