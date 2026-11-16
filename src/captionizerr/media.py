@@ -130,6 +130,10 @@ def find_forced(video: Path, cache_dir: Path, prefer: list[str], target: str) ->
     dialogue in an English show). Embedded forced text track first, then `<video>.<lang>.forced.srt`."""
     prefer = [l for l in (langs.norm(x) for x in prefer) if l and l != langs.norm(target)]
     streams, _ = probe(video)
+    def is_forced(x):
+        return x.forced or "forced" in (x.title or "").lower()
+    if any(is_forced(x) and langs.same(x.language, target) for x in streams):
+        return None                     # the release already ships a forced track in the target language
     for lang in prefer:
         cands = [x for x in streams if x.is_text and x.forced and langs.same(x.language, lang)]
         if not cands:   # some releases only say so in the title
