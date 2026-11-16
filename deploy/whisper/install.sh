@@ -1,6 +1,7 @@
 #!/bin/sh
 # Install the Whisper service on a Debian 12/13 host or LXC (run as root, from this folder).
-# Usage: sh install.sh [allowed client IP ...]   e.g. sh install.sh 192.0.2.10
+# Usage: sh install.sh [allowed client IP ...]   e.g. sh install.sh 192.0.2.10 192.0.2.20
+# (the CaptionizeRR/Bazarr host, and your Prometheus if it scrapes /metrics)
 set -eu
 apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv ffmpeg nftables >/dev/null

@@ -8,7 +8,7 @@ that CaptionizeRR and Bazarr's Whisper provider use, so any of those servers wor
 ## Install (Debian 12/13, a VM or an LXC)
 
 ```sh
-sh install.sh 192.0.2.10      # the IPs allowed to reach port 9000 (your CaptionizeRR / Bazarr host)
+sh install.sh 192.0.2.10 192.0.2.20   # IPs allowed to reach port 9000: CaptionizeRR/Bazarr host, Prometheus
 ```
 
 It installs ffmpeg and a Python venv in `/opt/whisper`, a `whisper` systemd service on port 9000 and,
@@ -31,6 +31,7 @@ accurate and about 3× slower).
   (`output=srt|vtt|txt` also work)
 - `POST /detect-language` → `{detected_language, language_code, confidence}`
 - `GET /health` → `{ok, model}`
+- `GET /metrics` → Prometheus text: `whisper_up`, `whisper_requests_total`, `whisper_requests_failed_total`, `whisper_audio_seconds_total`, `whisper_busy`, `whisper_busy_for_seconds`, `whisper_last_success_timestamp_seconds`, `whisper_info{model}`. Add your Prometheus host to the allow-list to scrape it.
 
 There is no authentication: keep it on your LAN and restrict who can reach it (the install script's
 firewall rule does that).
