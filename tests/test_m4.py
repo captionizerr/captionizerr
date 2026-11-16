@@ -1175,3 +1175,61 @@ def test_batch_result_uses_the_source_it_was_built_from(tmp_path):
     w.poll_batches()
     j = store.get(job.id)
     assert "40 cues from en (embedded)" in j.detail and j.state == "needs_review"   # not re-planned on the new file
+
+
+def _irregular(n: int, seed: int = 7, shift_from: int | None = None, shift_ms: int = 0):
+    """n cues with uneven lengths and gaps; cues from `shift_from` on moved by shift_ms."""
+    import random
+    rnd, t, out = random.Random(seed), 1000, []
+    for i in range(n):
+        d = rnd.randint(900, 3500)
+        a, b = t, t + d
+        if shift_from is not None and i >= shift_from:
+            a, b = a + shift_ms, b + shift_ms
+        out.append((a, b, f"Line number {i + 1} of the dialogue."))
+        t = b - (shift_ms if shift_from is not None and i >= shift_from else 0) + rnd.randint(300, 2500)
+    return out
+
+
+def _srt_of(cues) -> str:
+    def ts(ms):
+        return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+    return "\n".join(f"{i + 1}\n{ts(a)} --> {ts(b)}\n{x}\n" for i, (a, b, x) in enumerate(cues))
+
+
+@ffmpeg
+def test_spliced_ending_is_moved_onto_the_speech(tmp_path):
+    import math
+    import struct
+    import wave
+    truth = _irregular(80)
+    total = truth[-1][1] + 10_000
+    folder = tmp_path / "lib/Show"
+    folder.mkdir(parents=True)
+    wav = folder / "a.wav"
+    rate = 8000
+    with wave.open(str(wav), "wb") as w:                  # a tone wherever someone "speaks"
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+        frames = bytearray(2 * rate * total // 1000)
+        for a, b, _ in truth:
+            for i in range(a * rate // 1000, b * rate // 1000):
+                struct.pack_into("<h", frames, 2 * i, int(8000 * math.sin(2 * math.pi * 440 * i / rate)))
+        w.writeframes(bytes(frames))
+    cut_at = 45
+    emb = [(a, b, x) for a, b, x in truth[:cut_at]]
+    emb[-1] = (emb[-1][0], total - 500, emb[-1][2])       # last line stretched to the end
+    (folder / "e.srt").write_text(_srt_of(emb), encoding="utf-8")
+    v = folder / "Show S01E01.mkv"
+    subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i",
+                    f"color=c=black:s=32x32:d={total / 1000}:r=1", "-i", str(wav), "-i", str(folder / "e.srt"),
+                    "-map", "0", "-map", "1", "-map", "2", "-c:v", "libx264", "-c:a", "aac", "-c:s", "srt",
+                    "-metadata:s:a:0", "language=eng", "-metadata:s:s:0", "language=eng", str(v)], check=True)
+    # the downloaded file: right before the cut, 2.5 s early after it (another edit)
+    (folder / "Show S01E01.en.srt").write_text(_srt_of(_irregular(80, shift_from=cut_at - 1, shift_ms=-2500)),
+                                               encoding="utf-8")
+    src = media.find_source(v, tmp_path / "cache", ["en"], "ru")
+    assert src.origin == "embedded + sidecar ending"
+    got = cuesmod.load(src.path).cues
+    tail = [c for c in got if c.start_ms >= truth[cut_at][0] - 3000]
+    errs = [abs(c.start_ms - truth[int(c.text.split()[2]) - 1][0]) for c in tail]
+    assert len(tail) >= 30 and max(errs) <= 300, errs[:10]
