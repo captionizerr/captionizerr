@@ -75,7 +75,7 @@ class Settings:
     ollama_model: str = ""
     ollama_num_ctx: int = 16384   # context window; Ollama's own default is far too small for subtitles
     ollama_max_output: int = 8000
-    openai_base_url: str = ""     # e.g. https://api.openai.com/v1, http://ollama:11434/v1
+    openai_base_url: str = "https://api.openai.com/v1"   # or OpenRouter, vLLM, LM Studio, http://ollama:11434/v1
     openai_key: str = field(default="", repr=False)
     openai_model: str = ""
     openai_price_in: float = 0.0  # $ per 1M tokens; 0 for local models
@@ -139,7 +139,7 @@ class Settings:
             ollama_url=_env("OLLAMA_URL", "http://localhost:11434"),
             ollama_model=_env("OLLAMA_MODEL"),
             ollama_num_ctx=int(_env("OLLAMA_NUM_CTX", "16384") or 16384),
-            openai_base_url=_env("OPENAI_BASE_URL"),
+            openai_base_url=_env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             openai_key=_secret("OPENAI_API_KEY"),
             openai_model=_env("OPENAI_MODEL"),
             openai_price_in=float(_env("OPENAI_PRICE_IN", "0") or 0),

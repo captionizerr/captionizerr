@@ -596,3 +596,42 @@ def test_share_needs_config_and_confirmation(tmp_path, monkeypatch):
     assert "Uploaded" in r.headers["location"]
     assert app.state.store.share(str(sub))["url"].endswith("/999")
     assert c.post("/share", data={**data, "reviewed": "1", "rights": "1"}).status_code == 403   # cross-site
+
+
+def test_openai_adapts_token_parameter_and_temperature():
+    from captionizerr.providers.openai_compat import OpenAICompatProvider
+    seen = []
+
+    def strict_openai(req):        # like OpenAI's newer models
+        b = json.loads(req.content); seen.append(sorted(b))
+        if "max_tokens" in b:
+            return httpx.Response(400, json={"error": {"message": "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."}})
+        if "temperature" in b:
+            return httpx.Response(400, json={"error": {"message": "Unsupported value: 'temperature' does not support 0.3 with this model."}})
+        return httpx.Response(200, json={"model": b["model"], "choices": [{"message": {"content": "1|Привет."}, "finish_reason": "stop"}],
+                                         "usage": {"prompt_tokens": 10, "completion_tokens": 3}})
+    # a non-OpenAI base URL starts with max_tokens and has to adapt twice
+    p = OpenAICompatProvider("https://proxy.example/v1", "gpt-6-luna", "k", client=httpx.Client(transport=httpx.MockTransport(strict_openai)))
+    assert p.complete("", "", "1|1.0|Hi.").text == "1|Привет."
+    assert p.token_param == "max_completion_tokens" and p.send_temperature is False and len(seen) == 3
+    seen.clear(); p.complete("", "", "1|1.0|Hi.")
+    assert len(seen) == 1                                   # remembered: no retries next time
+    # OpenAI's own URL starts with the new parameter right away
+    assert OpenAICompatProvider("https://api.openai.com/v1", "m", "k").token_param == "max_completion_tokens"
+
+    def old_server(req):           # e.g. an older local server
+        b = json.loads(req.content)
+        if "max_completion_tokens" in b:
+            return httpx.Response(400, json={"error": {"message": "unknown field: max_completion_tokens; use max_tokens"}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}], "usage": {}})
+    q = OpenAICompatProvider("https://api.openai.com/v1", "m", "k", client=httpx.Client(transport=httpx.MockTransport(old_server)))
+    assert q.complete("", "", "x").text == "ok" and q.token_param == "max_tokens"
+
+
+def test_openai_error_message_is_readable():
+    from captionizerr.providers.openai_compat import OpenAICompatProvider
+    from captionizerr.providers.base import ProviderError
+    t = httpx.MockTransport(lambda req: httpx.Response(401, json={"error": {"message": "Incorrect API key provided.", "type": "invalid_request_error"}}))
+    with pytest.raises(ProviderError) as e:
+        OpenAICompatProvider("https://api.openai.com/v1", "m", "bad", client=httpx.Client(transport=t)).complete("", "", "x")
+    assert str(e.value) == "401: Incorrect API key provided."

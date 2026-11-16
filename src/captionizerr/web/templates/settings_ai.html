@@ -40,9 +40,9 @@
   <section class="card" data-for="openai">
     <h2>OpenAI-compatible</h2>
     <div class="fields">
-      <label class="f">Base URL <input type="url" name="openai_base_url" value="{{ v.openai_base_url }}" placeholder="https://api.openai.com/v1"></label>
+      <label class="f">Base URL <input type="url" name="openai_base_url" value="{{ v.openai_base_url or 'https://api.openai.com/v1' }}"><span class="h">OpenAI's address is filled in. For OpenRouter, vLLM, LM Studio or Ollama, use their <span class="mono">/v1</span> address.</span></label>
       {{ secret('openai_key', secrets, label='API key', placeholder='Leave empty for local servers', next='/settings/ai') }}
-      <label class="f">Model <input type="text" name="openai_model" value="{{ v.openai_model }}" placeholder="deepseek-chat"></label>
+      <label class="f">Model <input type="text" name="openai_model" value="{{ v.openai_model }}" placeholder="e.g. gpt-6-luna"></label>
       <label class="f">Price in / out, $ per 1M tokens <span class="row-inline"><input type="number" name="openai_price_in" min="0" step="0.01" value="{{ v.openai_price_in }}" aria-label="Input price"><input type="number" name="openai_price_out" min="0" step="0.01" value="{{ v.openai_price_out }}" aria-label="Output price"></span><span class="h">For the budget. 0 for local servers.</span></label>
       <label class="f">Max output tokens <input type="number" name="openai_max_output" min="1000" max="200000" step="1000" value="{{ v.openai_max_output }}"><span class="h">Long episodes are split to fit.</span></label>
     </div>

@@ -45,9 +45,9 @@
     <input type="hidden" name="ollama_num_ctx" value="{{ v.ollama_num_ctx }}">
   </div><div class="actions">{{ test('ollama') }}</div></div>
   <div data-for="openai"><div class="fields">
-    <label class="f">Base URL <input type="url" name="openai_base_url" value="{{ v.openai_base_url }}" placeholder="https://api.openai.com/v1"></label>
+    <label class="f">Base URL <input type="url" name="openai_base_url" value="{{ v.openai_base_url or 'https://api.openai.com/v1' }}"><span class="h">OpenAI's address is filled in. For OpenRouter, vLLM, LM Studio or Ollama, use their <span class="mono">/v1</span> address.</span></label>
     {{ secret('openai_key', secrets, label='API key', next='/setup?step=ai') }}
-    <label class="f">Model <input type="text" name="openai_model" value="{{ v.openai_model }}"></label>
+    <label class="f">Model <input type="text" name="openai_model" value="{{ v.openai_model }}" placeholder="e.g. gpt-6-luna"></label>
   </div><div class="actions">{{ test('openai') }}</div></div>
   <div class="actions"><button class="primary">Save and continue</button><a class="btn" href="/setup?step={{ prev_step }}">Back</a></div>
 </form>
