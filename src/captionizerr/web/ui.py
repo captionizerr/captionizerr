@@ -378,14 +378,15 @@ def register(app: FastAPI) -> None:
         return video, target, tdoc, rows, profile, str(target.stat().st_mtime_ns)
 
     @app.get("/edit")
-    def edit_page(request: Request, path: str, lang: str, key: str = "", back: str = ""):
+    def edit_page(request: Request, path: str, lang: str, key: str = "", back: str = "", view: str = ""):
         key = valid_key(key) or ""
         try:
             video, target, tdoc, rows, profile, token = load_editor(path, lang, key or None)
         except Preparing:
             return render(request, "preparing.html", back=local_path(back))
+        flags = editor.flags_for(rows, profile)
         data = [{"id": r.id, "t": r.start_ms, "d": round(r.duration, 2), "src": r.src, "tr": r.tr,
-                 "extra": r.extra, "flags": r.flags(profile)} for r in rows if not r.hidden]
+                 "extra": r.extra, "flags": flags.get(r.id, [])} for r in rows if not r.hidden]
         stem = video.stem
         m = re.search(r"[Ss](\d{1,2})[Ee](\d{1,3})", stem)
         series = re.split(r"[\s._-]+[Ss]\d{1,2}[Ee]\d", stem)[0].replace(".", " ").strip(" -_") if m else ""
@@ -397,7 +398,7 @@ def register(app: FastAPI) -> None:
         return render(request, "edit.html", rows=data, path=path, lang=lang, key=key, token=token,
                       heading=heading, ep_title=ep_title,
                       back=local_path(back),
-                      fname=target.name, profile=profile, flagged=sum(1 for d in data if d["flags"]),
+                      fname=target.name, profile=profile, view="flag" if view == "flag" else "all", flagged=sum(1 for d in data if d["flags"]),
                       has_source=any(r.src for r in rows))
 
     async def edit_body(request: Request) -> dict:
@@ -439,7 +440,8 @@ def register(app: FastAPI) -> None:
             raise HTTPException(400, str(e))
         bible.log_corrections(s.feedback_dir, key or "", changed)
         refresh_all(s, [str(b["path"])])
-        return {"saved": len(changed), "token": str(target.stat().st_mtime_ns)}
+        return {"saved": len(changed), "token": str(target.stat().st_mtime_ns),
+                "flags": {str(k): v for k, v in editor.flags_for(rows, profile).items()}}
 
     @app.post("/api/edit/retranslate")
     async def edit_retranslate(request: Request):
@@ -469,7 +471,7 @@ def register(app: FastAPI) -> None:
                      instruction or "re-translate", c, vars(usage))
         r = next(r for r in rows if r.id == row_id)
         r.tr = text
-        return {"text": text, "cost": round(c, 4), "flags": r.flags(profile)}
+        return {"text": text, "cost": round(c, 4), "flags": editor.flags_for(rows, profile).get(row_id, [])}
 
     # ------------------------------------------------------------------ share on OpenSubtitles
     def share_target(path: str, lang: str, forced: bool) -> tuple[Path, Path]:

@@ -282,3 +282,34 @@ def test_flags_leftover_labels_and_lost_italics():
     assert not check([c2], {2: "<i>от Конгресса.</i>"}, p)
     c3 = Cue(3, 0, 3000, "Meet me at 10:30.")
     assert not check([c3], {3: "Встретимся в 10:30."}, p)
+
+
+def test_onscreen_caption_is_not_a_speaker_label():
+    from captionizerr.cues import Cue
+    from captionizerr.profile import Profile
+    from captionizerr.validate import check, is_onscreen_caption
+    p = Profile()
+    title = Cue(1, 0, 1400, "TEST SUBJECT: AI COLEMAN")
+    assert is_onscreen_caption(title.text)
+    assert not [i for i in check([title], {1: "ПОДОПЫТНЫЙ: АЙ КОУЛМАН"}, p) if i.kind == "label_left"]
+    label = Cue(2, 0, 3000, "Man #2:\n<i>Surely you're not telling me</i>")
+    assert not is_onscreen_caption(label.text)
+    assert [i for i in check([label], {2: "Мужчина #2:\n<i>неужели вы хотите сказать</i>"}, p) if i.kind == "label_left"]
+
+
+def test_style_issues_dont_force_review():
+    from captionizerr.pipeline import Result
+    from captionizerr.validate import Issue
+    assert not Result({}, [], [Issue(1, "label_left", "")], []).needs_review
+    assert Result({}, [], [Issue(1, "too_long", "")], []).needs_review
+
+
+def test_editor_flags_match_the_validator():
+    from captionizerr.editor import Row, flags_for
+    from captionizerr.profile import Profile
+    p = Profile(max_line=42)
+    rows = [Row(1, 0, 4000, "A fairly long English line here.", "Ы" * 43),     # 43 chars: within tolerance
+            Row(2, 0, 4000, "Another fairly long English line.", "Ы" * 47),    # 47 chars: too long
+            Row(3, 0, 1400, "TEST SUBJECT: AI COLEMAN", "ПОДОПЫТНЫЙ: АЙ КОУЛМАН")]
+    f = flags_for(rows, p)
+    assert f[1] == [] and f[2] == ["47 chars"] and f[3] == []

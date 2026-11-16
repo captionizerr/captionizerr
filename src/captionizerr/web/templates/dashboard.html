@@ -44,7 +44,7 @@
         <td class="mono">{{ j.lang }}</td>
         <td><span class="pill {{ j.state }}">{{ state_label.get(j.state, j.state) }}</span></td>
         <td class="num">${{ '%.2f'|format(j.cost_usd) }}</td>
-        <td style="white-space:nowrap">{% if j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/'}|urlencode }}">Edit</a>{% endif %}
+        <td style="white-space:nowrap">{% if j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
           {% if j.state in ('failed','needs_review','no_source','waiting_source') %}<form method="post" action="/jobs/{{ j.id }}/retry" class="inline"><button class="small">Retry</button></form>{% endif %}</td>
       </tr>
     {% else %}

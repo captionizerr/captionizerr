@@ -7,7 +7,7 @@
 <div class="grid">
   <div class="card"><h2>Result</h2><p>{{ job.detail or '—' }}</p>
     {% if job.output_path %}<p class="small muted">Wrote</p><p class="mono" style="word-break:break-all">{{ job.output_path }}</p>
-      {% if job.output_path.endswith(('.srt', '.ass')) %}<p><a class="btn" href="/edit?{{ {'path': job.video_path, 'lang': job.lang, 'key': job.series_key or '', 'back': '/jobs/' ~ job.id}|urlencode }}">Open in editor</a></p>{% endif %}{% endif %}
+      {% if job.output_path.endswith(('.srt', '.ass')) %}<p><a class="btn" href="/edit?{{ {'path': job.video_path, 'lang': job.lang, 'key': job.series_key or '', 'back': '/jobs/' ~ job.id, 'view': 'flag' if job.state == 'needs_review' else ''}|urlencode }}">{{ 'Review flagged lines' if job.state == 'needs_review' else 'Open in editor' }}</a></p>{% endif %}{% endif %}
     {% if job.state in ('failed','needs_review','no_source','paused_budget') %}<form method="post" action="/jobs/{{ job.id }}/retry"><button class="primary">Retry</button></form>{% endif %}
   </div>
   <div class="card"><h2>Cost</h2><div class="big">${{ '%.4f'|format(job.cost_usd) }}</div>

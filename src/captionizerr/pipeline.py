@@ -62,7 +62,8 @@ class Result:
 
     @property
     def needs_review(self) -> bool:
-        return bool(self.issues_final)
+        from .validate import SOFT
+        return any(i.kind not in SOFT for i in self.issues_final)
 
     @property
     def usage(self) -> Usage:

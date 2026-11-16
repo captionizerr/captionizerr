@@ -39,6 +39,19 @@ class Issue:
 
 
 SHORT_CUE_SLACK = 1.6
+LINE_TOLERANCE = 4          # characters over max_line before a line counts as too long
+# Style issues: worth one fix attempt, but they don't make a whole job "needs review".
+SOFT = {"label_left", "italics_lost"}
+
+
+def is_onscreen_caption(text: str) -> bool:
+    """A short single-line ALL-CAPS 'LABEL: NAME' is usually on-screen text (a title card such as
+    'TEST SUBJECT: AI COLEMAN'), not a hearing-impaired speaker label followed by dialogue."""
+    t = plain(text).strip()
+    if "\n" in t or not t.isupper():
+        return False
+    _, _, rest = t.partition(":")
+    return 0 < len(rest.split()) <= 4
 
 
 def plain(text: str) -> str:
@@ -79,7 +92,7 @@ def check(cues: list[Cue], tr: dict[int, str | None], p: Profile,
         if len(lines) > p.max_lines:
             issues.append(Issue(c.index, "too_many_lines", f"{len(lines)} lines > {p.max_lines}"))
         longest = max(len(l) for l in lines)
-        if longest > p.max_line + 4:   # small tolerance before forcing a rewrite
+        if longest > p.max_line + LINE_TOLERANCE:   # small tolerance before forcing a rewrite
             issues.append(Issue(c.index, "too_long", f"line of {longest} chars > {p.max_line}"))
         cps = len(body.replace("\n", "")) / c.duration
         # short cues: a brief burst of speed beats losing words (the prompt allows 1.5x under 2 s)
@@ -93,7 +106,7 @@ def check(cues: list[Cue], tr: dict[int, str | None], p: Profile,
         elif p.target_lang != p.source_lang and plain(c.text).strip().lower() == body.strip().lower() and len(body) > 15:
             issues.append(Issue(c.index, "leftover", "identical to the source"))
         if p.drop_sdh and _LABEL_ANY.search(plain(c.text)) and _LABEL_ANY.search(body) \
-                and not re.search(r"\d:\d", body):
+                and not re.search(r"\d:\d", body) and not is_onscreen_caption(c.text):
             issues.append(Issue(c.index, "label_left", "speaker label kept; drop it (it's a hearing-impaired tag)"))
         src_plain = c.text.strip()
         if src_plain.startswith("<i>") and src_plain.endswith("</i>") and "<i>" not in t:

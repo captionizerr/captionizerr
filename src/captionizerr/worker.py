@@ -236,8 +236,11 @@ class Worker:
         if prep.reuse:
             via += (f"; re-timed from the previous release: {len(prep.reuse.translations)} lines reused "
                     f"({prep.reuse.method} match), {len(res.translations) - len(prep.reuse.translations)} translated")
+        from .editor import FLAG_LABEL
+        open_ = "".join(f"; open: " + ", ".join(f"#{i.index} {FLAG_LABEL.get(i.kind, i.kind.replace('_', ' '))}"
+                                                 for i in res.issues_final[:4]) if res.issues_final else "")
         detail = (f"{len(res.translations)} cues from {prep.source.lang} ({prep.source.origin}){via}; "
-                  f"{len(res.issues_initial)} flagged, {len(res.issues_final)} open")
+                  f"{len(res.issues_initial)} flagged, {len(res.issues_final)} open{open_}")
         try:
             reuse.store_source(s.data_dir / "sources", out, prep.source.path, prep.source.lang)
             if prep.previous:

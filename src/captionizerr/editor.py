@@ -38,21 +38,62 @@ class Row:
         return max(0.001, (self.end_ms - self.start_ms) / 1000)
 
     def flags(self, p: Profile) -> list[str]:
-        if not self.tr.strip():
-            if not self.src or re.fullmatch(r"[\s\[\]()♪♫A-Z:\-–—.]*", self.src) or CREDITS.search(self.src):
-                return []                         # sound tags, dashes, subtitle credits: dropping them is right
-            return ["empty"]
-        body = plain(self.tr)
-        out = []
-        lines = body.split("\n")
-        if len(lines) > p.max_lines:
-            out.append(f"{len(lines)} lines")
-        if max(len(l) for l in lines) > p.max_line:
-            out.append(f"{max(len(l) for l in lines)} chars")
-        cps = len(body.replace("\n", "")) / self.duration
-        if cps > p.target_cps:
-            out.append(f"{cps:.0f} cps")
-        return out
+        """Same verdict as the pipeline's validator, for this row alone (no neighbour checks)."""
+        return flags_for([self], p).get(self.id, [])
+
+
+FLAG_LABEL = {"dropped": "empty", "leftover": "untranslated?", "label_left": "speaker label?",
+              "italics_lost": "italics lost", "tag_lost": "position tag lost", "boundary": "line split?"}
+
+
+def _geometry(text: str, duration: float, p: Profile) -> list[str]:
+    from .validate import LINE_TOLERANCE, SHORT_CUE_SLACK
+    body = plain(text)
+    lines = body.split("\n")
+    out = []
+    if len(lines) > p.max_lines:
+        out.append(f"{len(lines)} lines")
+    longest = max(len(l) for l in lines)
+    if longest > p.max_line + LINE_TOLERANCE:
+        out.append(f"{longest} chars")
+    slack = max(1.25, SHORT_CUE_SLACK) if duration < 2.0 else 1.25
+    cps = len(body.replace("\n", "")) / duration
+    if cps > p.target_cps * slack and len(body) > 12:
+        out.append(f"{cps:.0f} cps")
+    return out
+
+
+def flags_for(rows: list["Row"], p: Profile) -> dict[int, list[str]]:
+    """Per-row flags from the pipeline's own validator: the editor's "Flagged" list and a job's
+    "needs review" can never disagree. Geometry labels are computed here; other kinds are named."""
+    from .cues import Cue
+    from .validate import check
+    out: dict[int, list[str]] = {r.id: [] for r in rows}
+    cues, tr = [], {}
+    for r in rows:
+        if r.hidden:
+            continue
+        if r.src:
+            cues.append(Cue(r.id, r.start_ms, r.end_ms, r.src))
+            tr[r.id] = r.tr
+        elif r.tr.strip():
+            out[r.id] = _geometry(r.tr, r.duration, p)         # translation-only rows: geometry only
+    by_id = {r.id: r for r in rows}
+    for i in check(cues, tr, p):
+        if i.kind in ("missing",) or i.index not in out:
+            continue
+        r = by_id[i.index]
+        if i.kind in ("too_long", "too_many_lines", "too_fast"):
+            for g in _geometry(r.tr, r.duration, p):
+                if g not in out[i.index]:
+                    out[i.index].append(g)
+        elif r.tr.strip() == "" and i.kind == "dropped" and CREDITS.search(r.src):
+            continue
+        else:
+            label = FLAG_LABEL.get(i.kind, i.kind)
+            if label not in out[i.index]:
+                out[i.index].append(label)
+    return out
 
 
 def build_rows(source: SubtitleDoc | None, translated: SubtitleDoc) -> list[Row]:

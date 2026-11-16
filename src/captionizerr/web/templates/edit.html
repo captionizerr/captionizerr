@@ -51,18 +51,23 @@ let token = {{ token|tojson }};
 const CREDITS = /www\.|\.(com|org|net|tv)\b|subtitles? by|synced|sync by|corrected by|ripped by|opensubtitles/i;
 const LIM = {line: {{ profile.max_line }}, lines: {{ profile.max_lines }}, cps: {{ profile.target_cps }}};
 const dirty = new Map(), flagged = new Map();
-let filter = 'all';
+let filter = {{ view|tojson }};
 
 const plain = t => t.replace(/<[^>]+>/g, '').replace(/\{\\[^}]*\}/g, '');
-function flags(tr, d, src) {
-  if (!tr.trim()) return src && /\p{L}/u.test(src) && !CREDITS.test(src) ? ['empty'] : [];
+// Same rules and tolerances as the server-side validator (+4 characters per line, 1.25x reading
+// speed, 1.6x on cues under 2 s). Findings only the server can make (speaker label, untranslated
+// text, lost italics…) stay on a line until you change that line; saving re-checks everything.
+const GEOM = /^\d+ (lines|chars|cps)$|^empty$/;
+function flags(tr, d, src, server, original) {
+  const keep = tr.trim() === original.trim() ? (server || []).filter(f => !GEOM.test(f)) : [];
+  if (!tr.trim()) return src && /\p{L}/u.test(src) && !CREDITS.test(src) ? ['empty', ...keep] : keep;
   const lines = plain(tr).split('\n'), out = [];
   if (lines.length > LIM.lines) out.push(lines.length + ' lines');
   const w = Math.max(...lines.map(l => l.length));
-  if (w > LIM.line) out.push(w + ' chars');
-  const cps = lines.join('').length / Math.max(d, 0.001);
-  if (cps > LIM.cps) out.push(Math.round(cps) + ' cps');
-  return out;
+  if (w > LIM.line + 4) out.push(w + ' chars');
+  const body = lines.join(''), cps = body.length / Math.max(d, 0.001);
+  if (cps > LIM.cps * (d < 2 ? 1.6 : 1.25) && body.length > 12) out.push(Math.round(cps) + ' cps');
+  return [...out, ...keep];
 }
 const ts = ms => { const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
@@ -102,7 +107,7 @@ for (const r of ROWS) {
 requestAnimationFrame(() => view.forEach(v => fit(v.ta)));
 
 function paintFlags(v) {
-  const f = flags(v.ta.value, v.r.d, v.r.src);
+  const f = flags(v.ta.value, v.r.d, v.r.src, v.r.flags, v.r.tr);
   v.fl.replaceChildren(...f.map(x => el('span', 'flag', x)));
   f.length ? flagged.set(v.r.id, 1) : flagged.delete(v.r.id);
 }
@@ -132,6 +137,7 @@ document.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', (
 document.getElementById('q').addEventListener('input', applyFilter);
 document.getElementById('dlg').addEventListener('change', applyFilter);
 counts();
+document.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x.dataset.f === filter));
 applyFilter();
 
 async function post(url, body) {
@@ -156,6 +162,7 @@ async function save() {
   try {
     const j = await post('/api/edit/save', {token, edits: Object.fromEntries(dirty)});
     token = j.token;
+    for (const [id, f] of Object.entries(j.flags || {})) { const v = view.get(Number(id)); if (v) v.r.flags = f; }
     for (const id of [...dirty.keys()]) { const v = view.get(id); v.r.tr = v.ta.value.trim(); changed(v); }
     status.textContent = `Saved ${j.saved} line${j.saved === 1 ? '' : 's'}. The previous version is kept in history, and Jellyfin was told to rescan.`;
   } catch (e) { status.textContent = 'Not saved: ' + e.message; }
