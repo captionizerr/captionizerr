@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.0
+
+**Set everything up in the browser.** A fresh install opens a setup wizard (login, AI provider and key, languages and budget, Sonarr/Radarr, media server); no config file is needed any more.
+
+- **Settings** are split into General, AI provider, Connections, Security and System. The separate "AI providers" page merged in; old URLs redirect.
+- **Keys and passwords in the UI:**
+  - stored in `config/secrets.json` (mode 600), never in the database, never shown back (write-only fields);
+  - the UI password is a salted PBKDF2 hash;
+  - secrets from files (`*_FILE`) or the environment still win, and show as "Set on the server".
+- **Test button for every connection** (Anthropic, Ollama, OpenAI-compatible, Sonarr, Radarr, Jellyfin/Emby, Plex, Bazarr, ntfy, OpenSubtitles), all read-only or free.
+- **One-click webhooks:** "Set up webhook" creates or updates Captionizerr's webhook in Sonarr/Radarr (Basic auth; import, upgrade and rename) and confirms with the app's test event. Making a new webhook key updates connected webhooks automatically.
+- **Security:**
+  - every secret accepts `<NAME>_FILE` (Docker/compose secrets);
+  - webhooks authenticate with HTTP Basic (the key as the password) instead of a key in the URL; `?apikey=` still works;
+  - 10 failed logins or keys lock an address out for 15 minutes;
+  - SECURITY.md has a Caddy HTTPS recipe.
+- **Dashboard:** "Needs attention", "In progress" and budget at a glance; the list shows translations, with filters and an Edit button; editor and notes costs sit under "Other spend".
+- **Library:** search, an "only with untranslated" filter, and translated progress per series.
+- **Editor:** compact rows with ↻ per line; lines without dialogue hidden by default; dropped subtitle-site credits no longer count as flagged.
+- **Fixed:**
+  - "Set up webhook", line re-translation and OpenSubtitles upload no longer block the server (the webhook setup deadlocked waiting for Sonarr's callback);
+  - the example `docker-compose.yml` had invalid YAML;
+  - first-run setup could replace a webhook key passed in directly.
+
+**Upgrading from 0.1.0:**
+- Nothing to do: existing environment variables and settings keep working, and an already configured instance skips the wizard.
+- Optionally move your webhooks to the new auth with **Settings → Connections → Re-create webhook**.
+
 ## 0.1.0 (first public release)
 
 - Sonarr/Radarr webhooks, job queue, monthly budget cap with estimates, ntfy notifications, Jellyfin rescan, Prometheus metrics.
