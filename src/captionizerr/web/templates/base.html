@@ -173,6 +173,7 @@ document.getElementById('oll-find')?.addEventListener('click', async () => {
   catch (err) { hint.textContent = "Couldn't reach Ollama: " + err.message; }
 });
 
+const money = v => '$' + (v > 0 && v < 0.1 ? v.toFixed(3) : v.toFixed(2));
 // Model lists and automatic prices (AI provider settings and the setup wizard)
 const $ = id => document.getElementById(id);
 function fillPrice(p) {

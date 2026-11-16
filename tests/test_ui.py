@@ -406,3 +406,17 @@ def test_changed_here_uses_readable_names(ui):
     app.state.settings.openai_price_in = 0.1
     page = c.get("/settings/system").text
     assert "Input price ($/1M tokens)" in page and ">openai price in<" not in page
+
+
+def test_replaced_translation_has_no_edit_and_points_to_newer(ui):
+    app, c, _ = ui
+    st = app.state.store
+    st.save_settings({"_setup_done": True})
+    a = st.enqueue("manual", "Show S01E01", "/x/a.mkv", "ru", None); st.finish(a.id, "done", "first", "/x/a.captionizerr.ru.srt", 0.003, {}, "gpt-6-luna")
+    b = st.enqueue("manual", "Show S01E01", "/x/a.mkv", "ru", None, redo=True); st.finish(b.id, "done", "second", "/x/a.captionizerr.ru.srt", 0.3, {}, "claude-opus-5-5")
+    page = c.get("/").text
+    assert page.count("Replaced by a newer translation") == 1 and page.count(">Edit<") == 1
+    assert "$0.003" in page and "$0.30" in page
+    jp = c.get(f"/jobs/{a.id}").text
+    assert f'href="/jobs/{b.id}"' in jp and "Open in editor" not in jp
+    assert "Open in editor" in c.get(f"/jobs/{b.id}").text

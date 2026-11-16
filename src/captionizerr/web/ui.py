@@ -77,6 +77,7 @@ def register(app: FastAPI) -> None:
     store, s = app.state.store, app.state.settings
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.globals.update(version=__version__, state_label=STATE_LABEL, lang_names=LANG_NAMES)
+    templates.env.filters["money"] = lambda v: f"${v:.3f}" if 0 < (v or 0) < 0.1 else f"${(v or 0):.2f}"
     templates.env.filters["datefmt"] = lambda t: datetime.fromtimestamp(t).strftime("%d %b %Y") if t else ""
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
@@ -120,7 +121,16 @@ def register(app: FastAPI) -> None:
                 jobs = [j for j in jobs if j.state == view]
         counts = store.counts()
         spent, cap, reserved = store.spent(), s.monthly_cap_usd, store.reserved()
-        return render(request, "dashboard.html", jobs=jobs[:100], counts=counts, spent=spent, cap=cap,
+        # an older translation of a file that was translated again: its file is gone, so no Edit for it
+        seen, replaced = set(), set()
+        for j in jobs:                                   # newest first
+            if j.source in side or j.state not in ("done", "needs_review"):
+                continue
+            k = (j.video_path, j.lang)
+            if k in seen:
+                replaced.add(j.id)
+            seen.add(k)
+        return render(request, "dashboard.html", jobs=jobs[:100], counts=counts, replaced=replaced, spent=spent, cap=cap,
                       reserved=reserved, pct=min(100, 100 * (spent + reserved) / cap) if cap else 0, month=month_now(),
                       months=store.spend_by_month(), view=view, avg=episode_estimate(),
                       attention={st: counts.get(st, 0) for st in groups["attention"]},
@@ -134,7 +144,7 @@ def register(app: FastAPI) -> None:
         if not job:
             raise HTTPException(404)
         import json
-        return render(request, "job.html", job=job, usage=json.loads(job.usage or "{}"),
+        return render(request, "job.html", job=job, usage=json.loads(job.usage or "{}"), replaced_by=store.replaced_by(job),
                       fmt_time=lambda t: datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M:%S"))
 
     @app.post("/jobs/{job_id}/retry")

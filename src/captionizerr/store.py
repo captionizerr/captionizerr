@@ -185,6 +185,14 @@ class Store:
         self._q("INSERT INTO shares (path, url, at, already) VALUES (?,?,?,?) ON CONFLICT(path) DO UPDATE SET "
                 "url=excluded.url, at=excluded.at, already=excluded.already", (path, url, time.time(), int(already)))
 
+    def replaced_by(self, job) -> int | None:
+        """The id of a later finished translation of the same video and language, if any (its file replaced this one's)."""
+        if job.source in ("edit", "notes", "forced"):
+            return None
+        r = self._q("SELECT id FROM jobs WHERE video_path=? AND lang=? AND id>? AND source NOT IN ('edit','notes','forced') "
+                    "AND state IN ('done','needs_review') ORDER BY id LIMIT 1", (job.video_path, job.lang, job.id)).fetchone()
+        return r[0] if r else None
+
     def model_for(self, video_path: str, lang: str, forced: bool = False) -> str:
         """The model of the latest finished job that wrote this video's translation (or its forced track)."""
         src = "source='forced'" if forced else "source NOT IN ('edit','notes','forced')"

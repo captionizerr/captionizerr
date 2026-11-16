@@ -3,7 +3,7 @@
 {% block content %}
 {% set n_attn = attention.values()|sum %}{% set n_active = active.values()|sum %}
 <h1>Dashboard</h1>
-<p class="sub">{% if settings.languages %}Translating into {{ settings.languages|map('upper')|join(', ') }} with {{ settings.active_model or 'no model yet' }}{% if avg %} (≈ ${{ ('%.3f' if avg < 0.1 else '%.2f')|format(avg) }} per episode){% endif %}. New Sonarr and Radarr imports are translated automatically.{% else %}<a href="/settings/general">Choose the languages to translate into</a> to start.{% endif %}</p>
+<p class="sub">{% if settings.languages %}Translating into {{ settings.languages|map('upper')|join(', ') }} with {{ settings.active_model or 'no model yet' }}{% if avg %} (≈ {{ avg|money }} per episode){% endif %}. New Sonarr and Radarr imports are translated automatically.{% else %}<a href="/settings/general">Choose the languages to translate into</a> to start.{% endif %}</p>
 <div class="grid">
   <section class="card {{ 'attn' if n_attn }}">
     <h2>Needs attention</h2>
@@ -22,7 +22,7 @@
     <h2>Budget, {{ month }}</h2>
     <div class="big">${{ '%.2f'|format(spent) }} <span class="muted small">of ${{ '%.2f'|format(cap) }}</span></div>
     <div class="bar" role="progressbar" aria-label="Budget used" aria-valuenow="{{ pct|round|int }}" aria-valuemin="0" aria-valuemax="100"><span style="width:{{ pct }}%"></span></div>
-    <div class="small muted">{% if reserved %}${{ '%.2f'|format(reserved) }} reserved for batches in progress · {% endif %}about {{ ((cap - spent - reserved) / avg)|round(0, 'floor')|int if avg else '–' }} more episodes at ${{ ('%.3f' if avg < 0.1 else '%.2f')|format(avg) }}.</div>
+    <div class="small muted">{% if reserved %}${{ '%.2f'|format(reserved) }} reserved for batches in progress · {% endif %}about {{ ((cap - spent - reserved) / avg)|round(0, 'floor')|int if avg else '–' }} more episodes at {{ avg|money }}.</div>
     {% if months|length > 1 %}<details class="adv"><summary>Earlier months</summary><table class="small"><tbody>{% for m, total, n in months %}<tr><td>{{ m }}</td><td class="num">{{ n }}</td><td class="num">${{ '%.2f'|format(total) }}</td></tr>{% endfor %}</tbody></table></details>{% endif %}
   </section>
 </div>
@@ -40,12 +40,12 @@
     {% for j in jobs %}
       <tr>
         <td class="small muted" style="white-space:nowrap">{{ fmt_time(j.updated) }}</td>
-        <td><a href="/jobs/{{ j.id }}">{{ j.title }}</a><div class="small muted clamp" title="{{ j.detail }}">{{ j.detail }}</div></td>
+        <td><a href="/jobs/{{ j.id }}">{{ j.title }}</a><div class="small muted clamp" title="{{ j.detail }}">{% if j.id in replaced %}Replaced by a newer translation. {% endif %}{{ j.detail }}</div></td>
         <td class="mono">{{ j.lang }}</td>
         <td class="mono small nowrap" title="{{ j.model }}">{{ (j.model|replace('claude-', '')) or '–' }}</td>
         <td><span class="pill {{ j.state }}">{{ state_label.get(j.state, j.state) }}</span></td>
-        <td class="num">${{ ('%.3f' if 0 < j.cost_usd < 0.1 else '%.2f')|format(j.cost_usd) }}</td>
-        <td style="white-space:nowrap">{% if j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
+        <td class="num">{{ j.cost_usd|money }}</td>
+        <td style="white-space:nowrap">{% if j.id not in replaced and j.output_path and j.output_path.endswith(('.srt', '.ass')) and j.source not in ('edit','notes','forced') %}<a class="btn small" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/', 'view': 'flag' if j.state == 'needs_review' else ''}|urlencode }}">{{ 'Review' if j.state == 'needs_review' else 'Edit' }}</a>{% endif %}
           {% if j.state in ('failed','needs_review','no_source','waiting_source') %}<form method="post" action="/jobs/{{ j.id }}/retry" class="inline"><button class="small">Retry</button></form>{% endif %}</td>
       </tr>
     {% else %}

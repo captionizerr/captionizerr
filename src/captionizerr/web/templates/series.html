@@ -27,7 +27,7 @@
     </tbody>
   </table>
   {% endfor %}
-  <div class="actions"><button class="primary" id="go">Translate selected</button><button name="mode" value="batch" title="Half price through the Batch API; results within 24 hours">Add to backlog (½ price)</button><span class="small muted" id="est">Select episodes to see an estimate (about ${{ '%.2f'|format(avg) }} per episode and language).</span></div>
+  <div class="actions"><button class="primary" id="go">Translate selected</button><button name="mode" value="batch" title="Half price through the Batch API; results within 24 hours">Add to backlog (½ price)</button><span class="small muted" id="est">Select episodes to see an estimate (about {{ avg|money }} per episode and language).</span></div>
 </form>
 
 <form method="post" action="/library/series/{{ ser.id }}/settings" class="card" id="settings">
@@ -52,12 +52,12 @@
 const avg = {{ avg }}, nlang = {{ langs|length }};
 const est = document.getElementById('est'), form = document.getElementById('eps');
 function upd(){ const n = form.querySelectorAll('input[name=path]:checked').length;
-  est.textContent = n ? `${n} episode(s) × ${nlang} language(s) ≈ $${(n*nlang*avg).toFixed(2)}` : `Select episodes to see an estimate (about $${avg.toFixed(2)} per episode and language).`; }
+  est.textContent = n ? `${n} episode(s) × ${nlang} language(s) ≈ ${money(n*nlang*avg)}` : `Select episodes to see an estimate (about ${money(avg)} per episode and language).`; }
 form.addEventListener('change', upd);
 document.querySelectorAll('button[data-season]').forEach(b => b.addEventListener('click', () => {
   form.querySelectorAll(`input[data-s="${b.dataset.season}"]`).forEach(c => c.checked = true); upd(); }));
 form.addEventListener('submit', e => { const n = form.querySelectorAll('input[name=path]:checked').length;
-  const half = e.submitter && e.submitter.value === 'batch', cost = (n*nlang*avg*(half ? 0.5 : 1)).toFixed(2);
+  const half = e.submitter && e.submitter.value === 'batch', cost = money(n*nlang*avg*(half ? 0.5 : 1)).slice(1);
   const redo = form.querySelectorAll('input[name=path][data-done]:checked').length;
   const note = redo ? `\n\n${redo} of them already have a translation: it will be replaced, including any edits you made. The previous version stays in the editor's history (Undo there).` : '';
   if (n && !confirm((half ? `Add ${n} episode(s) to the backlog for about $${cost}? Results arrive within 24 hours.`

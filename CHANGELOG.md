@@ -2,9 +2,16 @@
 
 ## Unreleased
 
+## 0.2.5 — 2026-11-16
+
+- **Dashboard:** an older translation of a file that was translated again is marked "Replaced by a newer translation" and loses its Edit button. Its job page links to the newer job.
+- **Job page:** Editor, Download, Share and Re-translate sit together in one row.
+- **Costs:** estimates on the series and library pages show three decimals below $0.10 (e.g. $0.008).
 - **OpenSubtitles upload fixed for episodes:** the title lookup now uses the episode's own IMDb ID (OpenSubtitles' `IMDBEpisode`) instead of the series' ID, which OpenSubtitles refuses for episode files. Uploading an episode under the series ID is caught with a clear message, and upload errors are logged.
 - **Download:** the share page and each job's page can download the translation, under exactly its name on disk, to share it by hand.
 - The share form credits the model that made the file, not the model selected now.
+- **Docs:** re-translate, download, effort settings (`CAPTIONIZERR_OPENAI_EFFORT`, `CAPTIONIZERR_OLLAMA_EFFORT`) and automatic prices are documented. The README's safety section now says exactly which files can be replaced.
+- **Cleanup:** removed unused imports and variables.
 
 ## 0.2.4 — 2026-11-16
 
