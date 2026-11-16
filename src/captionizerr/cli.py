@@ -17,6 +17,46 @@ from .writer import write_next_to
 VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".mov", ".ts", ".webm"}
 
 
+def make_cli_provider(a):
+    if a.provider == "ollama":
+        from .providers.ollama import OllamaProvider
+        return OllamaProvider(a.ollama_url, a.model, num_ctx=a.num_ctx)
+    if a.provider == "openai":
+        import os
+        from .providers.openai_compat import OpenAICompatProvider
+        return OpenAICompatProvider(a.base_url, a.model, os.environ.get("CAPTIONIZERR_OPENAI_API_KEY", ""))
+    return AnthropicProvider(model=a.model, effort=a.effort)
+
+
+def add_provider_args(p):
+    p.add_argument("--provider", default="anthropic", choices=["anthropic", "ollama", "openai"])
+    p.add_argument("--model", default="claude-opus-5-5", help="model id (Ollama: e.g. gemma3:12b)")
+    p.add_argument("--effort", default="low", choices=["low", "medium", "high", "xhigh", "max"])
+    p.add_argument("--ollama-url", default="http://localhost:11434")
+    p.add_argument("--num-ctx", type=int, default=16384)
+    p.add_argument("--base-url", default="", help="OpenAI-compatible base URL")
+
+
+def cmd_eval_build(a) -> int:
+    from . import evals
+    made = evals.build(Path(a.data), Path(a.out), a.lines, a.per_file)
+    print(f"{len(made)} new case(s) in {a.out}")
+    for d in made:
+        print("  ", d.name)
+    return 0
+
+
+def cmd_eval(a) -> int:
+    from . import evals
+    rep = evals.run(Path(a.cases), make_cli_provider(a), log=lambda m: print(m, file=sys.stderr) if a.verbose else None)
+    for r in rep["cases"]:
+        print(f"{r['chrf']:6.1f}  flags {r['flags']:3d}  ${r['cost']:.3f}  {'(edited) ' if r['edited'] else ''}{r['case']}")
+    print(f"overall chrF {rep['chrf']}  cost ${rep['cost']:.3f}  model {rep['model']}")
+    if a.report:
+        Path(a.report).write_text(json.dumps(rep, indent=2, ensure_ascii=False), encoding="utf-8")
+    return 0
+
+
 def cmd_probe(a) -> int:
     streams, dur = media.probe(Path(a.video))
     print(f"duration: {dur/60:.1f} min" if dur else "duration: unknown")
@@ -43,7 +83,7 @@ def cmd_translate(a) -> int:
     profile = Profile(target_lang=a.lang, source_lang=a.source_lang, tone=a.tone, songs=a.songs,
                       max_line=a.max_line, target_cps=a.cps)
     ctx = Path(a.context).read_text(encoding="utf-8") if a.context else None
-    provider = AnthropicProvider(model=a.model, effort=a.effort)
+    provider = make_cli_provider(a)
     res = translate(doc, profile, provider, series_context=ctx, title=a.title, log=lambda m: print(m, file=sys.stderr))
     out_text = cuesmod.render(doc, res.translations)
 
@@ -105,8 +145,7 @@ def main(argv=None) -> int:
     t.add_argument("input", help="a .srt/.ass file or a video file")
     t.add_argument("--lang", default="ru", help="target language (ISO 639-1)")
     t.add_argument("--source-lang", default="en")
-    t.add_argument("--model", default="claude-opus-5-5")
-    t.add_argument("--effort", default="low", choices=["low", "medium", "high", "xhigh", "max"])
+    add_provider_args(t)
     t.add_argument("--tone", default="faithful", choices=["faithful", "softened", "family"])
     t.add_argument("--songs", default="verse", choices=["verse", "literal", "original", "skip"])
     t.add_argument("--max-line", type=int, default=42)
@@ -117,6 +156,20 @@ def main(argv=None) -> int:
     t.add_argument("--write", action="store_true", help="write <video>.captionizerr.<lang>.<fmt> next to the video")
     t.add_argument("--report", help="write a JSON report (usage, cost, issues)")
     t.set_defaults(fn=cmd_translate)
+
+    eb = sub.add_parser("eval-build", help="make quality check cases from finished translations (private data)")
+    eb.add_argument("--data", default="/config", help="Captionizerr data folder")
+    eb.add_argument("--out", default="/config/evals")
+    eb.add_argument("--lines", type=int, default=40)
+    eb.add_argument("--per-file", type=int, default=2)
+    eb.set_defaults(fn=cmd_eval_build)
+
+    ev = sub.add_parser("eval", help="translate the check cases and score them against the references (chrF)")
+    ev.add_argument("cases", nargs="?", default="/config/evals")
+    add_provider_args(ev)
+    ev.add_argument("--report", help="write the JSON result here")
+    ev.add_argument("-v", "--verbose", action="store_true")
+    ev.set_defaults(fn=cmd_eval)
 
     sv = sub.add_parser("serve", help="run the web service (webhooks, queue, status page)")
     sv.add_argument("--host", default="0.0.0.0")

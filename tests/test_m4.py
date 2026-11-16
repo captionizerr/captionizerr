@@ -491,3 +491,21 @@ def test_editor_shows_preparing_while_extracting(tmp_path, monkeypatch):
     time.sleep(0.5)
     r = c.get("/edit", params={"path": str(v), "lang": "ru"})
     assert "Season 1, Episode 1" in r.text
+
+
+@ffmpeg
+def test_eval_build_and_run(tmp_path):
+    from captionizerr import evals
+    from captionizerr.writer import replace_own
+    s = settings(tmp_path)
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    v = make_video(tmp_path / "lib/Show", "Show - S01E01.mkv")
+    app.state.store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    app.state.worker.process(app.state.store.next_queued())
+    out = v.with_name("Show - S01E01.captionizerr.ru.srt")
+    replace_own(out, out.read_text(encoding="utf-8").replace("Строка номер 5 тестового эпизода.", "Пятая."), s.history_dir)
+    made = evals.build(s.data_dir, s.data_dir / "evals", lines=6, per_file=1)
+    assert len(made) == 1 and json.loads((made[0] / "case.json").read_text())["edited"]
+    assert "Пятая." in (made[0] / "reference.srt").read_text(encoding="utf-8")
+    rep = evals.run(s.data_dir / "evals", FakeProvider())
+    assert 50 < rep["chrf"] < 100 and rep["cases"][0]["flags"] == 0   # differs only on the edited line

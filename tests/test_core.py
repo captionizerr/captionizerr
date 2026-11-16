@@ -260,3 +260,10 @@ def test_short_cues_may_read_faster():
     assert not [i for i in check([short], {1: text}, p) if i.kind == "too_fast"]
     long_ = Cue(2, 0, 3000, "x" * 10)
     assert [i for i in check([long_], {2: "я" * 80}, p) if i.kind == "too_fast"]
+
+
+def test_chrf_sanity():
+    from captionizerr.evals import chrf
+    assert chrf(["Привет, мир"], ["Привет, мир"]) == 100.0
+    assert chrf(["совсем другое"], ["Привет, мир"]) < 20
+    assert 40 < chrf(["Привет, мир!"], ["Привет мир"]) <= 100
