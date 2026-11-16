@@ -104,7 +104,7 @@ flowchart TD
 - **Word by word.** Each line's words are found in order in the transcript, so music and effects don't throw it off the way audio-energy methods do.
 - **Careful with repeats.** A line counts only when its matched words sit together in the transcript; a phrase repeated from a neighbouring line can't set its time. A line matched far from its neighbours is ignored.
 - **The track's own habit is kept.** Most tracks show a line a fraction of a second before it is said; that habit (within −0.6 to +0.3 s) is measured and kept, and lines less than 0.5 s off are not touched, so a well-timed track is left alone and only the parts that are noticeably off move.
-- **Where it runs:** endings taken from another file, downloaded subtitles before translating, and **Re-sync to speech** on a translation's page, which re-times the existing file without re-translating (free; the old timing stays in the editor's history).
+- **Where it runs:** by default (`SPEECH_SYNC=auto`) endings taken from another file and downloaded subtitles before translating; `all` adds built-in tracks, `off` leaves only **Re-sync to speech** on a translation's page, which re-times the existing file without re-translating (free; the old timing stays in the editor's history).
 - **The service:** any whisper-asr-webservice-compatible server. `deploy/whisper` has a small faster-whisper one; on a 4-core laptop CPU an episode takes a few minutes.
 
 ### Inside "Translate" and "Validate + fix"

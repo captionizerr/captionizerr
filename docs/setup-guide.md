@@ -59,7 +59,7 @@ Everything here can be changed later under **Settings**.
 
 ## 4. Translate one episode
 
-**Library** → open a series → tick an episode → **Translate selected**. The dashboard shows it under *In progress*. A 45-minute episode takes 2–5 minutes with Anthropic and about $0.30 with Opus.
+**Library** → open a series → tick an episode → **Translate selected** (or open a film → **Translate**). The dashboard shows it under *In progress*. A 45-minute episode takes 2–5 minutes with Anthropic and about $0.30 with Opus.
 
 Untranslated back catalogue: tick many episodes and choose **Add to backlog (½ price)**. They go out as one Batch API request, and results usually arrive within the hour (always within 24 h).
 
@@ -81,7 +81,7 @@ Subtitles from the video or from Bazarr are sometimes off: a downloaded file mad
 1. Run a Whisper server on a machine with a few CPU cores (it doesn't need a GPU). The small one in [`deploy/whisper`](../deploy/whisper/README.md) installs on Debian with one script; any [whisper-asr-webservice](https://github.com/ahmetoner/whisper-asr-webservice) server works too.
 2. In **Settings → Connections → Whisper**, enter its address (e.g. `http://192.0.2.30:9000`) and press **Test**.
 
-From then on, downloaded subtitles and endings taken from another file are moved onto the speech before translating, and each translation gets **Re-sync to speech**. An episode takes a few minutes of the Whisper machine's time.
+From then on, downloaded subtitles and endings taken from another file are moved onto the speech before translating, and each translation gets **Re-sync to speech**. *Use it automatically for* on the same card can widen that to every translation (built-in tracks too) or narrow it to the button only. An episode takes a few minutes of the Whisper machine's time.
 
 ## Optional: keep secrets out of the app
 

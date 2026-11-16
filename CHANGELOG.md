@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-11-16
+
+- **Film pages:** a film in the Library opens its own page: status per language with editor, download, share and job links; **Translate** / **Translate again** / backlog; its history; film settings (translate automatically on import, languages, swearing tone) and film notes, which the AI can draft from the overview and the film's own subtitles.
+- **Series page markers:** each episode shows what happened to its translation (*needs review*, *source cut short*, *ending completed*, *re-synced*, *in progress*, *failed*) and links to its job. Columns have fixed widths, so seasons line up.
+- **When to use Whisper:** Settings → Connections → Whisper → *Use it automatically for*: downloaded subtitles and completed endings (default), every translation including built-in tracks, or nothing but the **Re-sync to speech** button (`SPEECH_SYNC=auto|all|off`).
+- **Setup wizard:** the media step offers an optional Whisper address with a test.
+- **In progress** on the dashboard names the running job and its current step ("translating 700 lines from the built-in English track", "listening to the audio") and how long it has been running.
+- **Job page:** all actions (editor, download, share, re-translate, re-sync, retry) sit in one row under the title.
+
 ## 0.2.9 — 2026-11-16
 
 UI polish after a full review of every page on desktop and phone:

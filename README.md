@@ -27,6 +27,7 @@ Because it translates the file's own track, the timing is exact for that release
 - **Forced subtitles:** foreign-language scenes and signs (a forced track in the source) get their own `….<lang>.forced.srt`, which players show automatically.
 - **Quality checks:** every line is checked for reading speed, line length, untranslated leftovers, merged or shifted lines and lost positioning tags. Only flagged lines are sent back for a fix.
 - **Series notes:** a short "bible" of characters with gender and formality, a glossary and tone. It's drafted automatically from the first episode and editable, and every episode of the series uses it, so names stay consistent.
+- **Library pages for series and films:** each episode shows whether it needs review, had its source completed or was re-synced, with a link to its job; each film has its own page with translate, editor, history, settings and notes.
 - **Editor:** source and translation side by side, with reading-speed flags and per-line re-translate ("make it more casual"). Your corrections can be turned into series notes.
 - **Re-translate:** run an episode again, for example after switching model. Your file is replaced, and the previous version stays in the editor's history.
 - **Share or download (opt-in):** after reviewing a file, upload it to OpenSubtitles.org with your account (always marked as an AI translation, with the episode's own IMDb ID found for you), or download it to share by hand. Nothing is ever shared automatically.

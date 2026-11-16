@@ -40,6 +40,7 @@ Secrets from 1 or 2 show as "Set on the server" and can't be changed in the UI. 
 | `SONARR_URL` / `SONARR_KEY`, `RADARR_URL` / `RADARR_KEY` | | Library page, Bazarr ID lookup |
 | `BAZARR_URL` / `BAZARR_KEY` | | Fallback source download |
 | `WHISPER_URL` | | Speech-to-text service (whisper-asr-webservice API, e.g. `deploy/whisper`): downloaded subtitles and endings taken from another release are moved onto the speech, and jobs get **Re-sync to speech** |
+| `SPEECH_SYNC` | `auto` | When Whisper is used automatically: `auto` = downloaded subtitles and endings taken from another file; `all` = every translation, built-in tracks too (a few minutes of the Whisper machine per episode); `off` = only the **Re-sync to speech** button. Also in Settings → Connections |
 | `JELLYFIN_URL` / `JELLYFIN_KEY` / `JELLYFIN_PATH_MAP` | | Rescan after writing |
 | `PLEX_URL` / `PLEX_TOKEN` / `PLEX_PATH_MAP` | | Plex folder rescan after writing (Emby: use the Jellyfin settings) |
 | `OPENSUBTITLES_USER` / `OPENSUBTITLES_PASSWORD` | | Your OpenSubtitles.org account, for the opt-in "Share on OpenSubtitles" button |
