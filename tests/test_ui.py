@@ -336,3 +336,12 @@ def test_secrets_from_files(tmp_path, monkeypatch):
     monkeypatch.setenv("CAPTIONIZERR_WEBHOOK_KEY_FILE", str(tmp_path / "missing"))
     with pytest.raises(RuntimeError):
         Settings.from_env()
+
+
+def test_editor_doesnt_flag_dropped_credits():
+    from captionizerr.editor import Row
+    from captionizerr.profile import Profile
+    p = Profile()
+    assert Row(1, 0, 3000, "- synced and corrected by chamallow -\n- www.addic7ed.com -", "").flags(p) == []
+    assert Row(2, 0, 3000, "-", "").flags(p) == []
+    assert Row(3, 0, 3000, "Where are you going?", "").flags(p) == ["empty"]

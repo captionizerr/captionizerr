@@ -48,13 +48,14 @@ button.icon{padding:5px 9px;font-size:14px;line-height:1}
 const ROWS = {{ rows|tojson }};
 const CTX = {path: {{ path|tojson }}, lang: {{ lang|tojson }}, key: {{ key|tojson }}};
 let token = {{ token|tojson }};
+const CREDITS = /www\.|\.(com|org|net|tv)\b|subtitles? by|synced|sync by|corrected by|ripped by|opensubtitles/i;
 const LIM = {line: {{ profile.max_line }}, lines: {{ profile.max_lines }}, cps: {{ profile.target_cps }}};
 const dirty = new Map(), flagged = new Map();
 let filter = 'all';
 
 const plain = t => t.replace(/<[^>]+>/g, '').replace(/\{\\[^}]*\}/g, '');
 function flags(tr, d, src) {
-  if (!tr.trim()) return src && /[a-z]/i.test(src) ? ['empty'] : [];
+  if (!tr.trim()) return src && /\p{L}/u.test(src) && !CREDITS.test(src) ? ['empty'] : [];
   const lines = plain(tr).split('\n'), out = [];
   if (lines.length > LIM.lines) out.push(lines.length + ' lines');
   const w = Math.max(...lines.map(l => l.length));

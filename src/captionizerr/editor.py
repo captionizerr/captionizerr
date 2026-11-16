@@ -15,7 +15,9 @@ from .profile import Profile
 from .prompt import context_block, system_prompt
 from .validate import plain
 
-MATCH_MS = 600   # translated cue start within this of a source start = same cue
+MATCH_MS = 600
+# subtitle-site credits and adverts, which translations rightly drop
+CREDITS = re.compile(r"www\.|\.(com|org|net|tv)\b|subtitles? by|synced|sync by|corrected by|ripped by|opensubtitles", re.I)   # translated cue start within this of a source start = same cue
 
 
 @dataclass
@@ -37,7 +39,9 @@ class Row:
 
     def flags(self, p: Profile) -> list[str]:
         if not self.tr.strip():
-            return ["empty"] if self.src and not re.fullmatch(r"[\s\[\]()♪♫A-Z:]*", self.src) else []
+            if not self.src or re.fullmatch(r"[\s\[\]()♪♫A-Z:\-–—.]*", self.src) or CREDITS.search(self.src):
+                return []                         # sound tags, dashes, subtitle credits: dropping them is right
+            return ["empty"]
         body = plain(self.tr)
         out = []
         lines = body.split("\n")

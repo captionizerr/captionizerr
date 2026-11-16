@@ -18,8 +18,8 @@
     {% for x in series %}{% set p = (100 * x.translated / x.files) if x.files else 0 %}
       <tr data-title="{{ x.title|lower }}" data-missing="{{ 1 if x.files > x.translated else 0 }}">
         <td><a href="/library/series/{{ x.id }}"><b>{{ x.title }}</b></a> <span class="muted small">{{ x.year or '' }}</span></td>
-        <td style="min-width:120px"><div class="progress" role="progressbar" aria-label="Translated episodes" aria-valuenow="{{ p|round|int }}" aria-valuemin="0" aria-valuemax="100"><span style="width:{{ p }}%"></span></div>
-          <span class="small muted">{{ x.translated }} of {{ x.files }}</span></td>
+        <td style="min-width:120px">{% if x.files %}<div class="progress" role="progressbar" aria-label="Translated episodes" aria-valuenow="{{ p|round|int }}" aria-valuemin="0" aria-valuemax="100"><span style="width:{{ p }}%"></span></div>
+          <span class="small muted">{{ x.translated }} of {{ x.files }}</span>{% else %}<span class="small muted">no files yet</span>{% endif %}</td>
         <td class="num small muted">{{ x.files }} on disk{% if x.episodes > x.files %} / {{ x.episodes }}{% endif %}</td>
         <td class="mono">{{ ((x.override and x.override.langs) or settings.languages)|join(', ') }}</td>
         <td>{% if x.override and not x.override.enabled %}<span class="pill">Off</span>{% else %}<span class="pill done">On</span>{% endif %}</td>
