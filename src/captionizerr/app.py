@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from . import __version__
 from .config import Settings
 from .hooks import parse_radarr, parse_sonarr, slug
-from .jellyfin import media_updated
+from .jellyfin import refresh_all
 from .store import STATES, Store, month_now
 from .worker import Worker
 from .writer import move_sidecars
@@ -28,6 +28,8 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
     (s.data_dir / "tmp").mkdir(parents=True, exist_ok=True)
     s.context_dir.mkdir(parents=True, exist_ok=True)
     store = Store(s.data_dir / "captionizerr.db")
+    import copy
+    env_defaults = copy.deepcopy(s)          # what the environment says, before UI overrides
     s.apply(store.load_settings())          # UI-saved settings override environment defaults
     if provider_factory is None:
         from .providers import make_provider
@@ -35,6 +37,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
     worker = Worker(s, store, provider_factory)
     app = FastAPI(title="Captionizerr", version=__version__)
     app.state.store, app.state.worker, app.state.settings = store, worker, s
+    app.state.env_defaults = env_defaults
 
     if start_worker:
         @app.on_event("startup")
@@ -94,7 +97,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
             moved += n
             if n:
                 touched.append(r.new_path)
-        media_updated(s.jellyfin_url, s.jellyfin_key, touched, s.jellyfin_path_map)
+        refresh_all(s, touched)
         return moved
 
     @app.post("/api/hooks/{arr}")

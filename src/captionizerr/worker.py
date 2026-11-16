@@ -19,11 +19,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import bible, cues as cuesmod
-from . import maintenance, media
+from . import maintenance, media, reuse
 from .arr import Arr, radarr_id_for_path, sonarr_ids_for_path
 from .bazarr import Bazarr, BazarrError
 from .config import Settings
-from .jellyfin import media_updated
+from .jellyfin import refresh_all
 from .notify import ntfy
 from .pipeline import cues_to_send, first_request, translate
 from .pricing import cost as price_of
@@ -48,6 +48,8 @@ class Prepared:
     profile: Profile
     context: str | None
     source: media.Source
+    reuse: "reuse.Reuse | None" = None      # translations carried over from a replaced release
+    previous: Path | None = None            # that release's (orphaned) translation file
 
 
 class Worker:
@@ -57,6 +59,7 @@ class Worker:
         self._stop = threading.Event()
         self.current: Job | None = None
         self._last: dict[str, float] = {}
+        self._batch_cap: tuple | None = None
 
     # ------------------------------------------------------------ lifecycle
     def start(self):
@@ -72,10 +75,16 @@ class Worker:
         self._wake.set()
 
     def batch_capable(self) -> bool:
-        try:
-            return bool(getattr(self.provider_factory(), "supports_batch", False))
-        except Exception:
-            return False
+        """Whether the configured provider has a Batch API. Cached per provider setting, so the
+        loop doesn't build a new API client every pass."""
+        key = (getattr(self.s, "provider", ""), getattr(self.s, "active_model", ""))
+        if self._batch_cap is None or self._batch_cap[0] != key:
+            try:
+                ok = bool(getattr(self.provider_factory(), "supports_batch", False))
+            except Exception:
+                ok = False
+            self._batch_cap = (key, ok)
+        return self._batch_cap[1]
 
     def _loop(self):
         last_month = month_now()
@@ -148,7 +157,23 @@ class Worker:
         context = self.context_for(job.series_key)
         if context is None and s.auto_notes and job.series_key:
             context = self.make_notes(job, doc, provider)
-        return Prepared(video, doc, profile, context, src)
+        prep = Prepared(video, doc, profile, context, src)
+        self.find_reuse(prep, job)
+        return prep
+
+    def find_reuse(self, prep: Prepared, job: Job) -> None:
+        """An upgrade left our old translation behind: carry it over if the dialogue matches."""
+        try:
+            old = reuse.predecessor(prep.video, job.lang, self.s.VIDEO_EXT)
+            if not old:
+                return
+            old_src = reuse.stored_source(self.s.data_dir / "sources", old)
+            r = reuse.align(prep.doc, cuesmod.load(old), cuesmod.load(old_src[0]) if old_src else None)
+            log.info("job %s: previous release %s matches %.0f%% (%s)", job.id, old.name, 100 * r.coverage, r.method)
+            if r.coverage >= reuse.MIN_COVERAGE:
+                prep.reuse, prep.previous = r, old
+        except Exception as e:
+            log.warning("job %s: reuse check failed: %s", job.id, e)
 
     def estimate(self, provider, doc, profile, context) -> float:
         """Free token count of the real prompt, plus output at the calibrated ratio (0.85x episode input)."""
@@ -164,10 +189,12 @@ class Worker:
     def over_budget(self, job: Job, est: float, reserved: float = 0.0) -> bool:
         s, store = self.s, self.store
         spent = store.spent()
-        if spent + reserved + est <= s.monthly_cap_usd:
+        in_flight = store.reserved()          # submitted batches count as spent until their results arrive
+        if spent + in_flight + reserved + est <= s.monthly_cap_usd:
             return False
+        extra = f", ${in_flight:.2f} reserved for open batches" if in_flight else ""
         store.set_state(job.id, "paused_budget",
-                        f"estimate ${est:.2f} would exceed the ${s.monthly_cap_usd:.2f} cap (spent ${spent:.2f})")
+                        f"estimate ${est:.2f} would exceed the ${s.monthly_cap_usd:.2f} cap (spent ${spent:.2f}{extra})")
         if store.alert_once("cap"):
             ntfy(s.ntfy_url, s.ntfy_topic, "Captionizerr: monthly budget reached",
                  f"Spent ${spent:.2f} of ${s.monthly_cap_usd:.2f}. New translations are paused until the cap is "
@@ -182,12 +209,16 @@ class Worker:
         if prep is None:
             return
         est = self.estimate(provider, prep.doc, prep.profile, prep.context)
+        if prep.reuse:
+            est *= max(0.05, 1 - prep.reuse.coverage) * 2      # only the unmatched lines (and their context)
         if self.over_budget(job, est):
             return
-        self.store.set_state(job.id, "running", f"translating {len(prep.doc.cues)} cues from {prep.source.lang} "
-                                                f"({prep.source.origin}), est ${est:.2f}")
+        what = (f"re-timing the previous release ({100 * prep.reuse.coverage:.0f}% reused)" if prep.reuse
+                else f"translating {len(prep.doc.cues)} cues from {prep.source.lang} ({prep.source.origin})")
+        self.store.set_state(job.id, "running", f"{what}, est ${est:.2f}")
         res = translate(prep.doc, prep.profile, provider, series_context=prep.context, title=job.title,
-                        log=lambda m: log.info("job %s %s", job.id, m.strip()))
+                        log=lambda m: log.info("job %s %s", job.id, m.strip()),
+                        prefilled=prep.reuse.translations if prep.reuse else None)
         self.finalize(job, prep, res)
 
     def finalize(self, job: Job, prep: Prepared, res):
@@ -201,16 +232,52 @@ class Worker:
         state = "needs_review" if res.needs_review else "done"
         cost = res.cost() or 0.0
         via = " via Batch" if any(st.batch for st in res.steps) else ""
+        if prep.reuse:
+            via += (f"; re-timed from the previous release: {len(prep.reuse.translations)} lines reused "
+                    f"({prep.reuse.method} match), {len(res.translations) - len(prep.reuse.translations)} translated")
         detail = (f"{len(res.translations)} cues from {prep.source.lang} ({prep.source.origin}){via}; "
                   f"{len(res.issues_initial)} flagged, {len(res.issues_final)} open")
+        try:
+            reuse.store_source(s.data_dir / "sources", out, prep.source.path, prep.source.lang)
+            if prep.previous:
+                maintenance.quarantine(s, prep.previous)        # replaced: out of the library, kept 30 days
+        except Exception as e:
+            log.warning("job %s: source copy / quarantine: %s", job.id, e)
         store.finish(job.id, state, detail, str(out), cost, vars(res.usage))
-        media_updated(s.jellyfin_url, s.jellyfin_key, [job.video_path], s.jellyfin_path_map)
-        self.notify_done(job, prep.doc, res, state, cost)
+        forced_cost = self.translate_forced(job, prep)
+        refresh_all(s, [job.video_path])
+        self.notify_done(job, prep.doc, res, state, cost + forced_cost)
         total = store.spent()
         if total >= s.alert_at * s.monthly_cap_usd and store.alert_once("warn"):
             ntfy(s.ntfy_url, s.ntfy_topic, "Captionizerr: budget at "
                  f"{100 * total / s.monthly_cap_usd:.0f}%", f"Spent ${total:.2f} of ${s.monthly_cap_usd:.2f} this month.",
                  priority=3, tags=["moneybag"])
+
+    def translate_forced(self, job: Job, prep: Prepared) -> float:
+        """Also translate the forced track, if the file has one, into `….<lang>.forced.<fmt>`.
+        Small (tens of lines), always live. Never fails the main job. Returns its cost."""
+        s = self.s
+        try:
+            if target_path(prep.video, job.lang, "srt", True).exists() or target_path(prep.video, job.lang, "ass", True).exists():
+                return 0.0
+            src = media.find_forced(prep.video, s.cache_dir, s.source_langs, job.lang)
+            if not src:
+                return 0.0
+            doc = cuesmod.load(src.path)
+            if not cues_to_send(doc):
+                return 0.0
+            provider = self.provider_factory()
+            res = translate(doc, s.profile(job.lang, src.lang, prep.profile.tone), provider,
+                            series_context=prep.context, title=f"{job.title} (forced: foreign-language lines and signs)",
+                            log=lambda m: log.info("job %s forced %s", job.id, m.strip()))
+            out = write_next_to(prep.video, job.lang, doc.fmt, cuesmod.render(doc, res.translations), forced=True)
+            c = res.cost() or 0.0
+            self.store.record("forced", f"{job.title}: forced track", job.video_path, job.lang, job.series_key,
+                              f"{len(res.translations)} lines → {out.name}", c, vars(res.usage))
+            return c
+        except Exception as e:
+            log.warning("job %s: forced track not translated: %s", job.id, e)
+            return 0.0
 
     # ------------------------------------------------------------ backlog via the Batch API
     def submit_batch(self):
@@ -229,6 +296,10 @@ class Worker:
             try:
                 prep = self.prepare(job, provider)
                 if prep is None:
+                    continue
+                if prep.reuse:                     # mostly carried over: a few live lines beat a batch
+                    self.store.to_live(job.id, "previous release can be re-timed; running live")
+                    self.wake()
                     continue
                 est = self.estimate(provider, prep.doc, prep.profile, prep.context) / 2
                 if self.over_budget(job, est, reserved):
@@ -249,7 +320,7 @@ class Worker:
                 self.store.finish(job.id, "failed", f"batch submit failed: {e}")
             return
         for job, est in sent:
-            self.store.set_batched(job.id, bid, f"in batch {bid} (est ${est:.2f}); results within 24 h")
+            self.store.set_batched(job.id, bid, f"in batch {bid} (est ${est:.2f}); results within 24 h", est)
         log.info("submitted batch %s with %d jobs, est $%.2f", bid, len(sent), reserved)
 
     def poll_batches(self):

@@ -25,7 +25,6 @@ class Settings:
     ntfy_topic: str = ""
     public_url: str = ""          # link shown in notifications
     path_map: list[tuple[str, str]] = field(default_factory=list)   # (arr path prefix, local prefix)
-    workers: int = 1
     library_roots: list[str] = field(default_factory=lambda: ["/downloads"])
     tone: str = "faithful"
     songs: str = "verse"
@@ -39,6 +38,9 @@ class Settings:
     jellyfin_url: str = ""
     jellyfin_key: str = ""
     jellyfin_path_map: list[tuple[str, str]] = field(default_factory=list)   # (our path prefix, Jellyfin's)
+    plex_url: str = ""
+    plex_token: str = ""
+    plex_path_map: list[tuple[str, str]] = field(default_factory=list)       # (our path prefix, Plex's)
     # sources
     source_langs: list[str] = field(default_factory=lambda: ["en"])   # translate FROM, in order of preference
     any_source: bool = True       # fall back to any other text track/sidecar language
@@ -87,7 +89,6 @@ class Settings:
             ntfy_topic=_env("NTFY_TOPIC"),
             public_url=_env("PUBLIC_URL"),
             path_map=pm,
-            workers=max(1, int(_env("WORKERS", "1") or 1)),
             library_roots=[x for x in _env("LIBRARY_ROOTS", "/downloads").split(";") if x],
             tone=_env("TONE", "faithful"),
             songs=_env("SONGS", "verse"),
@@ -101,6 +102,9 @@ class Settings:
             jellyfin_url=_env("JELLYFIN_URL"),
             jellyfin_key=_env("JELLYFIN_KEY"),
             jellyfin_path_map=pairs("JELLYFIN_PATH_MAP"),
+            plex_url=_env("PLEX_URL"),
+            plex_token=_env("PLEX_TOKEN"),
+            plex_path_map=pairs("PLEX_PATH_MAP"),
             source_langs=[x for x in _env("SOURCE_LANGS", "en").replace(" ", "").split(",") if x],
             any_source=_env("ANY_SOURCE", "1").lower() not in ("0", "false", "no", "off"),
             bazarr_url=_env("BAZARR_URL"),
@@ -135,7 +139,7 @@ class Settings:
         "languages": "list", "model": "str", "effort": "str", "monthly_cap_usd": "float", "alert_at": "float",
         "tone": "str", "songs": "str", "max_line": "int", "target_cps": "float",
         "ntfy_url": "str", "ntfy_topic": "str", "public_url": "str", "jellyfin_url": "str",
-        "jellyfin_path_map": "pairs", "sonarr_url": "str", "radarr_url": "str",
+        "jellyfin_path_map": "pairs", "plex_url": "str", "plex_path_map": "pairs", "sonarr_url": "str", "radarr_url": "str",
         "source_langs": "list", "any_source": "bool", "bazarr_url": "str", "auto_notes": "bool",
         "provider": "str", "ollama_url": "str", "ollama_model": "str", "ollama_num_ctx": "int",
         "ollama_max_output": "int", "openai_base_url": "str", "openai_model": "str", "openai_price_in": "float",
@@ -166,7 +170,7 @@ class Settings:
     def secrets_status(self) -> dict[str, bool]:
         return {"Anthropic API key": bool(os.environ.get("ANTHROPIC_API_KEY")),
                 "Webhook key": bool(self.webhook_key), "Sonarr API key": bool(self.sonarr_key),
-                "Radarr API key": bool(self.radarr_key), "Jellyfin API key": bool(self.jellyfin_key),
+                "Radarr API key": bool(self.radarr_key), "Jellyfin API key": bool(self.jellyfin_key), "Plex token": bool(self.plex_token),
                 "Bazarr API key": bool(self.bazarr_key), "OpenAI-compatible API key": bool(self.openai_key)}
 
     VIDEO_EXT = (".mkv", ".mp4", ".m4v", ".avi", ".mov", ".ts", ".webm")

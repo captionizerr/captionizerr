@@ -42,7 +42,8 @@ STATES = ("queued", "running", "batched", "waiting_source", "done", "needs_revie
           "skipped", "no_source")
 ACTIVE = ("queued", "running", "paused_budget", "batched", "waiting_source")
 # columns added after M1; created on start if missing
-MIGRATIONS = {"mode": "TEXT DEFAULT 'live'", "batch_id": "TEXT DEFAULT ''", "wait_since": "REAL DEFAULT 0"}
+MIGRATIONS = {"mode": "TEXT DEFAULT 'live'", "batch_id": "TEXT DEFAULT ''", "wait_since": "REAL DEFAULT 0",
+              "est_usd": "REAL DEFAULT 0"}
 
 
 def month_now() -> str:
@@ -68,6 +69,7 @@ class Job:
     mode: str = "live"           # live | batch (backlog through the Batch API)
     batch_id: str = ""
     wait_since: float = 0.0      # waiting_source: when we asked Bazarr
+    est_usd: float = 0.0         # estimate of a submitted batch job (reserved against the cap until paid)
 
 
 class Store:
@@ -141,9 +143,14 @@ class Store:
         return self._q("UPDATE jobs SET state=?, detail=?, updated=? WHERE id=? AND state=?",
                        (to_state, detail[:2000], time.time(), job_id, from_state)).rowcount == 1
 
-    def set_batched(self, job_id: int, batch_id: str, detail: str):
-        self._q("UPDATE jobs SET state='batched', batch_id=?, detail=?, updated=? WHERE id=?",
-                (batch_id, detail[:2000], time.time(), job_id))
+    def set_batched(self, job_id: int, batch_id: str, detail: str, est_usd: float = 0.0):
+        self._q("UPDATE jobs SET state='batched', batch_id=?, detail=?, est_usd=?, updated=? WHERE id=?",
+                (batch_id, detail[:2000], est_usd, time.time(), job_id))
+
+    def reserved(self) -> float:
+        """Estimated cost of batch requests already submitted but not yet paid."""
+        r = self._q("SELECT COALESCE(SUM(est_usd),0) FROM jobs WHERE state='batched'").fetchone()
+        return float(r[0])
 
     def batched(self) -> dict[str, list[Job]]:
         out: dict[str, list[Job]] = {}
@@ -164,6 +171,22 @@ class Store:
         return [Job(**dict(r)) for r in self._q("SELECT * FROM jobs WHERE state='waiting_source' ORDER BY id").fetchall()]
 
     # ---- housekeeping
+    def snapshot(self, dest: Path, keep: int = 7) -> Path:
+        """Consistent copy of the live database (SQLite online backup; safe while running).
+        Keeps the newest `keep` copies. File backups should copy these, not the live db/-wal/-shm."""
+        dest.mkdir(parents=True, exist_ok=True)
+        out = dest / f"captionizerr-{time.strftime('%Y%m%d')}.db"
+        tmp = out.with_suffix(".db.tmp")
+        tmp.unlink(missing_ok=True)
+        target = sqlite3.connect(str(tmp))
+        with self._lock:
+            self.db.backup(target)
+        target.close()
+        tmp.replace(out)
+        for old in sorted(dest.glob("captionizerr-*.db"))[:-keep]:
+            old.unlink(missing_ok=True)
+        return out
+
     def prune_jobs(self, days: int) -> int:
         """Forget old jobs that carry no money: skipped / no source / failed with zero cost.
         Paid rows stay (they are the spend ledger)."""
@@ -193,6 +216,10 @@ class Store:
     def load_settings(self) -> dict:
         return {r[0]: json.loads(r[1]) for r in self._q("SELECT key, value FROM settings").fetchall()}
 
+    def delete_settings(self, keys: list[str]) -> None:
+        for k in keys:
+            self._q("DELETE FROM settings WHERE key=?", (k,))
+
     def save_settings(self, values: dict) -> None:
         for k, v in values.items():
             self._q("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -219,7 +246,7 @@ class Store:
 
     def avg_cost(self, default: float = 0.31) -> float:
         r = self._q("SELECT AVG(cost_usd), COUNT(*) FROM (SELECT cost_usd FROM jobs WHERE state IN ('done','needs_review') "
-                    "AND source NOT IN ('edit','notes') AND cost_usd > 0 ORDER BY id DESC LIMIT 50)").fetchone()
+                    "AND source NOT IN ('edit','notes','forced') AND cost_usd > 0 ORDER BY id DESC LIMIT 50)").fetchone()
         return float(r[0]) if r and r[1] else default
 
     def spend_by_month(self, n: int = 6) -> list[tuple[str, float, int]]:

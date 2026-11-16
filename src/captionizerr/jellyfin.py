@@ -1,4 +1,5 @@
-"""Tell Jellyfin a file changed so new external subtitles show up without a full library scan."""
+"""Tell Jellyfin (or Emby: same API) a file changed so new external subtitles show up without a
+full library scan. `refresh_all` also covers Plex."""
 from __future__ import annotations
 
 import json
@@ -27,3 +28,13 @@ def media_updated(url: str, key: str, paths: list[str], mapping: list[tuple[str,
     except Exception as e:     # a missed refresh only delays the track appearing
         log.warning("Jellyfin refresh failed: %s", e)
         return False
+
+
+def refresh_all(s, paths: list[str]) -> None:
+    """Every configured media server. Paths are in the *arr form (what webhooks and jobs carry)."""
+    if not paths:
+        return
+    media_updated(s.jellyfin_url, s.jellyfin_key, paths, s.jellyfin_path_map)
+    if getattr(s, "plex_url", "") and getattr(s, "plex_token", ""):
+        from .plex import refresh
+        refresh(s.plex_url, s.plex_token, paths, s.plex_path_map)

@@ -370,3 +370,124 @@ def test_ollama_setup_in_ui(tmp_path, monkeypatch):
     assert app.state.store.load_settings()["provider"] == "ollama"          # survives a restart
     from captionizerr.providers import make_provider
     assert make_provider(s).name == "ollama"
+
+
+def test_plex_refreshes_only_the_matching_folder(monkeypatch):
+    from captionizerr import plex
+    calls = []
+
+    def fake_get(url, token, endpoint, **q):
+        calls.append((endpoint, q.get("path")))
+        if endpoint == "/library/sections":
+            return {"MediaContainer": {"Directory": [{"key": 1, "Location": [{"path": "/media/movies"}]},
+                                                     {"key": 2, "Location": [{"path": "/media/tv"}]}]}}
+        return {}
+    monkeypatch.setattr(plex, "_get", fake_get)
+    n = plex.refresh("http://plex:32400", "t", ["/data/tv/Show/S1/E1.mkv", "/data/tv/Show/S1/E2.mkv"], [("/data/", "/media/")])
+    assert n == 1 and ("/library/sections/2/refresh", "/media/tv/Show/S1") in calls
+
+
+# ------------------------------------------------------------------ improvements after M5 review
+def video_with_forced(folder: Path, name: str) -> Path:
+    """A full English track plus a forced English track (foreign-language scenes)."""
+    folder.mkdir(parents=True, exist_ok=True)
+    full, forced = folder / "full.srt", folder / "forced.srt"
+    full.write_text(SRT, encoding="utf-8")
+    forced.write_text("1\n00:00:04,000 --> 00:00:06,000\nWhere is the ring?\n", encoding="utf-8")
+    v = folder / name
+    subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=32x32:d=30",
+                    "-i", str(full), "-i", str(forced), "-map", "0", "-map", "1", "-map", "2", "-c:v", "libx264",
+                    "-c:s", "srt", "-metadata:s:s:0", "language=eng", "-metadata:s:s:1", "language=eng",
+                    "-disposition:s:1", "forced", str(v)], check=True)
+    full.unlink(); forced.unlink()
+    return v
+
+
+@ffmpeg
+def test_forced_track_is_translated_separately(tmp_path):
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    v = video_with_forced(tmp_path / "lib/Show", "Show S01E01.mkv")
+    app.state.store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    app.state.worker.process(app.state.store.next_queued())
+    main = v.with_name("Show S01E01.captionizerr.ru.srt")
+    forced = v.with_name("Show S01E01.captionizerr.ru.forced.srt")
+    assert main.is_file() and forced.is_file()
+    assert forced.read_text(encoding="utf-8").count("-->") == 1 and main.read_text(encoding="utf-8").count("-->") == 8
+    assert any(j.source == "forced" for j in app.state.store.list())
+
+
+@ffmpeg
+def test_upgrade_reuses_previous_translation_and_edits(tmp_path):
+    calls = []
+
+    class Counting(FakeProvider):
+        def complete(self, system, context, work):
+            calls.append(work)
+            return super().complete(system, context, work)
+
+    app = create_app(settings(tmp_path), provider_factory=Counting, start_worker=False)
+    store, w = app.state.store, app.state.worker
+    old = make_video(tmp_path / "lib/Show/Season 1", "Show - S01E01 - Pilot WEBDL-1080p.mkv")
+    store.enqueue("sonarr", "Show S01E01", str(old), "ru", None)
+    w.process(store.next_queued())
+    old_tr = old.with_name(old.stem + ".captionizerr.ru.srt")
+    edited = old_tr.read_text(encoding="utf-8").replace("Строка номер 2 тестового эпизода.", "Моя правка.")
+    old_tr.write_text(edited, encoding="utf-8")                    # the viewer's edit
+    # upgrade: Sonarr deletes the old video and imports a new release of the same episode
+    new = make_video(tmp_path / "lib/Show/Season 1", "Show - S01E01 - Pilot Bluray-1080p.mkv")
+    old.unlink()
+    n_before = len(calls)
+    store.enqueue("sonarr", "Show S01E01", str(new), "ru", None)
+    w.process(store.next_queued())
+    out = new.with_name(new.stem + ".captionizerr.ru.srt").read_text(encoding="utf-8")
+    assert "Моя правка." in out and len(calls) == n_before            # everything reused, no model call
+    assert not old_tr.exists() and list((tmp_path / "config/orphans").rglob(old_tr.name))
+    job = store.list(1)[0]
+    assert "re-timed from the previous release" in job.detail and job.cost_usd == 0
+
+
+def test_align_by_timing_with_offset(tmp_path):
+    from captionizerr import reuse
+    new = tmp_path / "new.srt"
+    new.write_text(SRT, encoding="utf-8")
+    shifted = "".join(f"{i}\n00:00:{i * 3 + 1:02d},000 --> 00:00:{i * 3 + 3:02d},500\nСтрока {i}.\n\n" for i in range(1, 9))
+    old = tmp_path / "old.srt"
+    old.write_text(shifted, encoding="utf-8")                      # same lines, 1 s later
+    r = reuse.align(cuesmod.load(new), cuesmod.load(old), None)
+    assert r.coverage == 1.0 and r.method == "timing" and r.translations[3] == "Строка 3."
+
+
+def test_open_batches_are_reserved_against_the_cap(tmp_path):
+    app = create_app(settings(tmp_path, monthly_cap_usd=1.0), provider_factory=FakeProvider, start_worker=False)
+    store, w = app.state.store, app.state.worker
+    a = store.enqueue("manual", "a", "/x/a.mkv", "ru", None, "batch")
+    store.set_batched(a.id, "b1", "in batch", 0.9)
+    assert abs(store.reserved() - 0.9) < 1e-9
+    b = store.enqueue("manual", "b", "/x/b.mkv", "ru", None)
+    assert w.over_budget(store.get(b.id), 0.2) and store.get(b.id).state == "paused_budget"
+
+
+def test_daily_db_snapshot(tmp_path):
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    rep = maintenance.run(app.state.settings, app.state.store)
+    snap = tmp_path / "config/backup" / rep["db_snapshot"]
+    import sqlite3
+    assert sqlite3.connect(snap).execute("SELECT COUNT(*) FROM jobs").fetchone()[0] >= 0
+
+
+@ffmpeg
+def test_editor_shows_preparing_while_extracting(tmp_path, monkeypatch):
+    app = create_app(settings(tmp_path), provider_factory=FakeProvider, start_worker=False)
+    c = TestClient(app)
+    v = make_video(tmp_path / "lib/Show", "Show S01E01.mkv")
+    v.with_name("Show S01E01.captionizerr.ru.srt").write_text(SRT, encoding="utf-8")
+    import threading
+    gate = threading.Event()
+    real = media.find_source
+    monkeypatch.setattr(media, "find_source", lambda *a, **k: (gate.wait(10), real(*a, **k))[1])
+    r = c.get("/edit", params={"path": str(v), "lang": "ru"})
+    assert "Preparing the editor" in r.text
+    gate.set()
+    time.sleep(0.5)
+    r = c.get("/edit", params={"path": str(v), "lang": "ru"})
+    assert "Season 1, Episode 1" in r.text

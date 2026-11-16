@@ -1,6 +1,6 @@
 """The only code path that writes next to media files.
 
-It creates `<video stem>.captionizerr.<lang>.<srt|ass>` and nothing else:
+It creates `<video stem>.captionizerr.<lang>[.forced].<srt|ass>` and nothing else:
 no overwrite, no delete, no other extension, no path outside the video's folder.
 """
 from __future__ import annotations
@@ -17,15 +17,17 @@ class WriteRefused(RuntimeError):
     pass
 
 
-def target_path(video: Path, lang: str, fmt: str) -> Path:
+def target_path(video: Path, lang: str, fmt: str, forced: bool = False) -> Path:
+    """`forced` = the translation of a forced track (foreign-language scenes, signs): players
+    show `.forced.` subtitles automatically when the audio is in the viewer's language."""
     if not _LANG.match(lang):
         raise WriteRefused(f"invalid language code: {lang!r}")
     if fmt not in ("srt", "ass"):
         raise WriteRefused(f"invalid format: {fmt!r}")
-    return video.with_name(f"{video.stem}.{TAG}.{lang}.{fmt}")
+    return video.with_name(f"{video.stem}.{TAG}.{lang}{'.forced' if forced else ''}.{fmt}")
 
 
-_SIDECAR = re.compile(r"^(?P<stem>.+)\." + TAG + r"\.(?P<lang>[a-z]{2,3}(?:-[A-Za-z]{2,4})?)\.(?P<fmt>srt|ass)$")
+_SIDECAR = re.compile(r"^(?P<stem>.+)\." + TAG + r"\.(?P<lang>[a-z]{2,3}(?:-[A-Za-z]{2,4})?)(?P<forced>\.forced)?\.(?P<fmt>srt|ass)$")
 
 
 def sidecars(video: Path) -> list[Path]:
@@ -48,7 +50,7 @@ def move_sidecars(old_video: Path, new_video: Path) -> list[tuple[Path, Path]]:
     moved = []
     for src in sidecars(old_video):
         m = _SIDECAR.match(src.name)
-        dest = target_path(new_video, m.group("lang"), m.group("fmt"))
+        dest = target_path(new_video, m.group("lang"), m.group("fmt"), bool(m.group("forced")))
         if dest.exists():
             continue
         os.rename(src, dest)
@@ -56,11 +58,11 @@ def move_sidecars(old_video: Path, new_video: Path) -> list[tuple[Path, Path]]:
     return moved
 
 
-def write_next_to(video: Path, lang: str, fmt: str, content: str) -> Path:
+def write_next_to(video: Path, lang: str, fmt: str, content: str, forced: bool = False) -> Path:
     video = Path(video)
     if not video.is_file():
         raise WriteRefused(f"video not found: {video}")
-    dest = target_path(video, lang, fmt)
+    dest = target_path(video, lang, fmt, forced)
     if dest.parent.resolve() != video.parent.resolve():
         raise WriteRefused("destination escapes the video's folder")
     # O_EXCL: fail if anything already exists at that name (file or symlink)

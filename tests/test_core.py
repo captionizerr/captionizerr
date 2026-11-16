@@ -248,3 +248,15 @@ def test_provider_never_marks_empty_blocks_for_cache():
     assert AnthropicProvider.content("", "work") == [{"type": "text", "text": "work"}]
     c = AnthropicProvider.content("notes", "work")
     assert c[0]["cache_control"] and "cache_control" not in c[1]
+
+
+def test_short_cues_may_read_faster():
+    from captionizerr.cues import Cue
+    from captionizerr.profile import Profile
+    from captionizerr.validate import check
+    p = Profile(target_cps=20)
+    short = Cue(1, 0, 1400, "Seemed real interested.")
+    text = "Казалось, ему очень интересно."   # 21 cps on a 1.4 s cue: allowed (short-cue limit 32)
+    assert not [i for i in check([short], {1: text}, p) if i.kind == "too_fast"]
+    long_ = Cue(2, 0, 3000, "x" * 10)
+    assert [i for i in check([long_], {2: "я" * 80}, p) if i.kind == "too_fast"]

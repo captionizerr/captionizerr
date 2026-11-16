@@ -49,6 +49,7 @@ RULES
 - Keep positioning tags such as {{\\an8}} at the very start of a cue, and keep <i>…</i> italics where the source has them.
 - Readability: at most {p.max_line} characters per line and {p.max_lines} lines per cue; aim for at most
   {p.target_cps:.0f} characters per second of screen time. When the source is fast, condense wording rather than dropping meaning.
+  Cues shorter than 2 seconds may run up to 1.5x that speed: never drop a meaningful word or phrase just to fit a short cue.
 - {LANG_STYLE.get(p.target_lang, "Follow the target language's subtitle conventions.")}
 """
 

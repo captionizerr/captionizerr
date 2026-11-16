@@ -7,6 +7,7 @@ UI has no login on a trusted LAN and some actions spend money.
 from __future__ import annotations
 
 import re
+import threading
 import time
 import urllib.parse
 from datetime import datetime
@@ -23,8 +24,8 @@ from ..hooks import slug
 from ..pricing import PRICES
 from ..profile import LANG_NAMES, SONG_RULES, TONE_RULES
 from ..store import month_now
-from .. import bible, cues as cuesmod, editor, media
-from ..jellyfin import media_updated
+from .. import bible, cues as cuesmod, editor, media, reuse
+from ..jellyfin import refresh_all
 from ..pricing import cost as price_of
 from ..profile import Profile
 from ..writer import WriteRefused, replace_own, target_path
@@ -36,6 +37,10 @@ STATE_LABEL = {"queued": "Queued", "running": "Running", "batched": "In batch", 
                "failed": "Failed", "paused_budget": "Paused (budget)", "skipped": "Skipped", "no_source": "No source"}
 # calibrated output/input ratio and default sizes, for the per-episode price hint on the providers page
 EP_IN, EP_OUT = 16_000, 12_000
+
+
+class Preparing(Exception):
+    """The editor's source track is still being extracted."""
 
 
 def _same_origin(request: Request) -> None:
@@ -89,7 +94,9 @@ def register(app: FastAPI) -> None:
         if state:
             jobs = [j for j in jobs if j.state == state]
         spent, cap = store.spent(), s.monthly_cap_usd
+        reserved = store.reserved()
         return render(request, "dashboard.html", jobs=jobs[:100], counts=store.counts(), spent=spent, cap=cap,
+                      reserved=reserved,
                       pct=min(100, 100 * spent / cap) if cap else 0, month=month_now(), months=store.spend_by_month(),
                       filter_state=state, states=STATES, avg=store.avg_cost(),
                       fmt_time=lambda t: datetime.fromtimestamp(t).strftime("%d %b %H:%M"))
@@ -176,7 +183,7 @@ def register(app: FastAPI) -> None:
         return None, None
 
     def budget_left(need: float) -> bool:
-        return store.spent() + need <= s.monthly_cap_usd
+        return store.spent() + store.reserved() + need <= s.monthly_cap_usd
 
     @app.post("/library/series/{series_id}/notes")
     def series_notes(request: Request, series_id: int):
@@ -280,6 +287,35 @@ def register(app: FastAPI) -> None:
         return _redirect("/", f"Queued {len(ids)} job(s), estimated ${len(ids) * store.avg_cost():.2f}.")
 
     # ------------------------------------------------------------------ editor
+    @app.exception_handler(Preparing)
+    async def _preparing(request: Request, exc: Preparing):
+        return JSONResponse({"error": "The original subtitle track is still being read; try again in a moment."}, 503)
+
+    pending: dict[str, threading.Thread] = {}
+    found: dict[str, object] = {}
+
+    def editor_source(video: Path, target: Path, lang: str):
+        """The exact source the translation was made from (stored copy, instant); otherwise the
+        video's track, extracted in the background (can take a minute over a network share)."""
+        st = reuse.stored_source(s.data_dir / "sources", target)
+        if st:
+            return media.Source(st[0], st[1], "stored")
+        k = f"{video}|{lang}"
+        if k not in pending:
+            def work():
+                try:
+                    found[k] = media.find_source(video, s.cache_dir, s.source_langs, lang)
+                except Exception as e:          # an unreadable track only means no source column
+                    found[k] = e
+            pending[k] = threading.Thread(target=work, daemon=True, name="editor-source")
+            pending[k].start()
+        pending[k].join(timeout=2)
+        if pending[k].is_alive():
+            raise Preparing()
+        pending.pop(k, None)
+        r = found.pop(k, None)
+        return None if isinstance(r, Exception) else r
+
     def load_editor(path: str, lang: str, key: str | None):
         video = s.map_path(path)
         if not s.in_library(video) or not video.is_file():
@@ -289,7 +325,7 @@ def register(app: FastAPI) -> None:
         target = next((t for t in (target_path(video, lang, "srt"), target_path(video, lang, "ass")) if t.is_file()), None)
         if target is None:
             raise HTTPException(404, "no Captionizerr translation for this file and language")
-        src = media.find_source(video, s.cache_dir, s.source_langs, lang)
+        src = editor_source(video, target, lang)
         tdoc = cuesmod.load(target)
         rows = editor.build_rows(cuesmod.load(src.path) if src else None, tdoc)
         ser = store.series(key) if key else None
@@ -298,7 +334,10 @@ def register(app: FastAPI) -> None:
 
     @app.get("/edit")
     def edit_page(request: Request, path: str, lang: str, key: str = "", back: str = ""):
-        video, target, tdoc, rows, profile, token = load_editor(path, lang, key or None)
+        try:
+            video, target, tdoc, rows, profile, token = load_editor(path, lang, key or None)
+        except Preparing:
+            return render(request, "preparing.html", back=back if back.startswith("/") and not back.startswith("//") else "/")
         data = [{"id": r.id, "t": r.start_ms, "d": round(r.duration, 2), "src": r.src, "tr": r.tr,
                  "extra": r.extra, "flags": r.flags(profile)} for r in rows if not r.hidden]
         stem = video.stem
@@ -350,7 +389,7 @@ def register(app: FastAPI) -> None:
         except WriteRefused as e:
             raise HTTPException(400, str(e))
         bible.log_corrections(s.feedback_dir, key or "", changed)
-        media_updated(s.jellyfin_url, s.jellyfin_key, [str(b["path"])], s.jellyfin_path_map)
+        refresh_all(s, [str(b["path"])])
         return {"saved": len(changed), "token": str(target.stat().st_mtime_ns)}
 
     @app.post("/api/edit/retranslate")
@@ -388,8 +427,37 @@ def register(app: FastAPI) -> None:
         return render(request, "settings.html", models=list(PRICES), efforts=EFFORTS, tones=list(TONE_RULES),
                       songs=list(SONG_RULES), v=s.editable_values(),
                       path_map="; ".join(f"{a}={b}" for a, b in s.jellyfin_path_map),
+                      plex_map="; ".join(f"{a}={b}" for a, b in s.plex_path_map),
                       storage=maintenance.storage(s), last=last, v_keep={"history": s.keep_history, "days": s.keep_days},
-                      last_when=datetime.fromtimestamp(last["at"]).strftime("%d %b %H:%M") if last.get("at") else "")
+                      last_when=datetime.fromtimestamp(last["at"]).strftime("%d %b %H:%M") if last.get("at") else "",
+                      overridden=overrides())
+
+    def overrides() -> list[dict]:
+        """Settings saved in the UI that differ from the environment default."""
+        env, saved = app.state.env_defaults, store.load_settings()
+        out = []
+        for k in sorted(saved):
+            if k not in s.EDITABLE:
+                continue
+            here, there = getattr(s, k), getattr(env, k)
+            norm = (lambda v: [list(x) for x in v]) if s.EDITABLE[k] == "pairs" else (lambda v: v)
+            if norm(here) != norm(there):
+                out.append({"key": k, "label": k.replace("_", " "), "value": here, "env": there})
+        return out
+
+    @app.post("/settings/reset")
+    async def settings_reset(request: Request):
+        _same_origin(request)
+        f = await request.form()
+        key = str(f.get("key", ""))
+        keys = [o["key"] for o in overrides()] if key == "all" else [key]
+        keys = [k for k in keys if k in s.EDITABLE]
+        if not keys:
+            return _redirect("/settings", "Nothing to reset.", "warn")
+        store.delete_settings(keys)
+        for k in keys:
+            setattr(s, k, getattr(app.state.env_defaults, k))
+        return _redirect("/settings", f"Back to the environment value: {', '.join(k.replace('_', ' ') for k in keys)}.")
 
     @app.post("/maintenance/run")
     def maintenance_run(request: Request):
@@ -415,12 +483,17 @@ def register(app: FastAPI) -> None:
             tone, songs = str(f.get("tone")), str(f.get("songs"))
             if tone not in TONE_RULES or songs not in SONG_RULES:
                 raise ValueError("unknown tone or songs option")
-            pm = []
-            for pair in filter(None, (x.strip() for x in str(f.get("jellyfin_path_map", "")).split(";"))):
-                a, _, b = pair.partition("=")
-                if not a or not b:
-                    raise ValueError("path map pairs look like /downloads/=/mnt/media/")
-                pm.append([a, b])
+            def pairs(field):
+                out = []
+                for pair in filter(None, (x.strip() for x in str(f.get(field, "")).split(";"))):
+                    a, _, b = pair.partition("=")
+                    if not a or not b:
+                        raise ValueError("path map pairs look like /downloads/=/mnt/media/")
+                    out.append([a, b])
+                return out
+            pm = pairs("jellyfin_path_map")
+            plex_vals = ({"plex_url": str(f.get("plex_url", "")).strip(), "plex_path_map": pairs("plex_path_map")}
+                         if "plex_url" in f else {})
             src_vals = {}
             if "source_langs" in f:                    # the Sources card is part of this form
                 srcl = [x for x in str(f.get("source_langs", "")).replace(" ", "").split(",") if x]
@@ -429,7 +502,7 @@ def register(app: FastAPI) -> None:
                 src_vals = {"source_langs": srcl, "any_source": bool(f.get("any_source")),
                             "auto_notes": bool(f.get("auto_notes")), "bazarr_url": str(f.get("bazarr_url", "")).strip()}
             vals = {
-                **src_vals,
+                **src_vals, **plex_vals,
                 "languages": langs, "model": model, "effort": effort, "tone": tone, "songs": songs,
                 "monthly_cap_usd": max(0.0, float(f.get("monthly_cap_usd") or 0)),
                 "alert_at": min(1.0, max(0.1, float(f.get("alert_pct") or 80) / 100)),

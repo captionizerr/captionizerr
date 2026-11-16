@@ -137,7 +137,7 @@ def test_jellyfin_path_map():
 @pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg needed")
 def test_worker_tells_jellyfin(tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setattr("captionizerr.worker.media_updated", lambda url, key, paths, m: calls.append((url, paths, m)))
+    monkeypatch.setattr("captionizerr.jellyfin.media_updated", lambda url, key, paths, m: calls.append((url, paths, m)))
     s = Settings(data_dir=tmp_path / "config", webhook_key=KEY, languages=["ru"], jellyfin_url="http://jf:8096",
                  library_roots=[str(tmp_path / "lib")],
                  jellyfin_key="k", jellyfin_path_map=[("/x/", "/y/")])

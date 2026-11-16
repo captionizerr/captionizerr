@@ -36,6 +36,9 @@ class Issue:
         return self.kind in FIXABLE
 
 
+SHORT_CUE_SLACK = 1.6
+
+
 def plain(text: str) -> str:
     return _TAGS.sub("", text)
 
@@ -77,7 +80,9 @@ def check(cues: list[Cue], tr: dict[int, str | None], p: Profile,
         if longest > p.max_line + 4:   # small tolerance before forcing a rewrite
             issues.append(Issue(c.index, "too_long", f"line of {longest} chars > {p.max_line}"))
         cps = len(body.replace("\n", "")) / c.duration
-        if cps > p.target_cps * cps_slack and len(body) > 12:
+        # short cues: a brief burst of speed beats losing words (the prompt allows 1.5x under 2 s)
+        slack = max(cps_slack, SHORT_CUE_SLACK) if c.duration < 2.0 else cps_slack
+        if cps > p.target_cps * slack and len(body) > 12:
             issues.append(Issue(c.index, "too_fast", f"{cps:.0f} chars/sec > {p.target_cps:.0f}"))
         if script == "cyrillic":
             bad = [w for w in _LATIN_WORD.findall(body) if not _ALLOWED_LATIN.match(w)]

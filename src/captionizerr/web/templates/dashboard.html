@@ -9,7 +9,8 @@
     <h2>Budget, {{ month }}</h2>
     <div class="big">${{ '%.2f'|format(spent) }} <span class="muted small">of ${{ '%.2f'|format(cap) }}</span></div>
     <div class="bar" role="progressbar" aria-valuenow="{{ pct|round|int }}" aria-valuemin="0" aria-valuemax="100"><span style="width:{{ pct }}%"></span></div>
-    <div class="small muted">About {{ ((cap - spent) / avg)|round(0, 'floor')|int if avg else '–' }} more episodes this month at ${{ '%.2f'|format(avg) }} each.</div>
+    {% if reserved %}<div class="small muted">Plus ${{ '%.2f'|format(reserved) }} reserved for backlog batches in progress.</div>{% endif %}
+    <div class="small muted">About {{ ((cap - spent - reserved) / avg)|round(0, 'floor')|int if avg else '–' }} more episodes this month at ${{ '%.2f'|format(avg) }} each.</div>
     {% if counts.get('paused_budget') %}
     <form method="post" action="/jobs/resume" class="actions"><button class="primary">Resume {{ counts.get('paused_budget') }} paused job(s)</button><span class="small muted">Raise the cap in Settings first.</span></form>
     {% endif %}

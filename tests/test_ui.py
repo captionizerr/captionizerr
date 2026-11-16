@@ -204,3 +204,28 @@ def test_optional_login(tmp_path):
     assert c.get("/static/favicon.svg").status_code == 200
     assert c.post(f"/api/hooks/sonarr?apikey={KEY}", json={"eventType": "Test"}).status_code == 200
     assert c.get("/api/jobs").status_code == 401 and c.get(f"/api/jobs?apikey={KEY}").status_code == 200
+
+
+def test_settings_show_and_reset_overrides(ui):
+    app, c, _ = ui
+    s = app.state.settings
+    c.post("/settings", data={"languages": "de", "model": s.model, "effort": "low", "tone": "faithful", "songs": "verse",
+                              "monthly_cap_usd": "20", "alert_pct": "80", "max_line": "42", "target_cps": "20"}, headers=SAME)
+    assert s.languages == ["de"]
+    page = c.get("/settings").text
+    assert "Changed here" in page and "languages" in page
+    c.post("/settings/reset", data={"key": "languages"}, headers=SAME)
+    assert s.languages == ["ru"] and "languages" not in app.state.store.load_settings()
+
+
+def test_settings_page_saves_everything(ui):
+    app, c, _ = ui
+    form = {"languages": "ru", "model": "claude-opus-5-5", "effort": "low", "tone": "faithful", "songs": "verse",
+            "monthly_cap_usd": "20", "alert_pct": "80", "max_line": "42", "target_cps": "20",
+            "source_langs": "en, ja", "any_source": "1", "bazarr_url": "http://bazarr:6767",
+            "plex_url": "http://plex:32400", "plex_path_map": "/data/=/media/"}
+    r = c.post("/settings", data=form, headers=SAME, follow_redirects=False)
+    assert "Settings+saved" in r.headers["location"], r.headers["location"]
+    s = app.state.settings
+    assert s.source_langs == ["en", "ja"] and s.plex_url == "http://plex:32400" and s.plex_path_map == [("/data/", "/media/")]
+    assert s.auto_notes is False                     # unticked checkbox

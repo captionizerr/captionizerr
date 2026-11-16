@@ -125,6 +125,25 @@ def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
     return None
 
 
+def find_forced(video: Path, cache_dir: Path, prefer: list[str], target: str) -> Source | None:
+    """A forced track in a source language: only the foreign-language lines and signs (e.g. Elvish
+    dialogue in an English show). Embedded forced text track first, then `<video>.<lang>.forced.srt`."""
+    prefer = [l for l in (langs.norm(x) for x in prefer) if l and l != langs.norm(target)]
+    streams, _ = probe(video)
+    for lang in prefer:
+        cands = [x for x in streams if x.is_text and x.forced and langs.same(x.language, lang)]
+        if not cands:   # some releases only say so in the title
+            cands = [x for x in streams if x.is_text and langs.same(x.language, lang) and "forced" in (x.title or "").lower()]
+        if cands:
+            return Source(_cache_extract(video, cands[0], cache_dir, lang), lang, "embedded")
+        for ext in ("srt", "ass"):
+            for code in (lang, *langs.ISO3.get(lang, ())):
+                side = video.with_name(f"{video.stem}.{code}.forced.{ext}")
+                if side.is_file():
+                    return Source(side, lang, "sidecar")
+    return None
+
+
 def _cache_extract(video: Path, stream: SubStream, cache_dir: Path, lang: str) -> Path:
     import hashlib
     import shutil

@@ -93,9 +93,11 @@ def first_request(doc: SubtitleDoc, profile: Profile, series_context: str | None
 
 def translate(doc: SubtitleDoc, profile: Profile, provider: Provider,
               series_context: str | None = None, title: str | None = None,
-              log=print, max_fix_rounds: int = 2, first=None) -> Result:
+              log=print, max_fix_rounds: int = 2, first=None, prefilled: dict[int, str] | None = None) -> Result:
     """`first`: a ProviderResult for the main request that already arrived via the Batch API;
-    the pipeline then only runs the (small, live) missing-cue and fix requests."""
+    the pipeline then only runs the (small, live) missing-cue and fix requests.
+    `prefilled`: translations reused from a previous release; only the other cues are sent,
+    and reused lines are never rewritten by fix rounds (they may carry the viewer's edits)."""
     send = cues_to_send(doc)
     valid = {c.index for c in send}
     by_index = {c.index: c for c in doc.cues}
@@ -133,7 +135,12 @@ def translate(doc: SubtitleDoc, profile: Profile, provider: Provider,
 
     log(f"translating {len(send)} cues ({len(doc.cues) - len(send)} sound-only cues dropped locally)"
         + (f" in chunks of {chunk}" if chunk and len(send) > chunk else ""))
-    if first is not None:
+    protected: set[int] = set()
+    if prefilled is not None:
+        tr: dict[int, str | None] = {n: t for n, t in prefilled.items() if n in valid}
+        protected = set(tr)
+        log(f"  reusing {len(tr)} lines from the previous release")
+    elif first is not None:
         steps.append(Step("translate (batch)", first.model, first.usage, 0.0, first.notes, batch=True))
         tr: dict[int, str | None] = dict(parse_response(first.text, valid))
     else:
@@ -148,7 +155,7 @@ def translate(doc: SubtitleDoc, profile: Profile, provider: Provider,
     confirmed: set[int] = set()
     current = issues0
     for rnd in range(1, max_fix_rounds + 1):
-        fixable = [i for i in current if i.fixable]
+        fixable = [i for i in current if i.fixable and i.index not in protected]
         if not fixable:
             break
         reasons: dict[int, list[str]] = {}
