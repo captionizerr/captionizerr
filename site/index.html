@@ -68,10 +68,6 @@ td .why{display:block;color:var(--muted);font-size:13.5px;font-weight:400;margin
 .steps{counter-reset:s;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin:20px 0}
 .steps .card{position:relative;padding-top:44px}
 .steps .card::before{counter-increment:s;content:counter(s);position:absolute;top:14px;left:20px;width:24px;height:24px;border-radius:99px;background:var(--accent-fill);color:#14171c;font-weight:800;font-size:13px;display:grid;place-items:center}
-.shots{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(min(100%,480px),1fr))}
-.shots figure{margin:0}
-.shots img{width:100%;border-radius:10px;border:1px solid var(--line);display:block;cursor:zoom-in;background:#0e1014}
-.shots figcaption{font-size:14px;color:var(--muted);margin-top:8px}
 pre{background:var(--code);color:var(--code-fg);padding:16px 18px;border-radius:10px;overflow-x:auto;font:13.5px/1.55 var(--mono);margin:12px 0;position:relative}
 pre .c{color:#7d8696}
 .copy{position:absolute;top:8px;right:8px;font:600 12px var(--sans);padding:4px 10px;border-radius:6px;border:1px solid #333a45;background:#1d2129;color:#c9ced8;cursor:pointer}
@@ -86,9 +82,6 @@ details p{color:var(--muted);margin:10px 0 0}
 .note{font-size:14px;color:var(--muted)}
 footer{padding:36px 0 56px;color:var(--muted);font-size:14px}
 footer .wrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between}
-dialog{border:0;padding:0;background:transparent;max-width:96vw}
-dialog img{max-width:96vw;max-height:92vh;border-radius:10px}
-dialog::backdrop{background:#000c}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 @media (max-width:640px){section{padding:52px 0} nav.main a:not(.gh){display:none}}
 </style>
@@ -99,7 +92,7 @@ dialog::backdrop{background:#000c}
     <svg viewBox="92.5 104 700 700" aria-hidden="true"><g fill="currentColor"><path d="M443 127H288C195 127 120 202 120 295C120 388 195 464 288 464H344C410 464 443 440 443 378V365H290C251 365 220 334 220 295C220 256 251 223 290 223H443Z"/><path d="M757 127H599C506 127 430 202 430 295C430 388 506 464 599 464H757V365H600C561 365 530 334 530 295C530 256 561 223 600 223H757Z"/><g fill-rule="evenodd"><path d="M126 464H329C398 464 444 509 444 577C444 627 418 664 371 682L447 781H335L256 686H220V781H126ZM220 550V609H323C342 609 355 597 355 579C355 562 342 550 323 550Z"/><path d="M445 781V562C445 497 479 464 545 464H644C713 464 760 510 760 578C760 627 734 664 680 682L765 781H647L565 686H536V781ZM536 550V609H635C654 609 666 597 666 579C666 562 654 550 635 550Z"/></g></g></svg>
     Captionizerr</a>
   <nav class="main" aria-label="Sections">
-    <a href="#examples">Examples</a><a href="#how">How it works</a><a href="#tour">Tour</a><a href="#features">Features</a><a href="#start">Quick start</a><a href="#faq">FAQ</a>
+    <a href="#how">How it works</a><a href="#features">Features</a><a href="#start">Quick start</a><a href="#faq">FAQ</a>
     <a class="gh" href="https://github.com/captionizerr/captionizerr">GitHub</a>
   </nav>
 </div></header>
@@ -127,36 +120,6 @@ dialog::backdrop{background:#000c}
     <div class="card problem"><h3>Machine translation flattens</h3><p>Line-by-line translation can't know who's speaking. You get the wrong grammatical gender, the wrong "you", softened swearing, literal idioms, and songs turned into prose.</p></div>
     <div class="card"><h3>Captionizerr: neither problem</h3><p>It starts from your video's own subtitle track, so the timing is exact. The model reads the whole episode at once, plus series notes on characters and names.</p></div>
   </div>
-</div></section>
-
-<section id="examples"><div class="wrap">
-  <div class="kicker">Examples</div>
-  <h2>The same scene, translated two ways</h2>
-  <p class="lead">An original scene written for this page, translated English → Russian. Officer Linda Moss knocks on the door of a farmer she has never met, Dale Pruitt. Her partner Hank waits in the car.</p>
-  <div class="tw"><table>
-    <thead><tr><th>English source</th><th>Literal machine translation <span class="note">(illustrative)</span></th><th>Captionizerr <span class="note">(real output)</span></th></tr></thead>
-    <tbody>
-      <tr><td>Sorry, I was sure you'd be asleep by now.<br><span class="note">Linda, to the stranger</span></td>
-        <td class="bad">Извини, я был уверен, что ты уже спишь.<span class="why">Masculine "был уверен" for a woman; familiar "ты" to a stranger</span></td>
-        <td class="good">Простите, я была уверена, что вы уже спите.<span class="why">Feminine "была уверена", polite "вы": the model knows who's speaking to whom</span></td></tr>
-      <tr><td>Well, shit. That's a hell of a way to start a Monday.<br><span class="note">Dale</span></td>
-        <td class="bad">Ну, дерьмо. Это адский способ начать понедельник.<span class="why">Word-for-word calque; nobody talks like this</span></td>
-        <td class="good">Ну, твою мать. Чертовски хорошее начало понедельника.<span class="why">As strong as the original, in natural speech (or softened, if you choose)</span></td></tr>
-      <tr><td>Your nephew's car was found in the river this morning.</td>
-        <td class="bad">Машину твоего племянника нашли утром в реке.<span class="why">Drops back to "ты" mid-conversation</span></td>
-        <td class="good">Машину вашего племянника нашли утром в реке.<span class="why">Stays formal, consistently</span></td></tr>
-      <tr><td>Ricky? He's not a bad apple. He's the whole damn orchard.</td>
-        <td class="bad">Рикки? Он не плохое яблоко. Он весь чёртов сад.<span class="why">The idiom doesn't exist in Russian, so the joke dies</span></td>
-        <td class="good">Рикки? Он не паршивая овца. Он всё чёртово стадо.<span class="why">Adapted to the Russian idiom ("black sheep → the whole flock"), so the joke still lands</span></td></tr>
-      <tr><td><i>♪ Oh, the river's cold and the night is long / I'll keep you warm with an old sad song ♪</i></td>
-        <td class="bad"><i>♪ О, река холодная, и ночь длинная / Я согрею тебя старой грустной песней ♪</i><span class="why">Prose; the rhyme is gone</span></td>
-        <td class="good"><i>♪ Холодна река, ночь длинна, темна / Песней старой согрею тебя до дна ♪</i><span class="why">Rhymed verse in italics. Not perfect: "до дна" is a stretch; the editor's ↻ would offer another take</span></td></tr>
-      <tr><td>You coming or not, Hank?<br><span class="note">Linda, to her partner</span></td>
-        <td>Ты идёшь или нет, Хэнк?</td>
-        <td class="good">Ты идёшь или нет, Хэнк?<span class="why">Now "ты" is right: the series notes say Linda and Hank are on first-name terms</span></td></tr>
-    </tbody>
-  </table></div>
-  <p class="note">The right column is Captionizerr's actual output for this scene (Claude Opus 5.5, low effort, with the series notes, 0 flagged lines, under 1¢), unedited: the same file as in the editor screenshot below. The middle column illustrates typical errors of sentence-by-sentence translation and was not produced by a specific product.</p>
 </div></section>
 
 <section id="how"><div class="wrap">
@@ -227,18 +190,6 @@ flowchart TD
   <div class="two">
     <div class="card"><h3>Upgrades are re-timed, not re-translated</h3><p>When Sonarr replaces a WEB-DL with a Blu-ray, Captionizerr matches the previous translation line by line onto the new release, keeping your edits. Only new or changed lines go to the model, usually at $0.</p></div>
     <div class="card"><h3>Backlog at half price</h3><p>Tick a whole season and choose <b>Add to backlog</b>. It goes out as one Anthropic Batch request at 50% of the price, usually back within the hour. Open batches count against your budget until they're paid.</p></div>
-  </div>
-</div></section>
-
-<section id="tour"><div class="wrap">
-  <div class="kicker">Tour</div>
-  <h2>A web UI that does the setup for you</h2>
-  <p class="lead">No config file needed. Keys, connections and webhooks are set up in the browser, and each connection has a Test button. Screenshots use demo data; click one to enlarge it.</p>
-  <div class="shots">
-    <figure><img src="img/dashboard.png" alt="Dashboard with needs-attention, in-progress and budget cards, and a list of translations" loading="lazy"><figcaption><b>Dashboard:</b> what needs attention, what's in progress, the budget, and every translation with an Edit button.</figcaption></figure>
-    <figure><img src="img/editor.png" alt="Side-by-side editor: English lines left, Russian translation right, with a re-translate button per line" loading="lazy"><figcaption><b>Editor:</b> source and translation side by side. ↻ re-translates one line, optionally with an instruction ("more casual").</figcaption></figure>
-    <figure><img src="img/wizard.png" alt="Setup wizard step: choose AI provider and enter API key" loading="lazy"><figcaption><b>Setup wizard:</b> provider, key and a free key test, in a few clicks.</figcaption></figure>
-    <figure><img src="img/connections.png" alt="Connections settings: Sonarr and Radarr with Test and Set up webhook buttons" loading="lazy"><figcaption><b>Connections:</b> <i>Set up webhook</i> adds Captionizerr's webhook to Sonarr/Radarr for you.</figcaption></figure>
   </div>
 </div></section>
 
@@ -338,7 +289,6 @@ docker compose up -d</pre>
   <span><a href="https://github.com/captionizerr/captionizerr">GitHub</a> · <a href="https://github.com/captionizerr/captionizerr/blob/main/docs/architecture.md">Architecture</a> · <a href="https://github.com/captionizerr/captionizerr/releases">Releases</a> · <a href="https://github.com/captionizerr/captionizerr/issues">Issues</a></span>
 </div></footer>
 
-<dialog id="zoom" aria-label="Screenshot"><img alt=""></dialog>
 <script type="module">
 import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
 const dark = matchMedia("(prefers-color-scheme: dark)").matches;
@@ -359,10 +309,6 @@ document.querySelectorAll("pre .copy").forEach(b => b.addEventListener("click", 
   const text = b.parentElement.innerText.replace(/^Copy\n?/, "").replace(/^Copied\n?/, "");
   try { await navigator.clipboard.writeText(text); b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy", 1500); } catch {}
 }));
-const dlg = document.getElementById("zoom");
-document.querySelectorAll(".shots img").forEach(img => img.addEventListener("click", () => {
-  dlg.querySelector("img").src = img.src; dlg.querySelector("img").alt = img.alt; dlg.showModal(); }));
-dlg.addEventListener("click", () => dlg.close());
 </script>
 </body>
 </html>
