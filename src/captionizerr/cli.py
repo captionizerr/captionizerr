@@ -18,14 +18,29 @@ VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".mov", ".ts", ".webm"}
 
 
 def make_cli_provider(a):
+    """Same keys and prices as the running service: secret files, the environment, or keys saved in
+    the web UI (config/secrets.json); prices from the built-in table or the price lookup."""
+    from .config import Settings
+    from . import secret_store
+    from .pricing import price, register
+    s = Settings.from_env()
+    secret_store.apply(s, secret_store.SecretStore(s.data_dir / "secrets.json"))
     if a.provider == "ollama":
         from .providers.ollama import OllamaProvider
         return OllamaProvider(a.ollama_url, a.model, num_ctx=a.num_ctx)
     if a.provider == "openai":
-        import os
         from .providers.openai_compat import OpenAICompatProvider
-        return OpenAICompatProvider(a.base_url, a.model, os.environ.get("CAPTIONIZERR_OPENAI_API_KEY", ""))
-    return AnthropicProvider(model=a.model, effort=a.effort)
+        base = a.base_url or s.openai_base_url
+        if price(a.model) is None:
+            from .price_lookup import lookup
+            p = lookup("openai", base, a.model, s.cache_dir)
+            if p:
+                register(a.model, p.inp, p.out)
+                print(f"price for {a.model}: ${p.inp:g} in / ${p.out:g} out per 1M tokens ({p.source})", file=sys.stderr)
+            else:
+                print(f"warning: no price found for {a.model}; costs will show as 0", file=sys.stderr)
+        return OpenAICompatProvider(base, a.model, s.openai_key)
+    return AnthropicProvider(model=a.model, effort=a.effort, api_key=s.anthropic_key or None)
 
 
 def add_provider_args(p):

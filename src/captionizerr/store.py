@@ -49,7 +49,7 @@ STATES = ("queued", "running", "batched", "waiting_source", "done", "needs_revie
 ACTIVE = ("queued", "running", "paused_budget", "batched", "waiting_source")
 # columns added after M1; created on start if missing
 MIGRATIONS = {"mode": "TEXT DEFAULT 'live'", "batch_id": "TEXT DEFAULT ''", "wait_since": "REAL DEFAULT 0",
-              "est_usd": "REAL DEFAULT 0"}
+              "est_usd": "REAL DEFAULT 0", "model": "TEXT DEFAULT ''"}
 
 
 def month_now() -> str:
@@ -76,6 +76,7 @@ class Job:
     batch_id: str = ""
     wait_since: float = 0.0      # waiting_source: when we asked Bazarr
     est_usd: float = 0.0         # estimate of a submitted batch job (reserved against the cap until paid)
+    model: str = ""              # the model that did the work (per-model cost averages)
 
 
 class Store:
@@ -127,18 +128,20 @@ class Store:
             return Job(**d)
 
     def finish(self, job_id: int, state: str, detail: str = "", output_path: str = "",
-               cost_usd: float = 0.0, usage: dict | None = None):
-        self._q("UPDATE jobs SET state=?, detail=?, output_path=?, cost_usd=?, usage=?, month=?, updated=? WHERE id=?",
-                (state, detail[:2000], output_path, cost_usd, json.dumps(usage or {}), month_now(), time.time(), job_id))
+               cost_usd: float = 0.0, usage: dict | None = None, model: str = ""):
+        self._q("UPDATE jobs SET state=?, detail=?, output_path=?, cost_usd=?, usage=?, month=?, updated=?, "
+                "model=CASE WHEN ?<>'' THEN ? ELSE model END WHERE id=?",
+                (state, detail[:2000], output_path, cost_usd, json.dumps(usage or {}), month_now(), time.time(),
+                 model, model, job_id))
 
     def record(self, source: str, title: str, video_path: str, lang: str, series_key: str | None,
-               detail: str, cost_usd: float, usage: dict | None = None) -> int:
+               detail: str, cost_usd: float, usage: dict | None = None, model: str = "") -> int:
         """A finished, already-paid request outside the queue (line re-translation, series notes)."""
         now = time.time()
         cur = self._q("INSERT INTO jobs (created, updated, source, title, series_key, video_path, lang, state, detail,"
-                      " output_path, cost_usd, usage, month) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      " output_path, cost_usd, usage, month, model) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (now, now, source, title, series_key, video_path, lang, "done", detail[:2000], "",
-                       cost_usd, json.dumps(usage or {}), month_now()))
+                       cost_usd, json.dumps(usage or {}), month_now(), model))
         return cur.lastrowid
 
     # ---- backlog through the Batch API
@@ -259,10 +262,18 @@ class Store:
         return self._q("UPDATE jobs SET state='queued', detail='', wait_since=0, updated=? WHERE id=? AND state IN "
                        "('failed','needs_review','no_source','paused_budget','waiting_source')", (time.time(), job_id)).rowcount == 1
 
-    def avg_cost(self, default: float = 0.31) -> float:
-        r = self._q("SELECT AVG(cost_usd), COUNT(*) FROM (SELECT cost_usd FROM jobs WHERE state IN ('done','needs_review') "
-                    "AND source NOT IN ('edit','notes','forced') AND cost_usd > 0 ORDER BY id DESC LIMIT 50)").fetchone()
-        return float(r[0]) if r and r[1] else default
+    def avg_cost(self, default: float = 0.31, model: str | None = None, min_jobs: int = 1):
+        """Average cost of the last 50 translations; with `model`, only jobs that model did (so switching
+        vendor or model doesn't carry the old model's prices into estimates). Returns `default` when
+        there are fewer than `min_jobs` such jobs."""
+        where = "state IN ('done','needs_review') AND source NOT IN ('edit','notes','forced') AND cost_usd > 0"
+        args: tuple = ()
+        if model is not None:
+            where += " AND model=?"
+            args = (model,)
+        r = self._q(f"SELECT AVG(cost_usd), COUNT(*) FROM (SELECT cost_usd FROM jobs WHERE {where} "
+                    "ORDER BY id DESC LIMIT 50)", args).fetchone()
+        return float(r[0]) if r and r[1] and r[1] >= min_jobs else default
 
     def spend_by_month(self, n: int = 6) -> list[tuple[str, float, int]]:
         return [(r[0], float(r[1]), int(r[2])) for r in self._q(

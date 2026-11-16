@@ -120,7 +120,7 @@ def register(app: FastAPI) -> None:
         spent, cap, reserved = store.spent(), s.monthly_cap_usd, store.reserved()
         return render(request, "dashboard.html", jobs=jobs[:100], counts=counts, spent=spent, cap=cap,
                       reserved=reserved, pct=min(100, 100 * (spent + reserved) / cap) if cap else 0, month=month_now(),
-                      months=store.spend_by_month(), view=view, avg=store.avg_cost(),
+                      months=store.spend_by_month(), view=view, avg=episode_estimate(),
                       attention={st: counts.get(st, 0) for st in groups["attention"]},
                       active={st: counts.get(st, 0) for st in groups["active"]},
                       side_count=sum(1 for j in all_jobs if j.source in side),
@@ -168,7 +168,7 @@ def register(app: FastAPI) -> None:
             x["override"] = store.series(x["key"])
             x["translated"] = translated_count(x.get("path"), langs_for(x["key"]))
         configured = {"sonarr": bool(s.sonarr_url and s.sonarr_key), "radarr": bool(s.radarr_url and s.radarr_key)}
-        return render(request, "library.html", series=series, movies=movies, errors=err, avg=store.avg_cost(),
+        return render(request, "library.html", series=series, movies=movies, errors=err, avg=episode_estimate(),
                       configured=configured)
 
     def translated_count(series_path: str | None, langs: list[str]) -> int:
@@ -214,7 +214,7 @@ def register(app: FastAPI) -> None:
                       override=store.series(key) or {"enabled": True, "langs": [], "tone": ""},
                       context=proposed if proposed is not None else saved, proposed=proposed is not None,
                       corrections=len(bible.corrections(s.feedback_dir, key)), tones=list(TONE_RULES),
-                      avg=store.avg_cost(), note=note)
+                      avg=episode_estimate(), note=note)
         return resp
 
     def first_source(series_id: int):
@@ -226,6 +226,26 @@ def register(app: FastAPI) -> None:
                 if src:
                     return e, cuesmod.load(src.path)
         return None, None
+
+    def episode_estimate() -> float:
+        """Typical cost of one episode with the model in use now: its own recent average once it has
+        3+ jobs, else its price (built-in / OpenRouter / LiteLLM, cached), else a conservative $0.31."""
+        model = s.active_model
+        avg = store.avg_cost(default=None, model=model, min_jobs=3)
+        if avg is not None:
+            return avg
+        from ..pricing import price
+        from ..price_lookup import EP_IN, EP_OUT
+        p = price(model)
+        if p is None and s.provider == "openai":
+            from ..price_lookup import lookup
+            pl = lookup("openai", s.openai_base_url, model, s.cache_dir)
+            p = (pl.inp, pl.out, pl.cache_read) if pl else None
+        if p is None and s.provider == "ollama":
+            return 0.0
+        return (EP_IN * p[0] + EP_OUT * p[1]) / 1_000_000 if p else 0.31
+
+    app.state.episode_estimate = episode_estimate
 
     def budget_left(need: float) -> bool:
         return store.spent() + store.reserved() + need <= s.monthly_cap_usd
@@ -253,7 +273,7 @@ def register(app: FastAPI) -> None:
             return _redirect(f"/library/series/{series_id}", f"Generation failed: {type(e).__name__}: {str(e)[:160]}", "warn")
         c = price_of(res.model, res.usage) or 0.0
         store.record("notes", f"{ser['title']}: series notes drafted", ep["path"], (langs_for(key) or ["en"])[0], key,
-                     "generated from the series page", c, vars(res.usage))
+                     "generated from the series page", c, vars(res.usage), res.model)
         return series_view(request, series_id, proposed=text,
                            note=f"Draft notes below (${c:.3f}), not saved yet. Edit, then save series settings.")
 
@@ -280,7 +300,7 @@ def register(app: FastAPI) -> None:
             return _redirect(f"/library/series/{series_id}", f"Failed: {type(e).__name__}: {str(e)[:160]}", "warn")
         c = price_of(res.model, res.usage) or 0.0
         store.record("notes", f"{ser['title']}: notes updated from {len(items)} correction(s)", "", (langs_for(key) or ["en"])[0],
-                     key, "learned from editor corrections", c, vars(res.usage))
+                     key, "learned from editor corrections", c, vars(res.usage), res.model)
         return series_view(request, series_id, proposed=text,
                            note=f"Updated notes from {len(items)} correction(s) (${c:.3f}), not saved yet. Review, then save.")
 
@@ -328,8 +348,8 @@ def register(app: FastAPI) -> None:
         if mode == "batch":
             how = ("sent as one batch in about two minutes; results within 24 h (usually under an hour)"
                    if app.state.worker.batch_capable() else "this provider has no Batch API, so they run live at full price")
-            return _redirect("/", f"Added {len(ids)} job(s) to the backlog, about ${len(ids) * store.avg_cost() / 2:.2f}: {how}.")
-        return _redirect("/", f"Queued {len(ids)} job(s), estimated ${len(ids) * store.avg_cost():.2f}.")
+            return _redirect("/", f"Added {len(ids)} job(s) to the backlog, about ${len(ids) * episode_estimate() / 2:.2f}: {how}.")
+        return _redirect("/", f"Queued {len(ids)} job(s), estimated ${len(ids) * episode_estimate():.2f}.")
 
     # ------------------------------------------------------------------ editor
     @app.exception_handler(Preparing)
@@ -462,13 +482,13 @@ def register(app: FastAPI) -> None:
             return JSONResponse({"error": "Monthly budget reached."}, 402)
         instruction = str(b.get("instruction") or "")[:500]
         try:
-            text, usage = editor.retranslate(app.state.worker.provider_factory(), profile,
-                                             app.state.worker.context_for(key), rows, row_id, instruction)
+            prov = app.state.worker.provider_factory()
+            text, usage = editor.retranslate(prov, profile, app.state.worker.context_for(key), rows, row_id, instruction)
         except Exception as e:
             return JSONResponse({"error": f"{type(e).__name__}: {str(e)[:200]}"}, 502)
-        c = price_of(s.model, usage) or 0.0
+        c = price_of(prov.model, usage) or 0.0          # the model that did the work, not the Anthropic setting
         store.record("edit", f"{target.name}: line {row_id} re-translated", str(b["path"]), str(b["lang"]), key,
-                     instruction or "re-translate", c, vars(usage))
+                     instruction or "re-translate", c, vars(usage), prov.model)
         r = next(r for r in rows if r.id == row_id)
         r.tr = text
         return {"text": text, "cost": round(c, 4), "flags": editor.flags_for(rows, profile).get(row_id, [])}

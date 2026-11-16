@@ -5,6 +5,7 @@ cost 1.25x input; cache reads use the listed rate. Batch API halves everything.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 # model: (input, output, cache_read)
@@ -37,7 +38,16 @@ def register(model: str, p_in: float, p_out: float) -> None:
 
 
 def price(model: str) -> tuple[float, float, float] | None:
-    return PRICES.get(model) or CUSTOM_PRICES.get(model)
+    """Exact name first; then the same model without a dated snapshot suffix
+    (gpt-x-2026-08-06, claude-y-20260806), so a provider reporting its snapshot still gets priced."""
+    known = {**PRICES, **CUSTOM_PRICES}
+    if model in known:
+        return known[model]
+    base = re.sub(r"-(\d{4}-\d{2}-\d{2}|\d{8})$", "", model or "")
+    if base in known:
+        return known[base]
+    prefix = max((k for k in known if (model or "").startswith(k + "-")), key=len, default=None)
+    return known[prefix] if prefix else None
 
 
 def cost(model: str, u: Usage, batch: bool = False) -> float | None:

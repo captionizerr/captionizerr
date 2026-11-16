@@ -713,3 +713,97 @@ def test_price_endpoint_and_zero_price_warning(tmp_path, monkeypatch):
     r = c.post("/settings/ai", data={"provider": "openai", "openai_base_url": "http://localhost:1234/v1", "openai_model": "local",
                                      "openai_price_in": "0", "openai_price_out": "0"}, headers=SAME, follow_redirects=False)
     assert "protect" not in r.headers["location"]                     # local servers are free: no warning
+
+
+# ------------------------------------------------------------------ switching vendors / models
+def test_price_tolerates_snapshot_names():
+    from captionizerr.pricing import price, register
+    register("acme-model", 1.0, 2.0)
+    assert price("acme-model-2026-08-06") == price("acme-model") == price("acme-model-20260806")
+    assert price("claude-opus-5-5-20260101") == (4.0, 20.0, 0.2)
+    assert price("totally-unknown") is None
+
+
+def test_estimates_follow_the_current_model(tmp_path):
+    s = settings(tmp_path)
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    st = app.state.store
+    for i in range(3):                              # history: three Opus episodes
+        j = st.enqueue("manual", f"ep{i}", f"/x/{i}.mkv", "ru", None)
+        st.finish(j.id, "done", "", "", 0.30, {}, "claude-opus-5-5")
+    est = app.state.episode_estimate
+    assert est() == pytest.approx(0.30)             # Anthropic Opus: its own average
+    s.provider, s.openai_model, s.openai_base_url = "openai", "luna-x", "https://api.openai.com/v1"
+    from captionizerr.pricing import register
+    register("luna-x", 0.1, 0.5)
+    assert est() == pytest.approx((16000 * 0.1 + 12000 * 0.5) / 1e6)   # not Opus's history
+    s.provider = "ollama"; s.ollama_model = "gemma3:27b"
+    assert est() == 0.0
+    s.provider = "anthropic"
+    assert est() == pytest.approx(0.30)             # back again
+
+
+def test_unknown_price_is_reported_not_hidden(tmp_path):
+    class Unpriced(FakeProvider):
+        model = "mystery-model"
+        def complete(self, system, context, work):
+            r = super().complete(system, context, work); r.model = "mystery-model"; return r
+    app = create_app(settings(tmp_path), provider_factory=Unpriced, start_worker=False)
+    v = make_video(tmp_path / "lib/Show", "Show S01E01.mkv") if HAS_FFMPEG else None
+    if v is None:
+        pytest.skip("ffmpeg needed")
+    app.state.store.enqueue("sonarr", "Show S01E01", str(v), "ru", None)
+    app.state.worker.process(app.state.store.next_queued())
+    j = app.state.store.list(1)[0]
+    assert "cost unknown: no price for mystery-model" in j.detail and j.model == "mystery-model"
+
+
+@ffmpeg
+def test_editor_retranslate_priced_by_the_model_that_did_it(tmp_path):
+    from captionizerr.pricing import register
+    register("cheap-model", 1.0, 1.0)
+
+    class Cheap(FakeProvider):
+        model = "cheap-model"
+        def complete(self, system, context, work):
+            r = super().complete(system, context, work); r.model = "cheap-model"; return r
+    app = create_app(settings(tmp_path), provider_factory=Cheap, start_worker=False)
+    c = TestClient(app)
+    v = make_video(tmp_path / "lib/Show", "Show S01E01.mkv")
+    v.with_name("Show S01E01.captionizerr.ru.srt").write_text(SRT, encoding="utf-8")
+    r = c.post("/api/edit/retranslate", json={"path": str(v), "lang": "ru", "id": 2}, headers=SAME)
+    assert r.status_code == 200, r.text
+    rec = [j for j in app.state.store.list(5) if j.source == "edit"][0]
+    assert rec.model == "cheap-model" and rec.cost_usd == pytest.approx((1000 + 800) * 1.0 / 1e6)   # not Opus's $4/$20
+
+
+@ffmpeg
+def test_open_batch_still_collected_after_switching_provider(tmp_path, monkeypatch):
+    s = settings(tmp_path, batch_min_wait_s=0)
+    app = create_app(s, provider_factory=FakeBatch, start_worker=False)
+    st, w = app.state.store, app.state.worker
+    v = make_video(tmp_path / "lib/Show/Season 1", "Show S01E01.mkv")
+    j = st.enqueue("manual", "Show S01E01", str(v), "ru", None, "batch")
+    w.submit_batch()
+    assert st.get(j.id).state == "batched"
+    w.provider_factory = FakeProvider                     # owner switches to a provider without Batch
+    from captionizerr.providers import anthropic_provider
+    monkeypatch.setattr(anthropic_provider, "AnthropicProvider", lambda **k: FakeBatch())
+    w.poll_batches()
+    assert st.get(j.id).state == "done"
+
+
+def test_cli_uses_keys_saved_in_the_ui(tmp_path, monkeypatch):
+    from captionizerr import secret_store
+    from captionizerr.cli import make_cli_provider
+    import argparse
+    monkeypatch.setenv("CAPTIONIZERR_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("CAPTIONIZERR_OPENAI_API_KEY", raising=False)
+    secret_store.SecretStore(tmp_path / "secrets.json").set("openai_key", "sk-from-ui")
+    a = argparse.Namespace(provider="openai", model="gpt-6-luna", base_url="https://api.openai.com/v1",
+                           ollama_url="", num_ctx=0, effort="low")
+    from captionizerr import price_lookup
+    monkeypatch.setattr(price_lookup.lookup, "__defaults__", (fake_fetch,))
+    p = make_cli_provider(a)
+    from captionizerr.pricing import price
+    assert p.key == "sk-from-ui" and price("gpt-6-luna")[:2] == pytest.approx((0.1, 0.5))

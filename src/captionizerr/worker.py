@@ -231,7 +231,10 @@ class Worker:
             store.finish(job.id, "skipped", str(e), cost_usd=res.cost() or 0, usage=vars(res.usage))
             return
         state = "needs_review" if res.needs_review else "done"
-        cost = res.cost() or 0.0
+        cost = res.cost()
+        used_model = res.steps[0].model if res.steps else ""
+        unpriced = cost is None
+        cost = cost or 0.0
         via = " via Batch" if any(st.batch for st in res.steps) else ""
         if prep.reuse:
             via += (f"; re-timed from the previous release: {len(prep.reuse.translations)} lines reused "
@@ -241,13 +244,16 @@ class Worker:
                                                  for i in res.issues_final[:4]) if res.issues_final else "")
         detail = (f"{len(res.translations)} cues from {prep.source.lang} ({prep.source.origin}){via}; "
                   f"{len(res.issues_initial)} flagged, {len(res.issues_final)} open{open_}")
+        if unpriced:   # never pretend it was free: say so where the owner will see it
+            detail += f"; cost unknown: no price for {used_model} (set it in Settings → AI provider)"
+            log.warning("job %s: no price known for %s; cost recorded as $0", job.id, used_model)
         try:
             reuse.store_source(s.data_dir / "sources", out, prep.source.path, prep.source.lang)
             if prep.previous:
                 maintenance.quarantine(s, prep.previous)        # replaced: out of the library, kept 30 days
         except Exception as e:
             log.warning("job %s: source copy / quarantine: %s", job.id, e)
-        store.finish(job.id, state, detail, str(out), cost, vars(res.usage))
+        store.finish(job.id, state, detail, str(out), cost, vars(res.usage), used_model)
         forced_cost = self.translate_forced(job, prep)
         refresh_all(s, [job.video_path])
         self.notify_done(job, prep.doc, res, state, cost + forced_cost)
@@ -277,7 +283,8 @@ class Worker:
             out = write_next_to(prep.video, job.lang, doc.fmt, cuesmod.render(doc, res.translations), forced=True)
             c = res.cost() or 0.0
             self.store.record("forced", f"{job.title}: forced track", job.video_path, job.lang, job.series_key,
-                              f"{len(res.translations)} lines → {out.name}", c, vars(res.usage))
+                              f"{len(res.translations)} lines → {out.name}", c, vars(res.usage),
+                              res.steps[0].model if res.steps else "")
             return c
         except Exception as e:
             log.warning("job %s: forced track not translated: %s", job.id, e)
@@ -327,11 +334,20 @@ class Worker:
             self.store.set_batched(job.id, bid, f"in batch {bid} (est ${est:.2f}); results within 24 h", est)
         log.info("submitted batch %s with %d jobs, est $%.2f", bid, len(sent), reserved)
 
+    def batch_provider(self):
+        """Batches are always Anthropic's. If the owner switched to another provider while a batch
+        was open, still collect it with Anthropic instead of stranding the jobs."""
+        p = self.provider_factory()
+        if getattr(p, "supports_batch", False):
+            return p
+        from .providers.anthropic_provider import AnthropicProvider
+        return AnthropicProvider(model=self.s.model, effort=self.s.effort, api_key=self.s.anthropic_key or None)
+
     def poll_batches(self):
         groups = self.store.batched()
         if not groups:
             return
-        provider = self.provider_factory()
+        provider = self.batch_provider()
         for bid, jobs in groups.items():
             try:
                 if provider.batch_status(bid) != "ended":
@@ -460,7 +476,7 @@ class Worker:
         f.write_text(text.strip() + "\n", encoding="utf-8")
         store.record("notes", f"{title}: series notes drafted", job.video_path, job.lang, job.series_key,
                      "auto-generated from the overview and this episode; edit them on the series page",
-                     price_of(res.model, res.usage) or 0.0, vars(res.usage))
+                     price_of(res.model, res.usage) or 0.0, vars(res.usage), res.model)
         return text
 
     def notify_done(self, job: Job, doc, res, state: str, cost: float):
