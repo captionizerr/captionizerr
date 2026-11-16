@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- **Notes for removed series:** Settings → System can check for translator's notes, correction logs and per-series settings whose series or movie is no longer in Sonarr or Radarr, and delete them one by one. Nothing is deleted automatically (a series downloaded again reuses its notes). Nothing is listed or deleted while Sonarr or Radarr can't be reached, and each Delete checks again first.
+## 0.2.6 — 2026-11-16
 
+- **Notes for removed series:** Settings → System can check for translator's notes, correction logs and per-series settings whose series or movie is no longer in Sonarr or Radarr, and delete them one by one. Nothing is deleted automatically (a series downloaded again reuses its notes). Nothing is listed or deleted while Sonarr or Radarr can't be reached, and each Delete checks again first.
 - **Deleted videos:** when a series or movie is deleted on the server, its rows on the dashboard and its job pages are marked "Video deleted" and lose Edit, Retry, Download, Share and Re-translate. The rows stay so the month's spending still adds up. Nothing is marked while the library folder is unreachable (e.g. a network share that isn't mounted).
 
 ## 0.2.5 — 2026-11-16
