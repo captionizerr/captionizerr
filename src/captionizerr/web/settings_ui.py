@@ -418,6 +418,20 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
                     keep={"history": s.keep_history, "days": s.keep_days}, overridden=overrides(),
                     last_when=datetime.fromtimestamp(last["at"]).strftime("%d %b %H:%M") if last.get("at") else "")
 
+    LABELS = {
+        "alert_at": "Budget warning (% of cap)", "any_source": "Translate from any language", "auto_notes": "Draft series notes",
+        "bazarr_url": "Bazarr address", "effort": "Claude effort", "jellyfin_path_map": "Jellyfin path mapping",
+        "jellyfin_url": "Jellyfin address", "languages": "Translate into", "max_line": "Characters per line",
+        "model": "Claude model", "monthly_cap_usd": "Monthly cap (USD)", "ntfy_topic": "ntfy topic", "ntfy_url": "ntfy server",
+        "ollama_max_output": "Ollama max output", "ollama_model": "Ollama model", "ollama_num_ctx": "Ollama context size",
+        "ollama_url": "Ollama address", "openai_base_url": "OpenAI-compatible base URL", "openai_max_output": "OpenAI-compatible max output",
+        "openai_model": "OpenAI-compatible model", "openai_price_in": "Input price ($/1M tokens)",
+        "openai_price_out": "Output price ($/1M tokens)", "openai_price_source": "Price source",
+        "opensubtitles_user": "OpenSubtitles user", "plex_path_map": "Plex path mapping", "plex_url": "Plex address",
+        "provider": "AI provider", "public_url": "Public address", "radarr_url": "Radarr address", "sonarr_url": "Sonarr address",
+        "songs": "Songs and poems", "source_langs": "Translate from", "target_cps": "Reading speed", "tone": "Swearing",
+        "ui_user": "Login user"}
+
     def overrides() -> list[dict]:
         env, saved = app.state.env_defaults, store.load_settings()
         out = []
@@ -426,7 +440,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
                 continue
             norm = (lambda v: [list(x) for x in v]) if s.EDITABLE[k] == "pairs" else (lambda v: v)
             if norm(getattr(s, k)) != norm(getattr(env, k)):
-                out.append({"key": k, "label": k.replace("_", " "), "value": getattr(s, k), "env": getattr(env, k)})
+                out.append({"key": k, "label": LABELS.get(k, k.replace("_", " ")), "value": getattr(s, k), "env": getattr(env, k)})
         return out
 
     @app.post("/settings/reset")

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.3 — 2026-11-16
+
+- **Web UI:**
+  - The name is shown as **CaptionizeRR** on the web pages and the website.
+  - The Translations list has a **Model** column, and each job's page names the model that did the work.
+  - Long job notes are shortened to two lines; the full note shows on hover and on the job page.
+  - Sub-dime costs show three decimals (e.g. $0.008 per episode).
+  - System → "Changed here" uses readable setting names.
+
 - **CLI:** `captionizerr translate` now requires `--lang` instead of silently defaulting to Russian.
 - Examples on the website, in the README and in the UI no longer assume Russian.
 - **Review accuracy:**

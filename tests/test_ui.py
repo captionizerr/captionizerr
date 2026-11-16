@@ -399,3 +399,11 @@ def test_translations_list_shows_the_model(ui):
     page = c.get("/").text
     assert "<th>Model</th>" in page and ">opus-5-5<" in page and ">gpt-6-luna<" in page
     assert "gpt-6-luna" in c.get(f"/jobs/{k.id}").text
+
+
+def test_changed_here_uses_readable_names(ui):
+    app, c, _ = ui
+    app.state.store.save_settings({"_setup_done": True, "openai_price_in": 0.1})
+    app.state.settings.openai_price_in = 0.1
+    page = c.get("/settings/system").text
+    assert "Input price ($/1M tokens)" in page and ">openai price in<" not in page
