@@ -71,6 +71,16 @@ Each job's page (click its title on the dashboard) also has:
 - **Re-translate**, to run the whole episode again, e.g. after switching model. It replaces the file; the old version stays in the editor's history.
 - **Download**, to save the file under its own name.
 - **Share…**, to upload it to OpenSubtitles.
+- **Re-sync to speech** (with Whisper connected), to fix the timing of the existing file against what is actually said. Nothing is re-translated and it costs nothing; the old timing stays in the editor's history.
+
+## Optional: sync to speech (Whisper)
+
+Subtitles from the video or from Bazarr are sometimes off: a downloaded file made for another release drifts, or a track stops early and its ending has to come from elsewhere. A Whisper speech-to-text service lets CaptionizeRR check the timing against the audio itself.
+
+1. Run a Whisper server on a machine with a few CPU cores (it doesn't need a GPU). The small one in [`deploy/whisper`](../deploy/whisper/README.md) installs on Debian with one script; any [whisper-asr-webservice](https://github.com/ahmetoner/whisper-asr-webservice) server works too.
+2. In **Settings → Connections → Whisper**, enter its address (e.g. `http://192.0.2.30:9000`) and press **Test**.
+
+From then on, downloaded subtitles and endings taken from another file are moved onto the speech before translating, and each translation gets **Re-sync to speech**. An episode takes a few minutes of the Whisper machine's time.
 
 ## Optional: keep secrets out of the app
 
@@ -88,6 +98,9 @@ Both take precedence and show as "Set on the server". See the commented block in
 | **Set up webhook** succeeds, but imports aren't translated | Sonarr reaches Captionizerr on a different address than your browser | Set **Settings → Security → This page's address** to one Sonarr can reach, then **Re-create webhook** |
 | Job ends in **No source** | The video has only image subtitles (PGS/VobSub) and Bazarr isn't set up, or found nothing | Connect Bazarr; check that its language profile can download English |
 | Job **Skipped** | A Captionizerr translation already exists; imports never overwrite it | Edit it, or press **Re-translate** on the job's page |
+| Job **Needs review**: "incomplete source … stops at 50:41" | The video's subtitle track ends early and no complete one was found | Connect Bazarr (it is asked for one automatically), or put a complete subtitle next to the video, then **Re-translate** |
+| Subtitles run early or late | The source subtitle was timed for another release | Connect Whisper and press **Re-sync to speech** on the job's page |
+| Job fails: "can't read the video" | The file couldn't be opened, often a network-share hiccup | Check the mount on the CaptionizeRR host, then **Retry** |
 | Job **Paused (budget)** | The monthly cap was reached | Raise it in **Settings → General**, then **Resume** on the dashboard |
 | Track doesn't show in the player | The media server rescan isn't configured, or the paths differ | Add the media server in **Connections**; set its path map under *Different paths in the media server?* |
 | "too many failed logins" (429) | 10 wrong passwords/keys within 10 minutes | Wait 15 minutes; behind a reverse proxy everyone shares one address |

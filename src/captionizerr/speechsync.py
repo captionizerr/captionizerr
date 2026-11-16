@@ -29,7 +29,7 @@ MIN_ANCHORS = 8
 OUTLIER_MS = 1500           # an anchor this far from its neighbours' shift is a mismatch
 NEIGHBOURS = 4              # anchors on each side used for the local shift
 LEAD_RANGE = (-600, 300)    # a sane "line appears before speech" habit (ms); outside it the track is just off
-MOVE_MIN_MS = 250           # smaller corrections are not worth making
+MOVE_MIN_MS = 500           # smaller corrections are within Whisper's own timing jitter and not noticeable
 
 
 class SpeechError(RuntimeError):

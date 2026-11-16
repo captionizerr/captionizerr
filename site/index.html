@@ -98,7 +98,7 @@ footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
   <h2>How it works</h2>
   <div class="steps">
     <div class="card"><h3>Sonarr or Radarr imports a video</h3><p>Their webhook tells CaptionizeRR right away. You can also pick anything already in your library.</p></div>
-    <div class="card"><h3>CaptionizeRR translates it</h3><p>It takes the video's subtitle track, falling back to Bazarr if there is none. It translates the whole episode at once, then checks every line.</p></div>
+    <div class="card"><h3>CaptionizeRR translates it</h3><p>It takes the video's subtitle track, falling back to Bazarr if there is none or it stops early, and can check the timing against the speech. It translates the whole episode at once, then checks every line.</p></div>
     <div class="card"><h3>The new track appears</h3><p>A subtitle file in your language (for example <span class="mono">Episode.captionizerr.de.srt</span>) is saved next to the video, and your media server is told to show it.</p></div>
   </div>
 </div></section>
@@ -113,6 +113,8 @@ footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
     <div class="card"><h3>Editor</h3><p>Review translations side by side with the original, fix lines yourself, or ask the AI to redo one.</p></div>
     <div class="card"><h3>Consistent series</h3><p>Notes on characters and names keep each series consistent from episode to episode.</p></div>
     <div class="card"><h3>Upgrades handled</h3><p>When a better release replaces a file, the existing translation and your edits usually carry over to it.</p></div>
+    <div class="card"><h3>Synced to the speech</h3><p>Connect a Whisper speech-to-text service and subtitle timing is checked against what is actually said. One click re-times an existing translation, free.</p></div>
+    <div class="card"><h3>Broken tracks caught</h3><p>A subtitle track that stops minutes before the end is spotted, and the missing part comes from a complete subtitle instead.</p></div>
     <div class="card"><h3>Safe for your library</h3><p>It only adds its own subtitle files. Nothing else is ever changed or deleted.</p></div>
   </div>
 </div></section>
@@ -134,7 +136,7 @@ docker compose up -d</pre>
 </div></section>
 </main>
 
-<footer><div class="wrap">CaptionizeRR · MIT licensed · <a href="https://github.com/captionizerr/captionizerr">GitHub</a> · <a href="https://github.com/captionizerr/captionizerr/releases">Releases</a> · <a href="https://github.com/captionizerr/captionizerr/issues">Issues</a> · not affiliated with Sonarr, Radarr, Bazarr, Jellyfin, Plex, Anthropic or Ollama</div></footer>
+<footer><div class="wrap">CaptionizeRR · MIT licensed · <a href="https://github.com/captionizerr/captionizerr">GitHub</a> · <a href="https://github.com/captionizerr/captionizerr/releases">Releases</a> · <a href="https://github.com/captionizerr/captionizerr/issues">Issues</a> · not affiliated with Sonarr, Radarr, Bazarr, Jellyfin, Plex, Anthropic, OpenAI (Whisper) or Ollama</div></footer>
 
 <script>
 document.querySelectorAll("pre .copy").forEach(b => b.addEventListener("click", async () => {

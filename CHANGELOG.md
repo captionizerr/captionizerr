@@ -2,11 +2,14 @@
 
 ## Unreleased
 
+## 0.2.8 — 2026-11-16
+
 - **Sync to speech (Whisper):** connect a speech-to-text service (Settings → Connections → Whisper; any whisper-asr-webservice-compatible server, or the small faster-whisper one in `deploy/whisper`). Each subtitle line is found in the transcript of the audio, and the timing follows the speech:
-  - endings taken from another release (cut-off tracks) are moved onto the speech; Northwind S02's Bazarr endings were 1.5–4 s early because that release is edited differently right after the cut;
+  - endings taken from another release (cut-off tracks) are moved onto the speech; on Northwind S02E08 the Bazarr ending was 3.7 s early, because that release is edited differently right after the cut;
   - downloaded subtitles are synced to the speech before translating;
   - each translation's page has **Re-sync to speech**, which re-times the existing file without re-translating (free; the old timing stays in the editor's history).
-  Matching is word by word, so music and effects don't fool it; a line whose words land in two places isn't trusted, outliers are ignored, and the track's own habit of how early it shows a line is kept, so a track that's already right is left alone.
+  Matching is word by word, so music and effects don't fool it; a line whose words land in two places isn't trusted, outliers are ignored, and the track's own habit of how early it shows a line is kept, so a track that's already right is left alone; lines less than 0.5 s off are not touched.
+- Interrupted jobs are requeued only when the service starts (opening the database from the CLI or a script no longer flips a running job back to queued).
 - The line an embedded track stops on is kept when the ending comes from another file (it could be dropped when that file was timed earlier).
 
 ## 0.2.7 — 2026-11-16

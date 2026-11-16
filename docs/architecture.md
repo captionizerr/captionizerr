@@ -21,6 +21,7 @@ flowchart TD
 
     L[(Media library)]
     AI[[AI provider]]
+    WH[[Whisper<br/>optional]]
     M[Jellyfin / Emby / Plex]
     N[[ntfy]]
 
@@ -31,6 +32,7 @@ flowchart TD
     P -->|asks for a subtitle| B
     B -->|downloads + syncs| L
     P <-->|translate| AI
+    P <-->|audio to words| WH
     P -->|writes .captionizerr.lang.srt| L
     P -->|rescan| M
     P -->|spot-check| N
@@ -41,7 +43,8 @@ flowchart TD
 ```
 
 - **Sonarr/Radarr** call a webhook on every import, upgrade and rename. The web UI's Library can also queue anything already on disk.
-- **The pipeline** reads the subtitle track that ships with the video. Only if there is none does it ask **Bazarr** to fetch and sync one.
+- **The pipeline** reads the subtitle track that ships with the video. Only if there is none, or it stops early, does it ask **Bazarr** to fetch one.
+- **Whisper** (optional) turns the audio into words with timestamps, so subtitle timing can be checked against what is actually said.
 - **The only thing written into your library** is `<video>.captionizerr.<lang>.srt|ass` (plus `.forced.` for forced tracks), next to the video.
 - **Media servers** are told to rescan that one folder, so the track appears within seconds.
 
@@ -56,8 +59,12 @@ flowchart TD
     C -->|None| G[Ask Bazarr]
     G --> H[[Waiting for source]]
     H -->|file arrives| C
-    E --> I{Budget OK?}
-    F --> I
+    E --> X{Track stops early?}
+    X -->|No| I{Budget OK?}
+    X -->|Yes| Y[Ending from a<br/>complete file]
+    Y --> S[Sync to speech]
+    F --> S
+    S --> I
     I -->|No| J[[Paused: budget]]
     I -->|Yes| K[Translate]
     K --> L[Validate + fix]
@@ -67,6 +74,38 @@ flowchart TD
     style K fill:#FF9900,color:#fff
     style J fill:#D13212,color:#fff
 ```
+
+"Sync to speech" runs only with a Whisper service connected; without one, those sources are used with their own timing.
+
+### Source tracks that stop early
+
+Some releases ship a subtitle track that ends minutes before the video does, with its last line stretched over the rest (seen on WEB-DL CC tracks). A track counts as cut off when its last line lasts over a minute and runs to the end of the video, or when the last quarter of the video has no lines. Then:
+
+1. A complete subtitle in the same language next to the video is used for the **missing ending only**: the embedded track keeps its exact timing up to where it stops. If there is none, Bazarr is asked for one and the job waits up to 3 hours.
+2. The ending is lined up with the embedded track on the lines both share in the 5 minutes before the cut (shift and stretch, so a file made for 25 fps fits a 23.976 fps video).
+3. With Whisper, the ending is then moved onto the speech, because a file from another release can be edited differently right after the cut, which no subtitle comparison can see.
+4. If nothing usable arrives, the job translates what there is, shortens the stretched line and goes to **Needs review**, saying where the source stops.
+
+### Sync to speech
+
+```mermaid
+flowchart TD
+    A[Audio track<br/>centre channel] --> B[[Whisper:<br/>words + times]]
+    C[Subtitle lines] --> D[Match words<br/>in order]
+    B --> D
+    D --> E[Shift per line]
+    E --> F[Drop outliers,<br/>smooth]
+    F --> G[Keep the track's<br/>usual lead]
+    G --> H([Move lines<br/>that are off])
+
+    style B fill:#FF9900,color:#fff
+```
+
+- **Word by word.** Each line's words are found in order in the transcript, so music and effects don't throw it off the way audio-energy methods do.
+- **Careful with repeats.** A line counts only when its matched words sit together in the transcript; a phrase repeated from a neighbouring line can't set its time. A line matched far from its neighbours is ignored.
+- **The track's own habit is kept.** Most tracks show a line a fraction of a second before it is said; that habit (within −0.6 to +0.3 s) is measured and kept, and lines less than 0.5 s off are not touched, so a well-timed track is left alone and only the parts that are noticeably off move.
+- **Where it runs:** endings taken from another file, downloaded subtitles before translating, and **Re-sync to speech** on a translation's page, which re-times the existing file without re-translating (free; the old timing stays in the editor's history).
+- **The service:** any whisper-asr-webservice-compatible server. `deploy/whisper` has a small faster-whisper one; on a 4-core laptop CPU an episode takes a few minutes.
 
 ### Inside "Translate" and "Validate + fix"
 
