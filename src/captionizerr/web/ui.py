@@ -548,12 +548,13 @@ def register(app: FastAPI) -> None:
             except Exception as e:
                 err = str(e)[:200]
         shared = store.share(str(sub))
+        # credit the model that made this file, not whichever one is selected now
+        used = store.model_for(path, lang, bool(forced)) or store.model_for(str(video), lang, bool(forced)) or "unknown model"
         return render(request, "share.html", path=path, lang=lang, forced=bool(forced), back=safe_back(back),
                       fname=sub.name, configured=configured, guess=guess, guess_error=err, release=video.stem,
-                      translator=f"CaptionizeRR (AI: {s.active_model})", hd=bool(re.search(r"(720|1080|2160)p", video.name)),
-                      comment=f"AI translation ({s.active_model}) of this release's own subtitles, timed to the file; "
+                      translator=f"CaptionizeRR (AI: {used})", hd=bool(re.search(r"(720|1080|2160)p", video.name)),
+                      comment=f"AI translation ({used}) of this release's own subtitles, timed to the file; "
                               "reviewed by the uploader.",
-                      dl_name=f"{video.stem}.{lang}{'.forced' if forced else ''}{sub.suffix}",
                       episode_file=bool(re.search(r"[Ss]\d{1,3}[Ee]\d{1,4}", video.name)),
                       shared=shared, shared_when=datetime.fromtimestamp(shared["at"]).strftime("%d %b %Y") if shared else "")
 
@@ -562,8 +563,13 @@ def register(app: FastAPI) -> None:
         """The translation as a file to keep or share by hand, named the way players and sites expect
         (<video>.<lang>[.forced].srt), without CaptionizeRR's own marker."""
         video, sub = share_target(path, lang, bool(forced))
-        name = f"{video.stem}.{lang}{'.forced' if forced else ''}{sub.suffix}"
-        return FileResponse(sub, filename=name, media_type="application/x-subrip" if sub.suffix == ".srt" else "text/plain")
+        # exactly the name on disk; RFC 6266/5987 with every special character escaped (an apostrophe in
+        # "Let's" otherwise ends the encoded value early in some browsers), plus an ASCII fallback
+        name = sub.name
+        ascii_name = re.sub(r'[^A-Za-z0-9._ +()\[\]-]', "_", name)
+        cd = f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{urllib.parse.quote(name, safe="")}'
+        return FileResponse(sub, media_type="application/x-subrip" if sub.suffix == ".srt" else "text/plain",
+                            headers={"Content-Disposition": cd})
 
     @app.post("/share")
     async def share_upload(request: Request):

@@ -3,7 +3,8 @@
 ## Unreleased
 
 - **OpenSubtitles upload fixed for episodes:** the title lookup now uses the episode's own IMDb ID (OpenSubtitles' `IMDBEpisode`) instead of the series' ID, which OpenSubtitles refuses for episode files. Uploading an episode under the series ID is caught with a clear message, and upload errors are logged.
-- **Download:** the share page and each job's page can download the translation as `<video>.<lang>[.forced].srt` to share it by hand.
+- **Download:** the share page and each job's page can download the translation, under exactly its name on disk, to share it by hand.
+- The share form credits the model that made the file, not the model selected now.
 
 ## 0.2.4 — 2026-11-16
 

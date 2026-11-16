@@ -185,6 +185,13 @@ class Store:
         self._q("INSERT INTO shares (path, url, at, already) VALUES (?,?,?,?) ON CONFLICT(path) DO UPDATE SET "
                 "url=excluded.url, at=excluded.at, already=excluded.already", (path, url, time.time(), int(already)))
 
+    def model_for(self, video_path: str, lang: str, forced: bool = False) -> str:
+        """The model of the latest finished job that wrote this video's translation (or its forced track)."""
+        src = "source='forced'" if forced else "source NOT IN ('edit','notes','forced')"
+        r = self._q(f"SELECT model FROM jobs WHERE video_path=? AND lang=? AND {src} AND model<>'' "
+                    "AND state IN ('done','needs_review') ORDER BY updated DESC LIMIT 1", (video_path, lang)).fetchone()
+        return r[0] if r else ""
+
     def share(self, path: str) -> dict | None:
         r = self._q("SELECT * FROM shares WHERE path=?", (path,)).fetchone()
         return dict(r) if r else None

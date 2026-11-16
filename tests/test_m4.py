@@ -928,7 +928,8 @@ def test_share_episode_id_guard_and_download(tmp_path, monkeypatch):
     r = c.get("/share/download", params=q)
     assert r.status_code == 200 and r.content == sub.read_bytes()
     import urllib.parse as _up
-    assert _up.unquote(r.headers["content-disposition"]).endswith("Harbor Lights - S02E01 - Title WEBDL-1080p.ru.srt")
+    cd = r.headers["content-disposition"]
+    assert _up.unquote(cd.split("filename*=UTF-8''")[1]) == sub.name and "'" not in cd.split("filename*=UTF-8''")[1]
     assert c.get("/share/download", params={"path": "/etc/passwd", "lang": "ru"}).status_code == 404
     assert "Download SRT" in c.get("/share", params=q).text
     s.opensubtitles_user, s.opensubtitles_password = "me", "pw"
@@ -943,3 +944,25 @@ def test_share_episode_id_guard_and_download(tmp_path, monkeypatch):
     r = c.post("/share", data={**data, "imdb_id": "tt35366575"}, headers=SAME, follow_redirects=False)
     assert "Uploaded" in r.headers["location"]
     assert [x for x in fake.calls if x[0] == "Upload"][0][1]["baseinfo"]["idmovieimdb"] == "35366575"
+
+
+@ffmpeg
+def test_share_credits_the_model_that_made_the_file(tmp_path, monkeypatch):
+    s = settings(tmp_path)
+    app = create_app(s, provider_factory=FakeProvider, start_worker=False)
+    c, st = TestClient(app), app.state.store
+    v = make_video(tmp_path / "lib/Show", "Show's Day S01E01 1080p.mkv")
+    with open(v, "ab") as fh:
+        fh.write(b"\0" * 200_000)
+    sub = v.with_name(v.stem + ".captionizerr.ru.srt"); sub.write_text(SRT, encoding="utf-8")
+    j = st.enqueue("manual", "Show S01E01", str(v), "ru", None); st.finish(j.id, "done", "", str(sub), 0.003, {}, "gpt-6-luna")
+    s.provider, s.model = "anthropic", "claude-opus-5-5"            # owner switched since
+    s.opensubtitles_user, s.opensubtitles_password = "me", "pw"
+    from captionizerr import opensubtitles
+    real = opensubtitles.Client
+    monkeypatch.setattr(opensubtitles, "Client", lambda u, p, ua: real(u, p, ua, proxy=FakeOS()))
+    page = c.get("/share", params={"path": str(v), "lang": "ru"}).text
+    assert "AI translation (gpt-6-luna)" in page and "CaptionizeRR (AI: gpt-6-luna)" in page and "opus" not in page.split("Upload to OpenSubtitles")[1]
+    r = c.get("/share/download", params={"path": str(v), "lang": "ru"})
+    import urllib.parse as _up
+    assert _up.unquote(r.headers["content-disposition"].split("filename*=UTF-8''")[1]) == sub.name

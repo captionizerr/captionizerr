@@ -5,8 +5,8 @@
 <h1>Share</h1>
 <p class="sub mono" style="word-break:break-all">{{ fname }}</p>
 <div class="card"><h2>Download</h2>
-  <p class="small muted">Save the file to share it yourself (a forum, a friend, another subtitle site). It's named <span class="mono">{{ dl_name }}</span>, the way players expect.</p>
-  <div class="actions"><a class="btn" href="/share/download?{{ {'path': path, 'lang': lang, 'forced': '1' if forced else ''}|urlencode }}" download>Download {{ dl_name.rsplit('.', 1)[-1]|upper }}</a></div></div>
+  <p class="small muted">Save the file to share it yourself (a forum, a friend, another subtitle site). It downloads with the same name as on disk.</p>
+  <div class="actions"><a class="btn" href="/share/download?{{ {'path': path, 'lang': lang, 'forced': '1' if forced else ''}|urlencode }}" download>Download {{ fname.rsplit('.', 1)[-1]|upper }}</a></div></div>
 <h2 style="margin-top:20px">Upload to OpenSubtitles</h2>
 {% if shared %}<div class="flash ok" role="status">{{ 'OpenSubtitles already had this exact file' if shared.already else 'Shared' }} on {{ shared_when }}.{% if shared.url %} <a href="{{ shared.url }}" target="_blank" rel="noopener">Open on OpenSubtitles ↗</a>{% endif %}</div>{% endif %}
 {% if not configured %}
