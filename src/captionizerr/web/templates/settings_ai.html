@@ -29,7 +29,7 @@
     <h2>Local model (Ollama)</h2>
     <div class="fields">
       <label class="f">Ollama address <input type="url" name="ollama_url" id="oll-url" value="{{ v.ollama_url }}" placeholder="http://ollama:11434">
-        <span class="h">On that machine set <span class="mono">OLLAMA_HOST=0.0.0.0</span> so Captionizerr can reach it.</span></label>
+        <span class="h">On that machine set <span class="mono">OLLAMA_HOST=0.0.0.0</span> so CaptionizeRR can reach it.</span></label>
       <label class="f">Model <span class="row-inline"><select name="ollama_model" id="oll-model">{% if v.ollama_model %}<option selected>{{ v.ollama_model }}</option>{% else %}<option value="">Find models first</option>{% endif %}</select>
         <button type="button" class="small" id="oll-find">Find models</button></span><span class="h" id="oll-hint">27–32B models are the useful minimum for natural dialogue.</span></label>
       <label class="f">Context window <select name="ollama_num_ctx">{% for n in (8192, 16384, 32768, 65536) %}<option value="{{ n }}" {{ 'selected' if n == v.ollama_num_ctx }}>{{ n // 1024 }}k{{ ' (recommended)' if n == 16384 }}</option>{% endfor %}</select></label>

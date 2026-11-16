@@ -64,7 +64,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
         from .providers import make_provider
         provider_factory = lambda: make_provider(s)  # noqa: E731
     worker = Worker(s, store, provider_factory)
-    app = FastAPI(title="Captionizerr", version=__version__)
+    app = FastAPI(title="CaptionizeRR", version=__version__)
     app.state.store, app.state.worker, app.state.settings = store, worker, s
     app.state.env_defaults = env_defaults
     app.state.secrets = secrets
@@ -110,7 +110,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
                 throttle.ok(who)
                 return await call_next(request)
             throttle.fail(who)
-        return PlainTextResponse("login required", 401, headers={"WWW-Authenticate": 'Basic realm="Captionizerr"'})
+        return PlainTextResponse("login required", 401, headers={"WWW-Authenticate": 'Basic realm="CaptionizeRR"'})
 
     def require_key(request: Request):
         """Webhooks and the JSON API: the key in the X-Api-Key header, as the password of HTTP Basic
@@ -243,7 +243,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
 
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="30"><title>Captionizerr</title>
+<meta http-equiv="refresh" content="30"><title>CaptionizeRR</title>
 <style>
 :root{{--bg:#f4f5f7;--fg:#14171c;--muted:#5b6370;--line:#dde1e7;--card:#fff;--accent:#a86f00;--bar:#f5c94a}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#0f1115;--fg:#e7eaf0;--muted:#9aa3b2;--line:#2a2f38;--card:#171a20;--accent:#f2c14e}}}}
@@ -256,7 +256,7 @@ th{{font-size:12px;color:var(--muted);text-transform:uppercase}} .num{{text-alig
 .pill{{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line)}}
 .st-done .pill{{color:#1f7a4d}} .st-failed .pill,.st-needs_review .pill{{color:#b4232a}} .st-paused_budget .pill{{color:var(--accent)}}
 </style></head><body><main>
-<h1>Captionizerr</h1><div class="muted">v{version} · target languages: {langs} · {model} · refreshed {now}</div>
+<h1>CaptionizeRR</h1><div class="muted">v{version} · target languages: {langs} · {model} · refreshed {now}</div>
 <div class="card"><b>Budget {month}:</b> ${spent} of ${cap}<div class="bar" style="margin-top:8px"><span style="width:{pct}%"></span></div></div>
 <div class="card tw"><table><thead><tr><th>#</th><th>Updated</th><th>Title</th><th>Lang</th><th>State</th><th class="num">Cost</th><th>Detail</th></tr></thead>
 <tbody>{rows}</tbody></table></div></main></body></html>"""

@@ -136,7 +136,7 @@ def connect_arr(kind: str, url: str, key: str, hook_url: str, webhook_key: str) 
             n["id"] = created.get("id") if isinstance(created, dict) else None
             verb = "created"
         _req(f"{base}/notification/test", h, "POST", n, timeout=30)
-        return True, f"webhook {verb} in {kind.title()}, and its test event reached Captionizerr"
+        return True, f"webhook {verb} in {kind.title()}, and its test event reached CaptionizeRR"
     except StopIteration:
         return False, f"{kind.title()} has no Webhook connection type"
     except Exception as e:

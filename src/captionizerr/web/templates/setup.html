@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_forms.html" import secret, test, webhook %}
-{% block title %}Setup · Captionizerr{% endblock %}
+{% block title %}Setup · CaptionizeRR{% endblock %}
 {% block content %}
 <div class="setup">
 <ol class="stepper" aria-label="Setup steps">
@@ -10,12 +10,12 @@
 
 {% if step == 'welcome' %}
 <section class="card hero">
-  <h1>Welcome to Captionizerr</h1>
-  <p>Captionizerr translates the subtitles that come with your videos, timed to the exact file, and keeps the original's tone. This takes about five minutes: an AI provider, your languages, Sonarr and Radarr, and your media server. Everything can be changed later in Settings.</p>
+  <h1>Welcome to CaptionizeRR</h1>
+  <p>CaptionizeRR translates the subtitles that come with your videos, timed to the exact file, and keeps the original's tone. This takes about five minutes: an AI provider, your languages, Sonarr and Radarr, and your media server. Everything can be changed later in Settings.</p>
   <form method="post" action="/settings/security">
     <input type="hidden" name="next" value="{{ nxt }}">
     <h2>Protect this page <span class="pill">Recommended</span></h2>
-    <p class="small muted">Anyone who can open Captionizerr can change settings and spend your budget. Set a password unless this network is only yours.</p>
+    <p class="small muted">Anyone who can open CaptionizeRR can change settings and spend your budget. Set a password unless this network is only yours.</p>
     <div class="fields">
       <label class="f">Username <input type="text" name="ui_user" value="{{ v.ui_user }}" autocomplete="username"></label>
       {{ secret('ui_password', secrets, label='Password', placeholder='At least 8 characters', next='/setup') }}
@@ -78,7 +78,7 @@ f.addEventListener('change', e => { if (e.target.name === 'provider') show(); })
 <form method="post" action="/settings/connections" class="card">
   <input type="hidden" name="next" value="/setup?step=arr">
   <h1>Sonarr and Radarr</h1>
-  <p class="muted">Save the address and API key (Sonarr/Radarr → Settings → General), test, then let Captionizerr add its webhook to each app.</p>
+  <p class="muted">Save the address and API key (Sonarr/Radarr → Settings → General), test, then let CaptionizeRR add its webhook to each app.</p>
   {% for kind, port in (('sonarr', 8989), ('radarr', 7878)) %}
   <div class="svc"><h3>{{ kind|title }}</h3>
     <div class="fields">

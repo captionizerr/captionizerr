@@ -111,7 +111,7 @@ def lookup(provider: str, base_url: str, model: str, cache_dir: Path, fetch=_fet
         return Price(0, 0, 0, "local server: free")
     if provider == "anthropic" and model in PRICES:
         i, o, c = PRICES[model]
-        return Price(i, o, c, "Captionizerr's built-in table")
+        return Price(i, o, c, "CaptionizeRR's built-in table")
     if "openrouter.ai" in (base_url or ""):
         p = openrouter(model, cache_dir, fetch)
         if p:

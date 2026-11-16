@@ -389,7 +389,7 @@ def register(app: FastAPI) -> None:
             raise HTTPException(400, "bad language")
         target = next((t for t in (target_path(video, lang, "srt"), target_path(video, lang, "ass")) if t.is_file()), None)
         if target is None:
-            raise HTTPException(404, "no Captionizerr translation for this file and language")
+            raise HTTPException(404, "no CaptionizeRR translation for this file and language")
         src = editor_source(video, target, lang)
         tdoc = cuesmod.load(target)
         rows = editor.build_rows(cuesmod.load(src.path) if src else None, tdoc)
@@ -503,7 +503,7 @@ def register(app: FastAPI) -> None:
         sub = next((t for t in (target_path(video, lang, "srt", forced), target_path(video, lang, "ass", forced))
                     if t.is_file()), None)
         if sub is None:
-            raise HTTPException(404, "no Captionizerr translation to share")
+            raise HTTPException(404, "no CaptionizeRR translation to share")
         return video, sub
 
     def os_client():
@@ -530,7 +530,7 @@ def register(app: FastAPI) -> None:
         shared = store.share(str(sub))
         return render(request, "share.html", path=path, lang=lang, forced=bool(forced), back=safe_back(back),
                       fname=sub.name, configured=configured, guess=guess, guess_error=err, release=video.stem,
-                      translator=f"Captionizerr (AI: {s.active_model})", hd=bool(re.search(r"(720|1080|2160)p", video.name)),
+                      translator=f"CaptionizeRR (AI: {s.active_model})", hd=bool(re.search(r"(720|1080|2160)p", video.name)),
                       comment=f"AI translation ({s.active_model}) of this release's own subtitles, timed to the file; "
                               "reviewed by the uploader.",
                       shared=shared, shared_when=datetime.fromtimestamp(shared["at"]).strftime("%d %b %Y") if shared else "")

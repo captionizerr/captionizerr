@@ -11,7 +11,7 @@
       {{ secret('ui_password', secrets, label='New password' if login else 'Password', placeholder='At least 8 characters', next='/settings/security') }}
       {% if not secrets.ui_password.locked %}<label class="f">Repeat the password <input type="password" name="password_again" autocomplete="new-password"></label>{% endif %}
     </div>
-    <p class="small muted">Over plain http the browser sends it unencrypted. For anything beyond your LAN, put Captionizerr behind HTTPS (see SECURITY.md: a three-line Caddy example).</p>
+    <p class="small muted">Over plain http the browser sends it unencrypted. For anything beyond your LAN, put CaptionizeRR behind HTTPS (see SECURITY.md: a three-line Caddy example).</p>
   </section>
   <section class="card">
     <h2>Webhook key</h2>
@@ -25,7 +25,7 @@
   </section>
   <section class="card">
     <h2>This page's address</h2>
-    <div class="fields"><label class="f">Address <input type="url" name="public_url" value="{{ v.public_url }}" placeholder="{{ hook_base }}"><span class="h">Used in notification links and for the webhooks Captionizerr creates. Empty: the address you're using now.</span></label></div>
+    <div class="fields"><label class="f">Address <input type="url" name="public_url" value="{{ v.public_url }}" placeholder="{{ hook_base }}"><span class="h">Used in notification links and for the webhooks CaptionizeRR creates. Empty: the address you're using now.</span></label></div>
   </section>
   <div class="savebar"><button class="primary">Save</button></div>
 </form>

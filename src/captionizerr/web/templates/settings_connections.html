@@ -4,7 +4,7 @@
 <form method="post" action="/settings/connections">
   <section class="card">
     <h2>Sonarr and Radarr</h2>
-    <p class="small muted">Captionizerr reads your library from them and gets a webhook call on every import, upgrade and rename. Find each API key in the app under <b>Settings → General</b>. After saving, <b>Set up webhook</b> adds the connection in Sonarr/Radarr for you.</p>
+    <p class="small muted">CaptionizeRR reads your library from them and gets a webhook call on every import, upgrade and rename. Find each API key in the app under <b>Settings → General</b>. After saving, <b>Set up webhook</b> adds the connection in Sonarr/Radarr for you.</p>
     {% for kind, port in (('sonarr', 8989), ('radarr', 7878)) %}
     <div class="svc">
       <h3>{{ kind|title }}</h3>
@@ -37,7 +37,7 @@
       <div class="actions">{{ test('plex') }}</div>
     </div>
     <details class="adv"><summary>Different paths in the media server?</summary>
-      <p class="small muted">Only if the server sees your library under another path than Captionizerr does. Format: <span class="mono">our-prefix=their-prefix</span>, several separated by <span class="mono">;</span>.</p>
+      <p class="small muted">Only if the server sees your library under another path than CaptionizeRR does. Format: <span class="mono">our-prefix=their-prefix</span>, several separated by <span class="mono">;</span>.</p>
       <div class="fields">
         <label class="f">Jellyfin/Emby path map <input type="text" name="jellyfin_path_map" value="{{ path_map }}" placeholder="/downloads/=/mnt/media/"></label>
         <label class="f">Plex path map <input type="text" name="plex_path_map" value="{{ plex_map }}" placeholder="/data/media/=/media/"></label>
@@ -47,7 +47,7 @@
 
   <section class="card">
     <h2>Bazarr <span class="pill">Optional</span></h2>
-    <p class="small muted">When a video has no usable subtitle, Captionizerr asks Bazarr to download and sync one, then translates it.</p>
+    <p class="small muted">When a video has no usable subtitle, CaptionizeRR asks Bazarr to download and sync one, then translates it.</p>
     <div class="fields">
       <label class="f">Address <input type="url" name="bazarr_url" value="{{ v.bazarr_url }}" placeholder="http://bazarr:6767"></label>
       {{ secret('bazarr_key', secrets, label='API key', hint='Bazarr → Settings → General → Security', next='/settings/connections') }}

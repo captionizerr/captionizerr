@@ -121,7 +121,7 @@ def test_rename_moves_only_our_sidecars(svc, tmp_path):
 
 def test_status_page_and_metrics(svc):
     _, c, _ = svc
-    assert "Captionizerr" in c.get("/").text and "/static/favicon.svg" in c.get("/").text
+    assert "CaptionizeRR" in c.get("/").text and "/static/favicon.svg" in c.get("/").text
     m = c.get("/metrics").text
     assert "captionizerr_budget_usd 20.00" in m
     assert 'captionizerr_jobs{state="failed"} 0' in m      # present before any failure, so delta() rules work
