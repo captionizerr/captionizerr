@@ -21,7 +21,7 @@ Because it translates the file's own track, the timing is exact for that release
 
 - **Automatic:** Sonarr/Radarr webhooks queue every import, and renames are followed.
 - **Upgrades are re-timed, not re-translated:** when a better release replaces a file, the previous translation (including your edits) is matched line by line onto the new release. Only new or changed lines go to the model, usually at $0.
-- **Any source language:** embedded text tracks first (exact timing), then subtitle files next to the video, then **Bazarr**. If a video has no usable subtitle, Captionizerr asks Bazarr to download and sync one, then translates it.
+- **Any source language:** embedded text tracks first (exact timing), then subtitle files next to the video, then **Bazarr**. If a video has no usable subtitle, Captionizerr asks Bazarr to download and sync one, then translates it. An embedded track that stops early (some WEB-DL releases cut their CC track minutes before the end) is caught too: a complete subtitle file is used instead, fetched through Bazarr if needed, and if none turns up the job goes to review saying where the source stops.
 - **SRT and ASS:** for anime, styles, signs, drawings and karaoke survive.
 - **Forced subtitles:** foreign-language scenes and signs (a forced track in the source) get their own `….<lang>.forced.srt`, which players show automatically.
 - **Quality checks:** every line is checked for reading speed, line length, untranslated leftovers, merged or shifted lines and lost positioning tags. Only flagged lines are sent back for a fix.
@@ -108,7 +108,7 @@ Everything, including keys, can be set in the web UI. Environment variables and 
 
 ## How it works
 
-1. **Pick a source.** Embedded text track → sidecar → Bazarr (download, sync, wait). Image subtitles (PGS/VobSub) are not OCR'd.
+1. **Pick a source.** Embedded text track → sidecar → Bazarr (download, sync, wait). A track that stops early is checked against sidecars and replaced by a complete one. Image subtitles (PGS/VobSub) are not OCR'd.
 2. **Send the whole episode in one request.** Stable rules and series notes are prompt-cached, and each line carries its screen time so the model can manage reading speed.
 3. **Parse `N|text` lines.** Re-request skipped lines, validate, and run up to two fix rounds on flagged lines only.
 4. **Write `<video>.captionizerr.<lang>.<fmt>`.** Then tell Jellyfin to rescan and send an ntfy spot-check.
