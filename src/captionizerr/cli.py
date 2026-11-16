@@ -57,6 +57,41 @@ def cmd_eval(a) -> int:
     return 0
 
 
+def cmd_backfill_sources(a) -> int:
+    """Store the source copy for translations made before sources were kept (needed for
+    re-timing after an upgrade, the editor's instant open, and eval cases)."""
+    from .config import Settings
+    from .maintenance import SKIP_DIRS
+    from .reuse import store_source, stored_source
+    from .writer import _SIDECAR
+    import os
+    s = Settings.from_env()
+    if a.data:
+        s.data_dir = Path(a.data)
+    n = 0
+    for root in s.library_roots:
+        for dirpath, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if d.lower() not in SKIP_DIRS and not d.startswith(".")]
+            for f in sorted(files):
+                m = _SIDECAR.match(f)
+                if not m or m.group("forced"):
+                    continue
+                out = Path(dirpath) / f
+                if stored_source(s.data_dir / "sources", out):
+                    continue
+                video = next((Path(dirpath) / (m.group("stem") + e) for e in s.VIDEO_EXT
+                              if (Path(dirpath) / (m.group("stem") + e)).is_file()), None)
+                if not video:
+                    continue
+                src = media.find_source(video, s.cache_dir, s.source_langs, m.group("lang"), s.any_source)
+                if src:
+                    store_source(s.data_dir / "sources", out, src.path, src.lang)
+                    n += 1
+                    print(f"stored {src.lang} ({src.origin}) for {f}", flush=True)
+    print(f"{n} source copies stored")
+    return 0
+
+
 def cmd_probe(a) -> int:
     streams, dur = media.probe(Path(a.video))
     print(f"duration: {dur/60:.1f} min" if dur else "duration: unknown")
@@ -156,6 +191,10 @@ def main(argv=None) -> int:
     t.add_argument("--write", action="store_true", help="write <video>.captionizerr.<lang>.<fmt> next to the video")
     t.add_argument("--report", help="write a JSON report (usage, cost, issues)")
     t.set_defaults(fn=cmd_translate)
+
+    bf = sub.add_parser("backfill-sources", help="keep source copies for translations made before 0.1")
+    bf.add_argument("--data", default="", help="data folder (default: CAPTIONIZERR_DATA_DIR)")
+    bf.set_defaults(fn=cmd_backfill_sources)
 
     eb = sub.add_parser("eval-build", help="make quality check cases from finished translations (private data)")
     eb.add_argument("--data", default="/config", help="Captionizerr data folder")
