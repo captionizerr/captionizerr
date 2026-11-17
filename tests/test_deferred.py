@@ -97,3 +97,25 @@ def test_dashboard_shows_the_running_step_and_job_actions_sit_in_one_row(tmp_pat
     f = st.enqueue("manual", "Show S01E05", "/x/b.mkv", "ru", None); st.finish(f.id, "failed", "boom")
     jp = c.get(f"/jobs/{f.id}").text
     assert jp.index(">Retry<") < jp.index("<h2>Result</h2>")
+
+
+def test_library_films_read_like_episodes_and_keep_their_own_settings(tmp_path, monkeypatch):
+    app = _app(tmp_path)
+    st, c = app.state.store, TestClient(app)
+    lib = tmp_path / "lib"
+    films = []
+    for i, t in enumerate(("Dune", "Heat")):
+        f = lib / t / f"{t}.2021.mkv"
+        f.parent.mkdir(parents=True)
+        f.write_bytes(b"x")
+        films.append({"id": i + 1, "title": t, "year": 2021, "movieFile": {"path": str(f)}})
+    (lib / "Dune" / "Dune.2021.captionizerr.ru.srt").write_text("1\n00:00:01,000 --> 00:00:02,000\nx\n", encoding="utf-8")
+    monkeypatch.setattr(uimod.Arr, "get", lambda self, path, **kw: films if path == "/movie" else [])
+    st.save_series("heat", "Heat", True, ["ru", "de"], "")
+    page = c.get("/library").text
+    assert "not yet" not in page and "Not translated" in page and ">Edit<" in page and page.count('name="path"') == 2
+    paths = [f["movieFile"]["path"] for f in films]
+    form = [("back", "/library"), ("path", paths[1]), (f"key:{paths[1]}", "heat"), (f"label:{paths[1]}", "Heat (2021)")]
+    c.post("/library/translate", data=form, headers=SAME)
+    jobs = [j for j in st.list(10) if j.video_path == paths[1]]
+    assert sorted(j.lang for j in jobs) == ["de", "ru"] and all(j.series_key == "heat" for j in jobs)

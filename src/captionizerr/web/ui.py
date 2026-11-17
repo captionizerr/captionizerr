@@ -350,16 +350,23 @@ def register(app: FastAPI) -> None:
         try:
             movies = radarr_movies(radarr())
             for m in movies:
-                m["status"] = status_for(m["path"], langs_for(slug(m["title"])))
+                m["key"] = slug(m["title"])
+                m["status"] = status_for(m["path"], langs_for(m["key"]))
         except ArrError as e:
             err.append(f"Radarr: {e}")
         for x in series:
             x["key"] = slug(x["title"])
             x["override"] = store.series(x["key"])
             x["translated"] = translated_count(x.get("path"), langs_for(x["key"]))
+        film_langs = sorted({l for m in movies for l in m["status"]}) or list(s.languages)
+        for l in film_langs:
+            jobs = store.jobs_by_video([m["path"] for m in movies], l)
+            for m in movies:
+                if l in m["status"]:
+                    m.setdefault("review", {})[l] = any(mk == "needs review" for mk, _ in file_marks(jobs.get(m["path"], []))[0])
         configured = {"sonarr": bool(s.sonarr_url and s.sonarr_key), "radarr": bool(s.radarr_url and s.radarr_key)}
         return render(request, "library.html", series=series, movies=movies, errors=err, avg=episode_estimate(),
-                      configured=configured)
+                      configured=configured, film_langs=film_langs)
 
     def translated_count(series_path: str | None, langs: list[str]) -> int:
         """Episodes with our translation in every wanted language: a folder scan, no Sonarr calls."""
@@ -607,7 +614,7 @@ def register(app: FastAPI) -> None:
         form = await request.form()
         paths = form.getlist("path")
         back = local_path(form.get("back"), "/library")
-        key = form.get("series_key") or None
+        default_key = form.get("series_key") or None
         title = form.get("title") or ""
         mode = "batch" if form.get("mode") == "batch" else "live"
         if not paths:
@@ -617,6 +624,7 @@ def register(app: FastAPI) -> None:
             if not s.in_library(s.map_path(str(p))):
                 continue
             label = form.get(f"label:{p}") or Path(str(p)).stem
+            key = valid_key(form.get(f"key:{p}")) or default_key     # films chosen together: each its own notes
             for lang in langs_for(key):
                 vid = s.map_path(str(p))
                 redo = target_path(vid, lang, "srt").exists() or target_path(vid, lang, "ass").exists()
