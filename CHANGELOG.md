@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.5 — 2026-11-17
+
+- **Renames keep everything with the file:** when Sonarr or Radarr renames a video, our subtitle files already followed it; now the job history, the editor's previous versions, the stored source copy, the record of deliberately skipped lines and the OpenSubtitles share record follow too. Before, a renamed episode showed as *Video deleted* on the dashboard with no Edit button, and the editor and re-sync lost the stored source. Verified live with a Sonarr rename of Some Show S01E01.
+- Docs and website: renames, large files and existing subtitles in the README; OpenSubtitles and Prometheus in the architecture overview; two more feature cards on the website (*Your library at a glance*, *Share or keep*).
+
 ## 0.3.4 — 2026-11-17
 
 - **Editor has the job page's actions:** Download, Share…, Re-translate, Re-sync to speech (with Whisper) and *Job & history* sit at the top of the editor, instead of a lone "Share on OpenSubtitles" link.
