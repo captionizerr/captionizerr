@@ -738,7 +738,10 @@ def register(app: FastAPI) -> None:
             ep_title = re.sub(r"\s*(WEBDL|WEBRip|Bluray|HDTV|DVD|Remux|\d{3,4}p).*$", "", rest, flags=re.I).strip(" -")
         heading = (f"{series} · Season {int(m.group(1))}, Episode {int(m.group(2))}" if m else stem)
         review = store.review_job(path, lang) or store.review_job(str(video), lang)
-        return render(request, "edit.html", rows=data, path=path, lang=lang, key=key, token=token, review=review,
+        hist = store.jobs_for(path, lang) or store.jobs_for(str(video), lang)
+        job = next((j for j in reversed(hist) if j.source not in ("edit", "notes", "forced", "sync")
+                    and j.state in ("done", "needs_review")), None)
+        return render(request, "edit.html", rows=data, path=path, lang=lang, key=key, token=token, review=review, job=job,
                       heading=heading, ep_title=ep_title,
                       back=local_path(back),
                       fname=target.name, profile=profile, view="flag" if view == "flag" else "all", flagged=sum(1 for d in data if d["flags"]),

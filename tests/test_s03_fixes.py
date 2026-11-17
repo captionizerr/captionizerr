@@ -98,3 +98,40 @@ def test_editor_page_lists_reviews_first_then_recent(tmp_path):
     assert 'href="/editor"' in page and "Waiting for your review" in page and "series notes" not in page
     assert page.index("Show S01E02") < page.index("Show S01E01") and ">Review<" in page and ">Edit<" in page
     assert 'href="/editor"' in c.get("/").text                                  # in the top menu everywhere
+
+
+def test_existing_target_subtitles_are_noted_or_skipped(tmp_path, monkeypatch):
+    from captionizerr import media as M
+    from captionizerr.media import SubStream
+    app = _app(tmp_path)
+    st, w = app.state.store, app.state.worker
+    v = tmp_path / "lib/Film/Film.mkv"
+    v.parent.mkdir(parents=True)
+    v.write_bytes(b"x")
+    tracks = [SubStream(3, "subrip", "rus", "Полные Blu-Ray", False, False),
+              SubStream(4, "subrip", "rus", "Комментарии режиссёра", False, False)]
+    monkeypatch.setattr(M, "probe", lambda video: (tracks, 7300.0))
+    assert [t.index for t in M.target_tracks(tracks, "ru")] == [3]
+    app.state.settings.existing_subs = "skip"
+    j = st.enqueue("radarr", "Film (2008)", str(v), "ru", None)
+    w.process(st.next_queued())
+    assert st.get(j.id).state == "skipped" and "already has RU subtitles (Полные Blu-Ray)" in st.get(j.id).detail
+    monkeypatch.setattr(M, "find_source", lambda *a, **k: None)          # manual start: goes on (here: no source)
+    m = st.enqueue("manual", "Film (2008)", str(v), "ru", None)
+    w.process(st.next_queued())
+    assert st.get(m.id).state != "skipped"
+
+
+def test_editor_has_the_same_actions_as_the_job_page(tmp_path):
+    app = _app(tmp_path)
+    st, c = app.state.store, TestClient(app)
+    v = tmp_path / "lib/Show/Show S01E01.mkv"
+    v.parent.mkdir(parents=True)
+    v.write_bytes(b"x")
+    out = v.with_name("Show S01E01.captionizerr.ru.srt")
+    out.write_text("1\n00:00:01,000 --> 00:00:02,000\nПривет\n", encoding="utf-8")
+    j = st.enqueue("sonarr", "Show S01E01", str(v), "ru", None); st.finish(j.id, "done", "1 cues from en (embedded); 0 flagged, 0 open", str(out), 0.1, {}, "m")
+    page = c.get("/edit", params={"path": str(v), "lang": "ru"}).text
+    for label in (">Download<", ">Share…<", ">Re-translate<", ">Job &amp; history<"):
+        assert label in page, label
+    assert "Share on OpenSubtitles…</a>" not in page

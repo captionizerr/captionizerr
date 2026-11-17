@@ -10,6 +10,10 @@
         <span class="h">Preferred source languages, in order. The video's own subtitle track beats a file next to it.</span></label>
       <label class="f check"><input type="checkbox" name="any_source" value="1" {{ 'checked' if v.any_source }}>
         <span>Otherwise use any other language<span class="h">If none of the above exists, translate from whatever text subtitle the file has.</span></span></label>
+      <label class="f">Videos that already have subtitles in that language <select name="existing_subs">
+        <option value="translate" {{ 'selected' if v.existing_subs != 'skip' }}>Translate anyway</option>
+        <option value="skip" {{ 'selected' if v.existing_subs == 'skip' }}>Skip them on import</option></select>
+        <span class="h">Some releases (often Blu-ray remuxes) already carry full subtitles in your language. Skipping saves the cost; you can still translate such a video by hand. Either way the job notes which tracks it found.</span></label>
     </div>
   </section>
   <section class="card">

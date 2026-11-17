@@ -145,6 +145,9 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
             if "source_langs" in f:
                 vals["source_langs"] = _iso_list(f.get("source_langs"), "source languages") or ["en"]
                 vals["any_source"] = bool(f.get("any_source"))
+            if "existing_subs" in f:
+                v = str(f.get("existing_subs") or "translate")
+                vals["existing_subs"] = v if v in ("translate", "skip") else "translate"
             if "tone" in f:
                 tone, songs = str(f.get("tone")), str(f.get("songs"))
                 if tone not in TONE_RULES or songs not in SONG_RULES:
@@ -450,7 +453,7 @@ def register_settings(app: FastAPI, render, redirect, same_origin) -> None:
 
     LABELS = {
         "alert_at": "Budget warning (% of cap)", "any_source": "Translate from any language", "auto_notes": "Draft series notes",
-        "bazarr_url": "Bazarr address", "whisper_url": "Whisper address", "speech_sync": "Sync to speech", "effort": "Claude effort", "jellyfin_path_map": "Jellyfin path mapping",
+        "bazarr_url": "Bazarr address", "whisper_url": "Whisper address", "speech_sync": "Sync to speech", "existing_subs": "Videos that already have subtitles", "effort": "Claude effort", "jellyfin_path_map": "Jellyfin path mapping",
         "jellyfin_url": "Jellyfin address", "languages": "Translate into", "max_line": "Characters per line",
         "model": "Claude model", "monthly_cap_usd": "Monthly cap (USD)", "ntfy_topic": "ntfy topic", "ntfy_url": "ntfy server",
         "ollama_max_output": "Ollama max output", "ollama_model": "Ollama model", "ollama_num_ctx": "Ollama context size",

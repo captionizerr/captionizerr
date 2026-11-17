@@ -43,7 +43,7 @@ Secrets from 1 or 2 show as "Set on the server" and can't be changed in the UI. 
 | `SPEECH_SYNC` | `auto` | When Whisper is used automatically: `auto` = downloaded subtitles and endings taken from another file; `all` = every translation, built-in tracks too (a few minutes of the Whisper machine per episode); `off` = only the **Re-sync to speech** button. Also in Settings → Connections |
 | `JELLYFIN_URL` / `JELLYFIN_KEY` / `JELLYFIN_PATH_MAP` | | Rescan after writing |
 | `PLEX_URL` / `PLEX_TOKEN` / `PLEX_PATH_MAP` | | Plex folder rescan after writing (Emby: use the Jellyfin settings) |
-| `OPENSUBTITLES_USER` / `OPENSUBTITLES_PASSWORD` | | Your OpenSubtitles.org account, for the opt-in "Share on OpenSubtitles" button |
+| `OPENSUBTITLES_USER` / `OPENSUBTITLES_PASSWORD` | | Your OpenSubtitles.org account, for the opt-in **Share…** button (editor and job pages) |
 | `OPENSUBTITLES_USER_AGENT` | `Captionizerr v<version>` | Client name sent to OpenSubtitles; set it if they assign you one |
 | `NTFY_URL` / `NTFY_TOPIC` / `PUBLIC_URL` | | Notifications and the link in them |
 
@@ -70,7 +70,7 @@ Back up everything in `/config` except `cache/`, `tmp/` and the live `captionize
 
 ## Sharing on OpenSubtitles
 
-The editor has a **Share on OpenSubtitles…** link. The confirmation page:
+The editor and each job page have a **Share…** button. The confirmation page:
 - identifies the title (OpenSubtitles' own guess from the filename; check the IMDb ID, and for an episode it must be the episode's);
 - shows the language, flags, release name and credit;
 - requires two ticks: you reviewed the file, and you accept OpenSubtitles' terms.

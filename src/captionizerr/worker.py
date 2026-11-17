@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import json
 import random
+import re
 import subprocess
 import threading
 import time
@@ -167,6 +168,18 @@ class Worker:
         if not job.redo and (target_path(video, job.lang, "srt").exists() or target_path(video, job.lang, "ass").exists()):
             store.finish(job.id, "skipped", "translation already exists")
             return None
+        already = ""
+        try:
+            present = media.target_tracks(media.probe(video)[0], job.lang)
+        except subprocess.CalledProcessError:
+            present = []                                     # unreadable: the source lookup below says so
+        if present:
+            names = ", ".join(p.title or p.codec for p in present[:2])
+            if s.existing_subs == "skip" and job.source in ("sonarr", "radarr") and not job.redo:
+                store.finish(job.id, "skipped", f"the video already has {job.lang.upper()} subtitles ({names}); "
+                                                "not translated (Settings → General). Start it by hand to translate anyway")
+                return None
+            already = f"the video already has {job.lang.upper()} subtitles ({names})"
         try:
             auto_sync = s.whisper_url if s.speech_sync in ("auto", "all") else ""
             src = pinned or media.find_source(video, s.cache_dir, s.source_langs, job.lang, s.any_source,
@@ -219,7 +232,7 @@ class Worker:
             warning = (f"a source line at {media.clock(c.start_ms)} stayed on screen for "
                        f"{media.clock(c.end_ms - c.start_ms)}, so dialogue may be missing there; it was shortened")
         note = "a source line that stayed on screen over a minute was shortened" if media.clamp_long_cues(doc) else ""
-        note = "; ".join(x for x in (speech_note, note) if x)
+        note = "; ".join(x for x in (speech_note, note, already) if x)
         ser = store.series(job.series_key) if job.series_key else None
         profile = s.profile(job.lang, src.lang, (ser or {}).get("tone"))
         context = self.context_for(job.series_key)
@@ -275,6 +288,7 @@ class Worker:
         if job.source == "sync":
             self.resync(job)
             return
+        self.store.set_state(job.id, "running", "reading the video's subtitle tracks (a large file can take a few minutes)")
         provider = self.provider_factory()
         prep = self.prepare(job, provider)
         if prep is None:
@@ -652,7 +666,8 @@ class Worker:
         if f.exists():                                   # someone wrote notes meanwhile: theirs win
             return f.read_text(encoding="utf-8")
         f.write_text(text.strip() + "\n", encoding="utf-8")
-        store.record("notes", f"{title}: series notes drafted", job.video_path, job.lang, job.series_key,
+        kind = "series notes" if re.search(r"[Ss]\d{1,2}[Ee]\d{1,3}", job.title + Path(job.video_path).name) else "film notes"
+        store.record("notes", f"{title}: {kind} drafted", job.video_path, job.lang, job.series_key,
                      "auto-generated from the overview and this episode; edit them on the series page",
                      price_of(res.model, res.usage) or 0.0, vars(res.usage), res.model)
         return text

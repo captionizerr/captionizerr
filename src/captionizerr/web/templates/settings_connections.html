@@ -79,7 +79,7 @@
 
   <section class="card">
     <h2>OpenSubtitles <span class="pill">Optional</span></h2>
-    <p class="small muted">For the <b>Share on OpenSubtitles</b> button in the editor. Nothing is ever shared automatically. Uploads go through the classic <b>opensubtitles.org</b> site: if the login test is refused, sign in there once with the same account, then test again.</p>
+    <p class="small muted">For the <b>Share…</b> button in the editor and on job pages. Nothing is ever shared automatically. Uploads go through the classic <b>opensubtitles.org</b> site: if the login test is refused, sign in there once with the same account, then test again.</p>
     <div class="fields">
       <label class="f">Username <input type="text" name="opensubtitles_user" value="{{ v.opensubtitles_user }}" autocomplete="off"></label>
       {{ secret('opensubtitles_password', secrets, label='Password', next='/settings/connections') }}

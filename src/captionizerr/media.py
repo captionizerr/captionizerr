@@ -61,6 +61,12 @@ def _track_score(s: SubStream) -> tuple:
     return (signs, s.looks_sdh, not s.default)
 
 
+def target_tracks(streams: list[SubStream], lang: str) -> list[SubStream]:
+    """Full subtitle tracks the video already has in `lang` (text or image; not forced, not commentary)."""
+    return [s for s in streams if langs.same(s.language, lang) and not s.forced
+            and not any(k in (s.title or "").lower() for k in ("forced", "sign", "song", "comment", "коммент"))]
+
+
 def pick_source(streams: list[SubStream], lang: str = "en") -> SubStream | None:
     """A full, non-forced text track in `lang` (any ISO spelling)."""
     cands = [s for s in streams if s.is_text and not s.forced and langs.same(s.language, lang)]
@@ -367,7 +373,7 @@ def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
     for lang in prefer:
         st = pick_source(streams, lang)
         if st:
-            emb = _cache_extract(video, st, cache_dir, lang)
+            emb = _cache_extract(video, st, cache_dir, lang, streams)
             better = _better_sidecar(emb, side, lang, duration, cache_dir, video, speech_url)
             if better is None:
                 return Source(emb, lang, "embedded")
@@ -381,7 +387,7 @@ def find_source(video: Path, cache_dir: Path, prefer: list[str], target: str,
         others.sort(key=lambda s: (not s.default,) + _track_score(s))
         if others:
             lang = langs.norm(others[0].language)
-            return Source(_cache_extract(video, others[0], cache_dir, lang), lang, "embedded")
+            return Source(_cache_extract(video, others[0], cache_dir, lang, streams), lang, "embedded")
         if side:
             return Source(side[0][0], side[0][1], "sidecar")
     return None
@@ -401,7 +407,7 @@ def find_forced(video: Path, cache_dir: Path, prefer: list[str], target: str) ->
         if not cands:   # some releases only say so in the title
             cands = [x for x in streams if x.is_text and langs.same(x.language, lang) and "forced" in (x.title or "").lower()]
         if cands:
-            return Source(_cache_extract(video, cands[0], cache_dir, lang), lang, "embedded")
+            return Source(_cache_extract(video, cands[0], cache_dir, lang, streams), lang, "embedded")
         for ext in ("srt", "ass"):
             for code in (lang, *langs.ISO3.get(lang, ())):
                 side = video.with_name(f"{video.stem}.{code}.forced.{ext}")
@@ -410,25 +416,58 @@ def find_forced(video: Path, cache_dir: Path, prefer: list[str], target: str) ->
     return None
 
 
-def _cache_extract(video: Path, stream: SubStream, cache_dir: Path, lang: str) -> Path:
+def _cache_key(video: Path, stream: SubStream) -> str:
     import hashlib
-    import shutil
     st = video.stat()
-    key = hashlib.sha1(f"{video}|{st.st_size}|{int(st.st_mtime)}|{stream.index}".encode()).hexdigest()[:20]
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    for ext in ("srt", "ass"):
-        hit = cache_dir / f"{key}.{lang}.{ext}"
-        if hit.is_file():
+    return hashlib.sha1(f"{video}|{st.st_size}|{int(st.st_mtime)}|{stream.index}".encode()).hexdigest()[:20]
+
+
+def _cached(cache_dir: Path, key: str) -> Path | None:
+    for hit in cache_dir.glob(f"{key}.*"):
+        if hit.suffix in (".srt", ".ass") and hit.is_file():
             os.utime(hit)
             return hit
+    return None
+
+
+def _cache_extract(video: Path, stream: SubStream, cache_dir: Path, lang: str,
+                   all_streams: list[SubStream] | None = None) -> Path:
+    """The text of one subtitle stream, from the cache or extracted. Getting at a subtitle stream
+    means reading the whole file (a 4K remux is 50–80 GB, minutes over a network share), so on a
+    miss every text stream is extracted in that same pass and cached for later (forced track,
+    other languages, the editor)."""
+    import shutil
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    key = _cache_key(video, stream)
+    hit = _cached(cache_dir, key)
+    if hit:
+        return hit
+    want = [stream] + [s for s in (all_streams or []) if s.is_text and s.index != stream.index
+                       and _cached(cache_dir, _cache_key(video, s)) is None]
     work = Path(tempfile.mkdtemp(prefix="src-", dir=str(cache_dir)))
     try:
-        out = extract(video, stream, work)
-        dest = cache_dir / f"{key}.{lang}.{out.suffix.lstrip('.')}"
-        shutil.move(str(out), dest)
-        return dest
+        outs = extract_many(video, want, work)
+        for s, out in outs:
+            code = lang if s.index == stream.index else (langs.norm(s.language) or "und")
+            shutil.move(str(out), cache_dir / f"{_cache_key(video, s)}.{code}.{out.suffix.lstrip('.')}")
+        hit = _cached(cache_dir, key)
+        if hit is None:
+            raise FileNotFoundError(f"stream {stream.index} was not extracted")
+        return hit
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def extract_many(video: Path, streams: list[SubStream], workdir: Path) -> list[tuple[SubStream, Path]]:
+    """Several subtitle streams in one read of the file."""
+    args, outs = ["ffmpeg", "-nostdin", "-loglevel", "error", "-n", "-i", str(video)], []
+    for s in streams:
+        ext = "ass" if s.codec in ("ass", "ssa") else "srt"
+        out = workdir / f"stream{s.index}.{ext}"
+        args += ["-map", f"0:{s.index}", "-c:s", ext, str(out)]
+        outs.append((s, out))
+    subprocess.run(args, check=True, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    return [(s, o) for s, o in outs if o.is_file()]
 
 
 def extract(video: Path, stream: SubStream, workdir: Path | None = None) -> Path:

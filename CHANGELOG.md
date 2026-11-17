@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Editor has the job page's actions:** Download, Share…, Re-translate, Re-sync to speech (with Whisper) and *Job & history* sit at the top of the editor, instead of a lone "Share on OpenSubtitles" link.
+- **Large files:** getting at a subtitle track means reading the whole video (a 4K remux is 50–80 GB; over a network share that took 11 minutes for one film). Every text subtitle track is now extracted in that one pass and cached, so a forced track or another language doesn't cost a second read, and the job says "reading the video's subtitle tracks" meanwhile instead of showing nothing.
+- **Videos that already have subtitles in your language** (often Blu-ray remuxes): the job notes which tracks it found, and *Settings → General → Videos that already have subtitles in that language* can skip them on import (default: translate anyway; a manual start always translates).
+- Notes drafted for a film are labelled "film notes", not "series notes".
+
 ## 0.3.3 — 2026-11-17
 
 - **Language-neutral interface:** series and film tables have one **Translation** column with an entry per target language ("DE · Edit", "IT · Not translated", "ES · Review") instead of a column headed with a language code; language codes are shown in capitals as values everywhere (dashboard *Language* column, editor list, film page with the language's name). Examples in the setup wizard, error messages and docs no longer suggest Russian (`de`, or `es, fr`); the internal fallback target language is no longer Russian. No language is preset: the setup wizard asks.
