@@ -86,3 +86,15 @@ def test_a_video_that_cant_be_read_right_now_is_retried_then_given_up(tmp_path, 
     w.process(st.next_queued())
     j = st.get(job.id)
     assert j.state == "failed" and "can't read the video" in j.detail and "Invalid argument" in j.detail
+
+
+def test_editor_page_lists_reviews_first_then_recent(tmp_path):
+    app = _app(tmp_path)
+    st, c = app.state.store, TestClient(app)
+    a = st.enqueue("sonarr", "Show S01E01", "/x/a.mkv", "ru", "show"); st.finish(a.id, "done", "10 cues from en (embedded); 0 flagged, 0 open", "/x/a.captionizerr.ru.srt", 0.3, {}, "m")
+    b = st.enqueue("sonarr", "Show S01E02", "/x/b.mkv", "ru", "show"); st.finish(b.id, "needs_review", "10 cues from en (embedded); 1 flagged, 1 open", "/x/b.captionizerr.ru.srt", 0.3, {}, "m")
+    n = st.enqueue("notes", "Show: series notes drafted", "/x/a.mkv", "ru", "show"); st.finish(n.id, "done", "x", "", 0.05, {}, "m")
+    page = c.get("/editor").text
+    assert 'href="/editor"' in page and "Waiting for your review" in page and "series notes" not in page
+    assert page.index("Show S01E02") < page.index("Show S01E01") and ">Review<" in page and ">Edit<" in page
+    assert 'href="/editor"' in c.get("/").text                                  # in the top menu everywhere

@@ -147,7 +147,8 @@ details.adv summary{cursor:pointer;color:var(--muted);font-weight:600;font-size:
   <a class="brand" href="/">{% include "_mark.html" %}CaptionizeRR</a>
   <nav class="main" aria-label="Main">
     <a href="/" class="{{ 'on' if nav=='dashboard' or nav=='job' }}">Dashboard</a>
-    <a href="/library" class="{{ 'on' if nav in ('library','series','edit','share') }}">Library</a>
+    <a href="/library" class="{{ 'on' if nav in ('library','series','film','share') }}">Library</a>
+    <a href="/editor" class="{{ 'on' if nav in ('editor','edit') }}">Editor</a>
     <a href="/settings" class="{{ 'on' if nav.startswith('settings') or nav == 'setup' }}">Settings</a>
   </nav>
   <span class="ver">v{{ version }}</span>

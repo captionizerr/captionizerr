@@ -15,7 +15,7 @@
         <td class="mono">{{ p.lang }}</td>
         <td>{% if p.ok %}<span class="yes">✓ translated</span>{% else %}<span class="muted">not yet</span>{% endif %}{% for mk, c in p.marks %} <span class="pill {{ c }}">{{ mk }}</span>{% endfor %}</td>
         <td><div class="actions" style="margin:0">
-          {% if p.ok %}<a class="btn small" href="/edit?{{ {'path': m.path, 'lang': p.lang, 'key': key, 'back': '/library/film/' ~ m.id}|urlencode }}">Open in editor</a>
+          {% if p.ok %}<a class="btn small {{ 'primary' if p.review }}" href="/edit?{{ {'path': m.path, 'lang': p.lang, 'key': key, 'back': '/library/film/' ~ m.id, 'view': 'flag' if p.review else ''}|urlencode }}">{{ 'Review in editor' if p.review else 'Open in editor' }}</a>
           <a class="btn small" href="/share/download?{{ {'path': m.path, 'lang': p.lang}|urlencode }}">Download</a>
           <a class="btn small" href="/share?{{ {'path': m.path, 'lang': p.lang, 'back': '/library/film/' ~ m.id}|urlencode }}">Share…</a>{% endif %}
           {% if p.job %}<a class="btn small" href="/jobs/{{ p.job }}">Job</a>{% endif %}

@@ -392,9 +392,11 @@ def register(app: FastAPI) -> None:
         for e in eps:
             e["status"] = status_for(e["path"], langs)
             e["missing"] = not all(e["status"].values())
-            e["marks"], e["job"] = [], None
+            e["marks"], e["job"], e["review"] = [], None, {}
             for l in langs:
-                marks, job_id = file_marks(by_lang[l].get(e.get("path") or "", []))
+                jobs = by_lang[l].get(e.get("path") or "", [])
+                marks, job_id = file_marks(jobs)
+                e["review"][l] = any(m == "needs review" for m, _ in marks)
                 e["marks"] += [(f"{l}: {m}" if len(langs) > 1 else m, c) for m, c in marks]
                 e["job"] = e["job"] or job_id
             seasons.setdefault(e["season"], []).append(e)
@@ -546,7 +548,8 @@ def register(app: FastAPI) -> None:
         for l in langs:
             jobs = store.jobs_for(m["path"], l) if m["path"] else []
             marks, job_id = file_marks(jobs)
-            per_lang.append({"lang": l, "ok": status.get(l, False), "marks": marks, "job": job_id})
+            per_lang.append({"lang": l, "ok": status.get(l, False), "marks": marks, "job": job_id,
+                             "review": any(mk == "needs review" for mk, _ in marks)})
         history = sorted((j for l in langs for j in (store.jobs_for(m["path"], l) if m["path"] else [])),
                          key=lambda j: j.created)
         ctx_file = s.context_dir / f"{key}.md"
@@ -679,6 +682,25 @@ def register(app: FastAPI) -> None:
         last = next((j for j in reversed(jobs) if j.source not in ("edit", "notes", "forced", "sync")
                      and j.state in ("done", "needs_review")), None)
         return {r.id for r in empty} if last is not None and last.state == "done" else set()
+
+    @app.get("/editor")
+    def editor_home(request: Request):
+        """Where to start editing: translations waiting for review first, then the latest ones."""
+        side = ("edit", "notes", "forced", "sync")
+        jobs = [j for j in store.list(500) if j.source not in side and j.output_path
+                and j.output_path.endswith((".srt", ".ass")) and j.state in ("done", "needs_review")]
+        seen, latest = set(), []
+        for j in jobs:                                   # newest first: one row per file and language
+            k = (j.video_path, j.lang)
+            if k not in seen:
+                seen.add(k)
+                latest.append(j)
+        gone = gone_videos([j.video_path for j in latest], s.library_roots)
+        latest = [j for j in latest if j.video_path not in gone]
+        review = [j for j in latest if j.state == "needs_review"]
+        recent = [j for j in latest if j.state != "needs_review"][:60]
+        return render(request, "editor.html", review=review, recent=recent,
+                      fmt_time=lambda t: datetime.fromtimestamp(t).strftime("%d %b %H:%M"))
 
     @app.get("/edit")
     def edit_page(request: Request, path: str, lang: str, key: str = "", back: str = "", view: str = ""):
