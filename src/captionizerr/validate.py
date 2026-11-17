@@ -171,9 +171,11 @@ def boundary_issues(dia: list[Cue], tr: dict[int, str | None]) -> list[Issue]:
         sa = {w.lower() for w in _WORD.findall(plain(a.text)) if len(w) > 2}
         sb = {w.lower() for w in _WORD.findall(plain(b.text)) if len(w) > 2}
         if len(wa) >= 3 and len(wb) >= 3:
-            overlap = len(wa & wb) / min(len(wa), len(wb))
+            shared = wa & wb
+            overlap = len(shared) / min(len(wa), len(wb))
             src_overlap = len(sa & sb) / max(1, min(len(sa), len(sb)))
-            if overlap >= 0.6 and src_overlap < 0.4:
+            # three shared words at least: two short lines can share "есть" and "брат" by chance
+            if overlap >= 0.6 and len(shared) >= 3 and src_overlap < 0.4:
                 flag(a, b, f"cues {a.index} and {b.index} say nearly the same thing but their sources differ")
         # 4. a number from one cue's source shows up in the neighbour instead
         for x, y, tx, ty in ((a, b, ta, tb), (b, a, tb, ta)):

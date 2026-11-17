@@ -135,3 +135,15 @@ def test_editor_has_the_same_actions_as_the_job_page(tmp_path):
     for label in (">Download<", ">Share…<", ">Re-translate<", ">Job &amp; history<"):
         assert label in page, label
     assert "Share on OpenSubtitles…</a>" not in page
+
+
+def test_short_neighbours_sharing_two_common_words_are_not_a_line_split():
+    from captionizerr.cues import Cue
+    from captionizerr.validate import boundary_issues
+    dia = [Cue(i, i * 3000, i * 3000 + 2000, f"Some ordinary line number {i} here.") for i in range(1, 30)]
+    tr = {c.index: f"Обычная строка номер {c.index} здесь." for c in dia}
+    dia += [Cue(30, 90000, 92000, "Marina has a brother."), Cue(31, 93000, 95000, "I mean, she had...\nhad a brother.")]
+    tr.update({30: "У Марины есть брат.", 31: "То есть у неё был...\nбыл брат."})
+    assert not [i for i in boundary_issues(dia, tr) if i.index in (30, 31)]
+    tr[31] = "У Марины есть брат, понимаешь."            # a real shift: the same sentence twice
+    assert [i for i in boundary_issues(dia, tr) if i.index in (30, 31)]

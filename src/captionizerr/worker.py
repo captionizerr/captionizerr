@@ -174,7 +174,7 @@ class Worker:
         except subprocess.CalledProcessError:
             present = []                                     # unreadable: the source lookup below says so
         if present:
-            names = ", ".join(p.title or p.codec for p in present[:2])
+            names = ", ".join(p.title or "an untitled track" for p in present[:2])
             if s.existing_subs == "skip" and job.source in ("sonarr", "radarr") and not job.redo:
                 store.finish(job.id, "skipped", f"the video already has {job.lang.upper()} subtitles ({names}); "
                                                 "not translated (Settings → General). Start it by hand to translate anyway")
@@ -668,7 +668,8 @@ class Worker:
         f.write_text(text.strip() + "\n", encoding="utf-8")
         kind = "series notes" if re.search(r"[Ss]\d{1,2}[Ee]\d{1,3}", job.title + Path(job.video_path).name) else "film notes"
         store.record("notes", f"{title}: {kind} drafted", job.video_path, job.lang, job.series_key,
-                     "auto-generated from the overview and this episode; edit them on the series page",
+                     (f"auto-generated from the overview and this {'episode' if kind == 'series notes' else 'film'}; "
+                     f"edit them on the {'series' if kind == 'series notes' else 'film'} page"),
                      price_of(res.model, res.usage) or 0.0, vars(res.usage), res.model)
         return text
 

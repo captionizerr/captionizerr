@@ -2,10 +2,14 @@
 
 ## Unreleased
 
+## 0.3.4 — 2026-11-17
+
 - **Editor has the job page's actions:** Download, Share…, Re-translate, Re-sync to speech (with Whisper) and *Job & history* sit at the top of the editor, instead of a lone "Share on OpenSubtitles" link.
 - **Large files:** getting at a subtitle track means reading the whole video (a 4K remux is 50–80 GB; over a network share that took 11 minutes for one film). Every text subtitle track is now extracted in that one pass and cached, so a forced track or another language doesn't cost a second read, and the job says "reading the video's subtitle tracks" meanwhile instead of showing nothing.
 - **Videos that already have subtitles in your language** (often Blu-ray remuxes): the job notes which tracks it found, and *Settings → General → Videos that already have subtitles in that language* can skip them on import (default: translate anyway; a manual start always translates).
-- Notes drafted for a film are labelled "film notes", not "series notes"; the editor heading for a film drops the quality tag ("Film (2008)", not "Film (2008) Remux-2160p").
+- **"Line split?" check:** two short neighbouring lines that share a couple of common words (a film: «У Марины есть брат.» / «То есть у неё был... был брат.») are no longer flagged; at least three shared words are needed. That false alarm alone sent the film to review.
+- The note about subtitles already in the video names an untitled track "an untitled track" instead of its format.
+- Notes drafted for a film are labelled "film notes" (and point to the film page), not "series notes"; the editor heading for a film drops the quality tag ("Film (2008)", not "Film (2008) Remux-2160p").
 
 ## 0.3.3 — 2026-11-17
 
