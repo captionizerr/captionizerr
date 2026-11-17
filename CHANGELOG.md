@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.1 — 2026-11-17
+
+Fixes from the first full season run after 0.3.0 (Northwind S03):
+
+- **Editor is easy to reach:** an **Editor** item in the top menu opens a page with the translations waiting for your review first, then the latest ones, each with **Review** / **Edit**, and a search. Series and film pages have real **Edit** / **Review** buttons instead of a bare ✓.
+- **Editor text boxes no longer collapse:** opening the editor through *Review* shows only flagged lines; the hidden boxes were sized at zero and stayed slivers when you switched to *All*. They are now sized when shown, on window resize, and have a minimum height.
+- **Reviews close when you fix them:** saving in the editor closes the job's review when nothing serious is left (only soft notes such as a possible speaker label); **Mark as reviewed** in the editor and on the job page accepts a file as it is (e.g. a fast line nobody can shorten). Before, a review stayed pending after the line was fixed.
+- **Speaker-label check:** a colon that introduces quoted speech ("я так и сказал: «Ох»") is no longer reported as a kept speaker label. Soft notes on a finished job read "small notes left (no review needed)".
+- **Videos that can't be read right now** (a file still seeding in a torrent client, hardlinked on a network share, answers "Invalid argument") make the job wait and retry every 30 minutes for a day instead of failing; re-sync jobs too.
+
 - **`captionizerr eval`:** `--only` limits the run to cases whose name contains a string (repeatable); `--keep DIR` saves each model's lines as `DIR/<case>.json` (private, like the cases) for reading side by side. OpenAI-compatible models now get the `--effort` you pass, or the effort saved in the web UI; the CLI reads the UI-saved settings (read-only) instead of only the environment, so a model is measured the way it translates.
 
 ## 0.3.0 — 2026-11-16

@@ -65,7 +65,7 @@ Untranslated back catalogue: tick many episodes and choose **Add to backlog (½ 
 
 ## 5. Check it in your player
 
-The new track is listed as **"captionizerr - <Language>"** (Jellyfin). Open the episode again in **Library** to edit lines: ↻ re-translates one line, optionally with an instruction such as "more casual".
+The new track is listed as **"captionizerr - <Language>"** (Jellyfin). To correct lines, open **Editor** in the top menu (translations waiting for review are listed first) or press **Edit** next to an episode in **Library**: ↻ re-translates one line, optionally with an instruction such as "more casual".
 
 Each job's page (click its title on the dashboard) also has:
 - **Re-translate**, to run the whole episode again, e.g. after switching model. It replaces the file; the old version stays in the editor's history.
@@ -102,6 +102,8 @@ Both take precedence and show as "Set on the server". See the commented block in
 | Job **Needs review**: "incomplete source … stops at 50:41" | The video's subtitle track ends early and no complete one was found | Connect Bazarr (it is asked for one automatically), or put a complete subtitle next to the video, then **Re-translate** |
 | Subtitles run early or late | The source subtitle was timed for another release | Connect Whisper and press **Re-sync to speech** on the job's page |
 | Job fails: "can't read the video" | The file couldn't be opened, often a network-share hiccup | Check the mount on the CaptionizeRR host, then **Retry** |
+| Job stays **Needs review** after you fixed the line | A flagged line is still over a limit (e.g. reading speed) | Fix it further, or press **Mark as reviewed** in the editor if it is fine |
+| Job **waiting**: "Video busy" | The video can't be read right now, often because a torrent client is still seeding it over a network share | Nothing: it is retried every 30 minutes for a day |
 | Job **Paused (budget)** | The monthly cap was reached | Raise it in **Settings → General**, then **Resume** on the dashboard |
 | Track doesn't show in the player | The media server rescan isn't configured, or the paths differ | Add the media server in **Connections**; set its path map under *Different paths in the media server?* |
 | "too many failed logins" (429) | 10 wrong passwords/keys within 10 minutes | Wait 15 minutes; behind a reverse proxy everyone shares one address |

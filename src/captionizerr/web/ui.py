@@ -61,10 +61,16 @@ def human_detail(detail: str) -> str:
     d = re.sub(r"(\d+) cues from ([a-z]{2,3}) \(([^)]*)\)", src, detail)
     d = re.sub(r"(\d+) cues; ", r"\1 lines; ", d)
 
+    soft_only = bool(re.search(r"open: ", d)) and all(
+        x.strip().split(" ", 1)[-1] in ("speaker label?", "italics lost")
+        for x in re.sub(r"^.*?open: ", "", d).split(";")[0].split(", "))
+
     def checks(m):
         n, left = int(m.group(1)), int(m.group(2))
         if not n:
             return "no lines needed fixing"
+        if left and soft_only:
+            return f"{n} lines checked and fixed, {left} small note{'s' if left != 1 else ''} left (no review needed)"
         return (f"{n} line{'s' if n != 1 else ''} checked and fixed" if not left
                 else f"{n} lines checked, {left} still need{'s' if left == 1 else ''} a look")
     d = re.sub(r"(\d+) flagged, (\d+) open", checks, d)
