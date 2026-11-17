@@ -115,7 +115,7 @@ def test_library_films_read_like_episodes_and_keep_their_own_settings(tmp_path, 
     page = c.get("/library").text
     assert "not yet" not in page and "Not translated" in page and ">Edit<" in page and page.count('name="path"') == 2
     paths = [f["movieFile"]["path"] for f in films]
-    form = [("back", "/library"), ("path", paths[1]), (f"key:{paths[1]}", "heat"), (f"label:{paths[1]}", "Heat (2021)")]
+    form = {"back": "/library", "path": paths[1], f"key:{paths[1]}": "heat", f"label:{paths[1]}": "Heat (2021)"}
     c.post("/library/translate", data=form, headers=SAME)
     jobs = [j for j in st.list(10) if j.video_path == paths[1]]
     assert sorted(j.lang for j in jobs) == ["de", "ru"] and all(j.series_key == "heat" for j in jobs)
