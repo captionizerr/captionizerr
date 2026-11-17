@@ -40,6 +40,16 @@ log = logging.getLogger("captionizerr.worker")
 TICK_BATCH_POLL = 300        # seconds between batch status checks
 TICK_WAITING = 300           # between checks for a Bazarr download
 CUT_PREFIX = "Source cut short:"
+BUSY_PREFIX = "Video busy:"
+BUSY_RETRY_S = 1800          # a file that can't be read right now is tried again every 30 minutes...
+BUSY_GIVE_UP_S = 24 * 3600   # ...for a day
+
+
+def busy_read(err: str) -> bool:
+    """A read failure that usually passes: the file is open elsewhere (seeding torrent on a network
+    share, a lease or lock), not missing or broken."""
+    return any(x in err for x in ("Invalid argument", "Resource busy", "Device or resource busy",
+                                   "Permission denied", "Stale file handle", "Input/output error"))
 SIDECAR_SETTLE = 120         # a new sidecar must be this old (Bazarr syncs right after download)
 MAINTENANCE_EVERY = 86400
 
@@ -163,7 +173,10 @@ class Worker:
                                               speech_url=auto_sync)
         except subprocess.CalledProcessError as e:      # ffprobe/ffmpeg can't open it
             why = ((e.stderr or "") if isinstance(e.stderr, str) else "").strip().splitlines()
-            store.finish(job.id, "failed", f"can't read the video ({why[-1][-160:] if why else 'ffprobe failed'}); "
+            reason = why[-1][-160:] if why else "ffprobe failed"
+            if busy_read(reason) and self.wait_busy(job, reason):
+                return None
+            store.finish(job.id, "failed", f"can't read the video ({reason}); "
                                            "if the library is on a network share, check the mount and retry")
             return None
         if src and src.origin == "sidecar" and time.time() - src.path.stat().st_mtime < SIDECAR_SETTLE:
@@ -300,6 +313,8 @@ class Worker:
         try:
             moves = speechsync.sync_cues(s.whisper_url, video, stored[1], src.cues)
         except speechsync.SpeechError as e:
+            if busy_read(str(e)) and self.wait_busy(job, str(e)[-160:]):
+                return
             store.finish(job.id, "failed", str(e))
             return
         if moves is None:
@@ -537,6 +552,14 @@ class Worker:
             return
         store.set_waiting(job.id, f"asked Bazarr for a {want} subtitle; checking every few minutes")
 
+    def wait_busy(self, job: Job, reason: str) -> bool:
+        """Park a job whose video can't be read right now; False once it has waited a day."""
+        if job.wait_since and job.detail.startswith(BUSY_PREFIX) and time.time() - job.wait_since > BUSY_GIVE_UP_S:
+            return False
+        self.store.set_waiting(job.id, f"{BUSY_PREFIX} can't read the video right now ({reason}); it is probably "
+                                       "still being seeded or is open elsewhere. Trying again every 30 minutes for a day")
+        return True
+
     def _ask_bazarr_quietly(self, job: Job) -> bool:
         """Ask Bazarr for a better source without failing the job when it can't help."""
         bz = Bazarr(self.s.bazarr_url, self.s.bazarr_key)
@@ -568,6 +591,11 @@ class Worker:
     def check_waiting(self):
         s = self.s
         for job in self.store.waiting():
+            if job.detail.startswith(BUSY_PREFIX):        # retried by time, not by a new subtitle file
+                if time.time() - job.updated >= BUSY_RETRY_S:
+                    self.store.claim(job.id, "waiting_source", "queued", job.detail)
+                    self.wake()
+                continue
             video = s.map_path(job.video_path)
             if not video.is_file():
                 self.store.finish(job.id, "failed", f"video not found: {video}")

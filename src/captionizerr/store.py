@@ -210,6 +210,18 @@ class Store:
         return [Job(**dict(r)) for r in self._q("SELECT * FROM jobs WHERE video_path=? AND lang=? ORDER BY created "
                                                 "LIMIT ?", (video_path, lang, limit)).fetchall()]
 
+    def review_job(self, video_path: str, lang: str) -> Job | None:
+        """The translation job of this file that is waiting for review, if any."""
+        r = self._q("SELECT * FROM jobs WHERE video_path=? AND lang=? AND state='needs_review' "
+                    "AND source NOT IN ('edit','notes','forced','sync') ORDER BY created DESC LIMIT 1",
+                    (video_path, lang)).fetchone()
+        return Job(**dict(r)) if r else None
+
+    def mark_reviewed(self, job_id: int, how: str) -> bool:
+        """A person looked at it: needs_review becomes done; the detail says how."""
+        return self._q("UPDATE jobs SET state='done', detail=detail || ?, updated=? WHERE id=? AND state='needs_review'",
+                       (f"; {how} {time.strftime('%d %b %H:%M')}", time.time(), job_id)).rowcount == 1
+
     def jobs_by_video(self, paths: list[str], lang: str) -> dict[str, list[Job]]:
         """video_path -> its jobs in `lang`, oldest first (one query for a whole season)."""
         out: dict[str, list[Job]] = {}

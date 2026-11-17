@@ -18,6 +18,7 @@
   <form method="post" action="/jobs/{{ job.id }}/resync" class="inline"
         onsubmit="return confirm('Move this translation onto the speech in the audio? Lines are matched with Whisper; nothing is re-translated and there is no cost. The current timing stays in the editor\'s history.')">
     <button title="Match the lines to the speech in the audio (Whisper) and fix their timing">Re-sync to speech</button></form>{% endif %}
+  {% if job.state == 'needs_review' and not deleted %}<form method="post" action="/jobs/{{ job.id }}/reviewed" class="inline"><button title="Accept the file as it is">Mark as reviewed</button></form>{% endif %}
   {% if not deleted and job.state in ('failed','needs_review','no_source','paused_budget') %}<form method="post" action="/jobs/{{ job.id }}/retry" class="inline"><button class="{{ 'primary' if job.state != 'needs_review' }}">Retry</button></form>{% endif %}
 </div>
 <div class="grid">

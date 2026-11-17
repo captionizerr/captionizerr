@@ -701,7 +701,8 @@ def register(app: FastAPI) -> None:
             rest = stem[m.end():].strip(" -")
             ep_title = re.sub(r"\s*(WEBDL|WEBRip|Bluray|HDTV|DVD|Remux|\d{3,4}p).*$", "", rest, flags=re.I).strip(" -")
         heading = (f"{series} · Season {int(m.group(1))}, Episode {int(m.group(2))}" if m else stem)
-        return render(request, "edit.html", rows=data, path=path, lang=lang, key=key, token=token,
+        review = store.review_job(path, lang) or store.review_job(str(video), lang)
+        return render(request, "edit.html", rows=data, path=path, lang=lang, key=key, token=token, review=review,
                       heading=heading, ep_title=ep_title,
                       back=local_path(back),
                       fname=target.name, profile=profile, view="flag" if view == "flag" else "all", flagged=sum(1 for d in data if d["flags"]),
@@ -746,8 +747,30 @@ def register(app: FastAPI) -> None:
             raise HTTPException(400, str(e))
         bible.log_corrections(s.feedback_dir, key or "", changed)
         refresh_all(s, [str(b["path"])])
-        return {"saved": len(changed), "token": str(target.stat().st_mtime_ns),
-                "flags": {str(k): v for k, v in editor.flags_for(rows, profile).items()}}
+        flags = editor.flags_for(rows, profile)
+        reviewed = close_review_if_clean(str(b["path"]), video, target, str(b["lang"]), rows, flags)
+        return {"saved": len(changed), "token": str(target.stat().st_mtime_ns), "reviewed": reviewed,
+                "flags": {str(k): v for k, v in flags.items()}}
+
+    SOFT_FLAGS = {"speaker label?", "italics lost"}       # don't hold a job in review (validate.SOFT)
+
+    def close_review_if_clean(path: str, video: Path, target: Path, lang: str, rows, flags) -> bool:
+        """After a save: when nothing but soft notes is left, the job's review is done."""
+        job = store.review_job(path, lang) or store.review_job(str(video), lang)
+        if job is None:
+            return False
+        skipped = skipped_rows(path, video, target, lang, rows)
+        hard = [f for rid, fs in flags.items() for f in fs
+                if f not in SOFT_FLAGS and not (f == "empty" and rid in skipped)]
+        return not hard and store.mark_reviewed(job.id, "reviewed in the editor")
+
+    @app.post("/jobs/{job_id}/reviewed")
+    def job_reviewed(request: Request, job_id: int, back: str = Form("")):
+        """The owner accepts the file as it is (a flagged line can be fine: a fast line nobody can shorten)."""
+        _same_origin(request)
+        ok = store.mark_reviewed(job_id, "marked as reviewed")
+        return _redirect(local_path(back, f"/jobs/{job_id}"), "Marked as reviewed." if ok else "Nothing to review.",
+                         "ok" if ok else "warn")
 
     @app.post("/api/edit/retranslate")
     async def edit_retranslate(request: Request):

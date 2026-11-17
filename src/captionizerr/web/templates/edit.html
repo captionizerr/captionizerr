@@ -30,6 +30,10 @@ button.icon{padding:5px 9px;font-size:14px;line-height:1}
 <p class="sub">{% if ep_title %}“{{ ep_title }}” · {% endif %}{{ lang_names.get(lang, lang) }} translation</p>
 <p class="small muted mono" style="word-break:break-all;margin-top:-10px">{{ fname }}</p>
 <p class="small"><a href="/share?{{ {'path': path, 'lang': lang, 'back': request.url.path ~ '?' ~ request.url.query}|urlencode }}">Share on OpenSubtitles…</a></p>
+{% if review %}<form method="post" action="/jobs/{{ review.id }}/reviewed" class="flash warn" id="reviewbar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  <input type="hidden" name="back" value="{{ back }}">
+  <span>This translation is waiting for your review. Fix the flagged lines and save: the review closes by itself when nothing serious is left. If a flagged line is fine as it is, accept the file.</span>
+  <button type="submit" class="small">Mark as reviewed</button></form>{% endif %}
 {% if not has_source %}<div class="flash warn">The video has no English text track, so only the translation is shown.</div>{% endif %}
 
 <div class="bar-top">
@@ -168,7 +172,8 @@ async function save() {
     token = j.token;
     for (const [id, f] of Object.entries(j.flags || {})) { const v = view.get(Number(id)); if (v) v.r.flags = f; }
     for (const id of [...dirty.keys()]) { const v = view.get(id); v.r.tr = v.ta.value.trim(); changed(v); }
-    status.textContent = `Saved ${j.saved} line${j.saved === 1 ? '' : 's'}. The previous version is kept in history, and Jellyfin was told to rescan.`;
+    status.textContent = `Saved ${j.saved} line${j.saved === 1 ? '' : 's'}. The previous version is kept in history, and Jellyfin was told to rescan.` + (j.reviewed ? ' Review done: nothing serious is left.' : '');
+    if (j.reviewed) document.getElementById('reviewbar')?.remove();
   } catch (e) { status.textContent = 'Not saved: ' + e.message; }
   counts();
 }

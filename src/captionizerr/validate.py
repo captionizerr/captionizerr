@@ -21,6 +21,21 @@ _DIGITS = re.compile(r"\d+")
 _SPEAKER = re.compile(r"^\s*[A-Za-z][A-Za-z .'-]{0,24}:\s*")
 # a speaker label in any script at the start of a line: "Man #2:", "Мужчина:", "ANNA:"
 _LABEL_ANY = re.compile(r"(^|\n)\s*-?\s*[^\W\d_][\w .'#-]{0,24}:\s", re.UNICODE)
+_QUOTES = "«\"“„'‘‹"
+
+
+def label_kept(text: str) -> bool:
+    """A speaker label at a line start ("GRACE: …", "Мужчина по радио: …"). Not a colon that
+    introduces quoted speech ("я так и сказал: «Ох»", "Мама просила передать:\n«Не звони»"),
+    which is ordinary punctuation in many languages: labels are at most three words and are not
+    followed by a quotation mark."""
+    for m in _LABEL_ANY.finditer(text):
+        label = m.group(0).strip().lstrip("-").strip().rstrip(":")
+        rest = text[m.end():].lstrip()
+        if rest[:1] in _QUOTES or len(label.split()) > 3:
+            continue
+        return True
+    return False
 # Latin tokens that legitimately appear in Cyrillic subtitles (Roman numerals, initialisms)
 _ALLOWED_LATIN = re.compile(r"^(?:[IVXLCDM]+|OK|DNA|FBI|CIA|USA|TV|DJ|PhD|vs)$")
 
@@ -105,7 +120,7 @@ def check(cues: list[Cue], tr: dict[int, str | None], p: Profile,
                 issues.append(Issue(c.index, "leftover", f"looks untranslated: {' '.join(bad[:4])}"))
         elif p.target_lang != p.source_lang and plain(c.text).strip().lower() == body.strip().lower() and len(body) > 15:
             issues.append(Issue(c.index, "leftover", "identical to the source"))
-        if p.drop_sdh and _LABEL_ANY.search(plain(c.text)) and _LABEL_ANY.search(body) \
+        if p.drop_sdh and _LABEL_ANY.search(plain(c.text)) and label_kept(body) \
                 and not re.search(r"\d:\d", body) and not is_onscreen_caption(c.text):
             issues.append(Issue(c.index, "label_left", "speaker label kept; drop it (it's a hearing-impaired tag)"))
         src_plain = c.text.strip()
