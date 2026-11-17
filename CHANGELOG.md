@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- **Subtitles from the audio when a video has none** (Whisper): the last resort after the video's own text tracks, subtitle files next to it and Bazarr (which still gets its 3-hour wait first). Whisper writes down what is said in the source-language audio; the words become readable subtitle lines (pauses, sentence ends, two lines, about 6 s on screen; repeated phrases over silence removed); then it is translated as usual and goes to review, labelled *from the English audio (speech recognition)*. Typical case: Blu-ray remuxes whose only subtitles are images (PGS). Settings → Connections → Whisper → *Make a subtitle from the audio when a video has none* (`SPEECH_SOURCE`, on by default). No AI cost; a few minutes of the Whisper machine per episode.
+## 0.3.6 — 2026-11-17
+
+- **Subtitles from the audio when a video has none** (Whisper): the last resort after the video's own text tracks, subtitle files next to it and Bazarr (which still gets its 3-hour wait first). Whisper writes down what is said in the source-language audio; the words become readable subtitle lines (pauses, sentence ends, two lines, about 6 s on screen; repeated phrases over silence removed); then it is translated as usual and goes to review, labelled *from the English audio (speech recognition)*. Typical case: Blu-ray remuxes whose only subtitles are images (PGS). Settings → Connections → Whisper → *Make a subtitle from the audio when a video has none* (`SPEECH_SOURCE`, on by default). No AI cost; a few minutes of the Whisper machine per episode (15 min for a 70-min episode on a 4-core NUC). Measured on Northwind S01E01 against its real English subtitle: 89 % of the spoken words caught, timing within 0.25 s typically, every line within two lines of 42 characters and 6 s.
 - README status line no longer names a version; the GitHub description mentions OpenAI-compatible models and Whisper.
 
 ## 0.3.5 — 2026-11-17

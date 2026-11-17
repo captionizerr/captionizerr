@@ -97,3 +97,18 @@ def test_switched_off_or_audio_already_in_the_target_language(tmp_path, monkeypa
     w.process(st.next_queued())
     j = st.get(job.id)
     assert j.state == state and words in j.detail, j.detail
+
+
+def test_lines_break_at_punctuation_and_short_sentences_stand_alone():
+    from captionizerr.speechsync import _two_lines
+    assert _two_lines("Okay, well, if you change your mind, then come here.", 42) == \
+        "Okay, well, if you change your mind,\nthen come here."
+    assert not _two_lines("I was going to let me know about the brochure", 42).split("\n")[0].endswith(" let")
+    ws = [Spoken(1000 + i * 250, 1200 + i * 250, w) for i, w in enumerate("What is it, Dad? Yeah, Dad.".split())]
+    assert [t for _, _, t in words_to_cues(ws)] == ["What is it, Dad?", "Yeah, Dad."]
+
+
+def test_text_whisper_invents_over_silence_is_dropped():
+    for phrase in ("Thanks for watching!", "Subtitles by the Amara.org community", "♪ ♪"):
+        ws = [Spoken(1000 + i * 300, 1250 + i * 300, w) for i, w in enumerate(phrase.split())]
+        assert words_to_cues(ws) == [], phrase
