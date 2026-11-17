@@ -107,6 +107,17 @@ def replace_own(path: Path, content: str, history_dir: Path) -> Path:
     return path
 
 
+def follow_rename_history(old: Path, new: Path, history_dir: Path) -> None:
+    """Keep the editor's previous versions of a renamed translation (history is keyed by path)."""
+    import hashlib
+    hd = Path(history_dir)
+    src = hd / hashlib.sha1(str(Path(old)).encode()).hexdigest()[:16]
+    dst = hd / hashlib.sha1(str(Path(new)).encode()).hexdigest()[:16]
+    if src.is_dir() and not dst.exists():
+        src.rename(dst)
+        (dst / "path.txt").write_text(str(new), encoding="utf-8")
+
+
 def history(path: Path, history_dir: Path) -> list[Path]:
     import hashlib
     hd = Path(history_dir) / hashlib.sha1(str(Path(path)).encode()).hexdigest()[:16]

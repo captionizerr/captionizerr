@@ -39,6 +39,19 @@ def store_source(sources_dir: Path, output: Path, source: Path, lang: str = "en"
     base.with_suffix(".path").write_text(str(output), encoding="utf-8")
 
 
+def follow_rename(sources_dir: Path, old_output: Path, new_output: Path) -> None:
+    """Move the stored source, its .path note and the skipped-line record to the renamed
+    translation's key."""
+    old, new = source_copy_path(sources_dir, old_output), source_copy_path(sources_dir, new_output)
+    if not old.parent.is_dir():
+        return
+    for f in list(old.parent.glob(old.name + ".*")):
+        f.rename(new.parent / (new.name + f.name[len(old.name):]))
+    meta = new.with_suffix(".path")
+    if meta.is_file():
+        meta.write_text(str(new_output), encoding="utf-8")
+
+
 def store_drops(sources_dir: Path, output: Path, starts: list[int]) -> None:
     """Start times (ms) of source lines the translation leaves out on purpose (TV promos, adverts the
     model confirmed): the editor shows them as skipped instead of as errors. `<key>.drops`."""

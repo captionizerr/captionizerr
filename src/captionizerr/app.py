@@ -146,10 +146,24 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
         moved, touched = 0, []
         for r in renames:
             try:
-                n = len(move_sidecars(s.map_path(r.old_path), s.map_path(r.new_path)))
+                pairs = move_sidecars(s.map_path(r.old_path), s.map_path(r.new_path))
             except OSError as e:
                 log.warning("rename of sidecars failed for %s: %s", r.new_path, e)
                 continue
+            n = len(pairs)
+            try:                                  # records keyed by the old names follow too
+                from . import reuse
+                from .writer import follow_rename_history
+                for old_sub, new_sub in pairs:
+                    reuse.follow_rename(s.data_dir / "sources", old_sub, new_sub)
+                    follow_rename_history(old_sub, new_sub, s.history_dir)
+                store.follow_rename(r.old_path, r.new_path, [(str(a), str(b)) for a, b in pairs])
+                if r.old_path != str(s.map_path(r.old_path)):
+                    store.follow_rename(str(s.map_path(r.old_path)), str(s.map_path(r.new_path)), [])
+            except Exception as e:
+                log.warning("rename bookkeeping failed for %s: %s", r.new_path, e)
+            if n:
+                log.info("renamed: %s -> %s (%d of our files moved)", r.old_path, r.new_path, n)
             moved += n
             if n:
                 touched.append(r.new_path)

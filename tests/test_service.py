@@ -147,3 +147,36 @@ def test_worker_tells_jellyfin(tmp_path, monkeypatch):
     c.post(f"/api/hooks/sonarr?apikey={KEY}", json=sonarr_download(video, "Show"))
     app.state.worker.process(app.state.store.next_queued())
     assert calls == [("http://jf:8096", [str(video)], [("/x/", "/y/")])]
+
+
+def test_rename_keeps_jobs_sources_history_and_shares_with_the_file(svc, tmp_path):
+    from captionizerr import reuse
+    from captionizerr.writer import history, replace_own
+    app, c, _ = svc
+    st, s = app.state.store, app.state.settings
+    st.save_settings({"_setup_done": True})
+    d = tmp_path / "lib/Show/Season 1"
+    d.mkdir(parents=True)
+    old, new = d / "Show.S01E01.WEB-DL.mkv", d / "Show - S01E01 - Pilot WEBDL-1080p.mkv"
+    old_sub = d / "Show.S01E01.WEB-DL.captionizerr.ru.srt"
+    old_sub.write_text("1\n00:00:01,000 --> 00:00:02,000\nПривет\n", encoding="utf-8")
+    src = tmp_path / "src.srt"
+    src.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    reuse.store_source(s.data_dir / "sources", old_sub, src, "en")
+    reuse.store_drops(s.data_dir / "sources", old_sub, [5000])
+    replace_own(old_sub, "1\n00:00:01,000 --> 00:00:02,000\nПривет!\n", s.history_dir)
+    j = st.enqueue("sonarr", "Show S01E01", str(old), "ru", "show")
+    st.finish(j.id, "done", "1 cues from en (embedded); 0 flagged, 0 open", str(old_sub), 0.1, {}, "m")
+    st.record_share(str(old_sub), "https://example/sub", False)
+    new.write_bytes(b"video")                                      # Sonarr has moved the video
+    c.post(f"/api/hooks/sonarr?apikey={KEY}", json={"eventType": "Rename", "series": {"title": "Show"},
+           "renamedEpisodeFiles": [{"previousPath": str(old), "path": str(new)}]})
+    new_sub = d / "Show - S01E01 - Pilot WEBDL-1080p.captionizerr.ru.srt"
+    assert new_sub.is_file() and not old_sub.exists()
+    job = st.get(j.id)
+    assert job.video_path == str(new) and job.output_path == str(new_sub)
+    assert reuse.stored_source(s.data_dir / "sources", new_sub) is not None
+    assert reuse.stored_drops(s.data_dir / "sources", new_sub) == {5000}
+    assert history(new_sub, s.history_dir) and st.share(str(new_sub))["url"] == "https://example/sub"
+    page = c.get("/").text
+    assert "Video deleted" not in page and "Show S01E01" in page

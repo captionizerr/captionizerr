@@ -210,6 +210,15 @@ class Store:
         return [Job(**dict(r)) for r in self._q("SELECT * FROM jobs WHERE video_path=? AND lang=? ORDER BY created "
                                                 "LIMIT ?", (video_path, lang, limit)).fetchall()]
 
+    def follow_rename(self, old_video: str, new_video: str, subs: list[tuple[str, str]]) -> int:
+        """Sonarr/Radarr renamed a video and we moved our subtitle files: keep the job history,
+        Edit links and share records pointing at the new names. Returns the jobs updated."""
+        n = self._q("UPDATE jobs SET video_path=? WHERE video_path=?", (new_video, old_video)).rowcount
+        for old, new in subs:
+            self._q("UPDATE jobs SET output_path=? WHERE output_path=?", (new, old))
+            self._q("UPDATE shares SET path=? WHERE path=?", (new, old))
+        return n
+
     def review_job(self, video_path: str, lang: str) -> Job | None:
         """The translation job of this file that is waiting for review, if any."""
         r = self._q("SELECT * FROM jobs WHERE video_path=? AND lang=? AND state='needs_review' "
