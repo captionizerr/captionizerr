@@ -48,7 +48,7 @@
     {% else %}<tr><td colspan="{{ 2 + film_langs|length }}" class="muted">No films with files in Radarr.</td></tr>{% endfor %}
     </tbody>
   </table>
-  {% if movies %}<div class="actions"><button class="primary">Translate selected</button><button name="mode" value="batch" title="Half price through the Batch API; results within 24 hours">Add to backlog (½ price)</button><span class="small muted" id="fest">About {{ avg|money }} per film and language (a 2-hour film costs about twice an episode).</span></div>{% endif %}
+  {% if movies %}<div class="actions"><button class="primary">Translate selected</button><button name="mode" value="batch" title="Half price through the Batch API; results within 24 hours">Add to backlog (½ price)</button><span class="small muted" id="fest">About {{ (avg * 2)|money }} per film and language (a 2-hour film costs about twice an episode).</span></div>{% endif %}
   {% endif %}
 </form>
 <style>.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}</style>
