@@ -133,7 +133,7 @@ def human_size(n: int) -> str:
 
 
 def short_title(path: str) -> str:
-    """"Northwind S02E05" from a video or subtitle file name; the plain stem when there is no SxxEyy."""
+    """"The Expanse S02E05" from a video or subtitle file name; the plain stem when there is no SxxEyy."""
     stem = Path(path).name.split(".captionizerr.")[0]
     stem = re.sub(r"\.(mkv|mp4|m4v|avi|mov|ts|webm|srt|ass)$", "", stem, flags=re.I)
     m = re.search(r"[Ss](\d{1,2})[Ee](\d{1,3})", stem)

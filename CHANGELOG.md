@@ -4,12 +4,12 @@
 
 ## 0.3.6 — 2026-11-17
 
-- **Subtitles from the audio when a video has none** (Whisper): the last resort after the video's own text tracks, subtitle files next to it and Bazarr (which still gets its 3-hour wait first). Whisper writes down what is said in the source-language audio; the words become readable subtitle lines (pauses, sentence ends, two lines, about 6 s on screen; repeated phrases over silence removed); then it is translated as usual and goes to review, labelled *from the English audio (speech recognition)*. Typical case: Blu-ray remuxes whose only subtitles are images (PGS). Settings → Connections → Whisper → *Make a subtitle from the audio when a video has none* (`SPEECH_SOURCE`, on by default). No AI cost; a few minutes of the Whisper machine per episode (15 min for a 70-min episode on a 4-core NUC). Measured on Northwind S01E01 against its real English subtitle: 89 % of the spoken words caught, timing within 0.25 s typically, every line within two lines of 42 characters and 6 s.
+- **Subtitles from the audio when a video has none** (Whisper): the last resort after the video's own text tracks, subtitle files next to it and Bazarr (which still gets its 3-hour wait first). Whisper writes down what is said in the source-language audio; the words become readable subtitle lines (pauses, sentence ends, two lines, about 6 s on screen; repeated phrases over silence removed); then it is translated as usual and goes to review, labelled *from the English audio (speech recognition)*. Typical case: Blu-ray remuxes whose only subtitles are images (PGS). Settings → Connections → Whisper → *Make a subtitle from the audio when a video has none* (`SPEECH_SOURCE`, on by default). No AI cost; a few minutes of the Whisper machine per episode (15 min for a 70-min episode on a 4-core NUC). Measured on a 70-minute episode against its real English subtitle: 89 % of the spoken words caught, timing within 0.25 s typically, every line within two lines of 42 characters and 6 s.
 - README status line no longer names a version; the GitHub description mentions OpenAI-compatible models and Whisper.
 
 ## 0.3.5 — 2026-11-17
 
-- **Renames keep everything with the file:** when Sonarr or Radarr renames a video, our subtitle files already followed it; now the job history, the editor's previous versions, the stored source copy, the record of deliberately skipped lines and the OpenSubtitles share record follow too. Before, a renamed episode showed as *Video deleted* on the dashboard with no Edit button, and the editor and re-sync lost the stored source. Verified live with a Sonarr rename of Some Show S01E01.
+- **Renames keep everything with the file:** when Sonarr or Radarr renames a video, our subtitle files already followed it; now the job history, the editor's previous versions, the stored source copy, the record of deliberately skipped lines and the OpenSubtitles share record follow too. Before, a renamed episode showed as *Video deleted* on the dashboard with no Edit button, and the editor and re-sync lost the stored source. Verified live with a real Sonarr rename.
 - Docs and website: renames, large files and existing subtitles in the README; OpenSubtitles and Prometheus in the architecture overview; two more feature cards on the website (*Your library at a glance*, *Share or keep*).
 
 ## 0.3.4 — 2026-11-17
@@ -17,7 +17,7 @@
 - **Editor has the job page's actions:** Download, Share…, Re-translate, Re-sync to speech (with Whisper) and *Job & history* sit at the top of the editor, instead of a lone "Share on OpenSubtitles" link.
 - **Large files:** getting at a subtitle track means reading the whole video (a 4K remux is 50–80 GB; over a network share that took 11 minutes for one film). Every text subtitle track is now extracted in that one pass and cached, so a forced track or another language doesn't cost a second read, and the job says "reading the video's subtitle tracks" meanwhile instead of showing nothing.
 - **Videos that already have subtitles in your language** (often Blu-ray remuxes): the job notes which tracks it found, and *Settings → General → Videos that already have subtitles in that language* can skip them on import (default: translate anyway; a manual start always translates).
-- **"Line split?" check:** two short neighbouring lines that share a couple of common words (a film: «У Марины есть брат.» / «То есть у неё был... был брат.») are no longer flagged; at least three shared words are needed. That false alarm alone sent the film to review.
+- **"Line split?" check:** two short neighbouring lines that share a couple of common words (e.g. «У неё есть брат.» / «То есть у неё был... был брат.») are no longer flagged; at least three shared words are needed. That false alarm alone could send a film to review.
 - The note about subtitles already in the video names an untitled track "an untitled track" instead of its format.
 - Notes drafted for a film are labelled "film notes" (and point to the film page), not "series notes"; the editor heading for a film drops the quality tag ("Film (2008)", not "Film (2008) Remux-2160p").
 
@@ -32,7 +32,7 @@
 
 ## 0.3.1 — 2026-11-17
 
-Fixes from the first full season run after 0.3.0 (Northwind S03):
+Fixes from the first full season run after 0.3.0:
 
 - **Editor is easy to reach:** an **Editor** item in the top menu opens a page with the translations waiting for your review first, then the latest ones, each with **Review** / **Edit**, and a search. Series and film pages have real **Edit** / **Review** buttons instead of a bare ✓.
 - **Editor text boxes no longer collapse:** opening the editor through *Review* shows only flagged lines; the hidden boxes were sized at zero and stayed slivers when you switched to *All*. They are now sized when shown, on window resize, and have a minimum height.
@@ -61,13 +61,13 @@ UI polish after a full review of every page on desktop and phone:
 - **Job page:** a **History of this file** list (translations, re-syncs, editor work) links every job for that episode; re-sync jobs show **Free** instead of a table of zero tokens; the source reads "imported by Sonarr", "started by hand", "re-sync to speech".
 - **Editor:** lines left out on purpose (TV promos, adverts the model confirmed) are shown greyed out as *skipped on purpose* instead of red "empty", and no longer count as flagged. Recorded with each new translation and kept in step by re-sync; for older files, the last translation's state decides.
 - **Share:** the suggested OpenSubtitles comment says where the subtitle really came from (the release's own track, completed from another subtitle, or a downloaded one) and whether its timing was checked against the speech.
-- "Other spend" is now **Other activity**; line re-translations are titled "Northwind S02E05: line 13" instead of the file name.
+- "Other spend" is now **Other activity**; line re-translations are titled "Show S02E05: line 13" instead of the file name.
 - Settings: storage sizes in KB/MB (no more "0.0 MB"), short swearing options with a hint, whole numbers without a trailing ",0".
 
 ## 0.2.8 — 2026-11-16
 
 - **Sync to speech (Whisper):** connect a speech-to-text service (Settings → Connections → Whisper; any whisper-asr-webservice-compatible server, or the small faster-whisper one in `deploy/whisper`). Each subtitle line is found in the transcript of the audio, and the timing follows the speech:
-  - endings taken from another release (cut-off tracks) are moved onto the speech; on Northwind S02E08 the Bazarr ending was 3.7 s early, because that release is edited differently right after the cut;
+  - endings taken from another release (cut-off tracks) are moved onto the speech; on one test episode the Bazarr ending was 3.7 s early, because that release is edited differently right after the cut;
   - downloaded subtitles are synced to the speech before translating;
   - each translation's page has **Re-sync to speech**, which re-times the existing file without re-translating (free; the old timing stays in the editor's history).
   Matching is word by word, so music and effects don't fool it; a line whose words land in two places isn't trusted, outliers are ignored, and the track's own habit of how early it shows a line is kept, so a track that's already right is left alone; lines less than 0.5 s off are not touched.
@@ -76,9 +76,9 @@ UI polish after a full review of every page on desktop and phone:
 
 ## 0.2.7 — 2026-11-16
 
-- **Incomplete source tracks:** a built-in subtitle track that stops early (its last line stretched over the rest of the video, or nothing for the last quarter) is now detected. A complete subtitle file next to the video in the same language is used instead; otherwise Bazarr is asked for one and the job waits up to 3 hours, then translates what there is, shortens the stretched line and goes to Needs review with a note saying where the source stops. Any source line longer than a minute is shortened. Found on Northwind season 2 WEB-DL releases, whose English CC tracks end 5–14 minutes early.
+- **Incomplete source tracks:** a built-in subtitle track that stops early (its last line stretched over the rest of the video, or nothing for the last quarter) is now detected. A complete subtitle file next to the video in the same language is used instead; otherwise Bazarr is asked for one and the job waits up to 3 hours, then translates what there is, shortens the stretched line and goes to Needs review with a note saying where the source stops. Any source line longer than a minute is shortened. Found on WEB-DL releases whose English CC tracks end 5–14 minutes early.
 - **Edge cases of that check:** a long last line only counts as a cut when it reaches the end of the video (a song over the credits doesn't make a job wait); a line stretched over a minute in the middle of a track sends the job to review, since dialogue may be missing there; a Batch result is applied to the exact source it was built from, so a subtitle arriving while the batch runs can't shift the line numbers; a video that can't be read (e.g. a network-share hiccup) fails with a readable message.
-- **Downloaded subtitles are lined up before use:** the built-in track is kept for everything it covers (its timing is exact) and only the missing ending is taken from the downloaded subtitle, lined up on the lines both share in the 5 minutes before the cut (within 0.1 s on Northwind S02) (shift and stretch: a file made for 25 fps drifts by minutes otherwise, and Bazarr's sync only shifts). A file that doesn't line up closely is not used. The original file is never changed: the combined copy lives in the cache.
+- **Downloaded subtitles are lined up before use:** the built-in track is kept for everything it covers (its timing is exact) and only the missing ending is taken from the downloaded subtitle, lined up on the lines both share in the 5 minutes before the cut (within 0.1 s in testing) (shift and stretch: a file made for 25 fps drifts by minutes otherwise, and Bazarr's sync only shifts). A file that doesn't line up closely is not used. The original file is never changed: the combined copy lives in the cache.
 
 ## 0.2.6 — 2026-11-16
 

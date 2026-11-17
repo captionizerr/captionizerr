@@ -1,4 +1,4 @@
-"""Fixes from the Northwind S03 run: speaker-label false positives, reviews closed by saving, busy videos."""
+"""Fixes from the first full season run: speaker-label false positives, reviews closed by saving, busy videos."""
 import json
 import re
 import subprocess

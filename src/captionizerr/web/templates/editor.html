@@ -10,7 +10,7 @@
     <td class="nowrap"><a class="btn small {{ 'primary' if label == 'Review' }}" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/editor', 'view': 'flag' if label == 'Review' else ''}|urlencode }}">{{ label }}</a></td>
   </tr>
 {% endmacro %}
-<input type="search" id="q" placeholder="Find a title, e.g. Northwind S03E05" aria-label="Find a title" style="margin:6px 0 16px">
+<input type="search" id="q" placeholder="Find a title, e.g. The Expanse S03E05" aria-label="Find a title" style="margin:6px 0 16px">
 {% if review %}
 <section class="card tw" style="margin-bottom:16px"><h2>Waiting for your review <span class="pill needs_review">{{ review|length }}</span></h2>
   <p class="small muted">A few lines were flagged after the automatic checks. Fix them and save; the review closes by itself when nothing serious is left, or press <b>Mark as reviewed</b> if a flagged line is fine.</p>

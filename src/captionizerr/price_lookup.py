@@ -24,7 +24,7 @@ LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_pric
 OPENROUTER_URL = "https://openrouter.ai/api/v1/models"
 MAX_AGE = 24 * 3600
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "ollama", "lmstudio", "host.docker.internal")
-EP_IN, EP_OUT = 16_000, 12_000            # a typical 45-60 min episode (measured on Northwind)
+EP_IN, EP_OUT = 16_000, 12_000            # a typical 45-60 min episode (measured on real episodes)
 
 
 @dataclass

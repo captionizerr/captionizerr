@@ -285,7 +285,7 @@ def _better_sidecar(embedded: Path, side: list[tuple[Path, str, bool]], lang: st
     return None
 
 
-# line the ending up on the last minutes before the cut (measured on Northwind S02: 5 min -> under 0.1 s,
+# line the ending up on the last minutes before the cut (measured on a real series: 5 min -> under 0.1 s,
 # 15 min -> up to 1.7 s, because a 25 fps version's scene cuts differ); wider only when lines are few
 SPLICE_WINDOWS = ((300_000, 10), (900_000, 15))
 

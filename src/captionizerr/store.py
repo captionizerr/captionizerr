@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   updated REAL NOT NULL,
   source TEXT NOT NULL,          -- sonarr | radarr | manual
   title TEXT NOT NULL,
-  series_key TEXT,               -- context file key, e.g. "northwind"
+  series_key TEXT,               -- context file key, e.g. "the-expanse"
   video_path TEXT NOT NULL,
   lang TEXT NOT NULL,
   state TEXT NOT NULL,           -- see STATES

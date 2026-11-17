@@ -187,7 +187,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
 
     @app.post("/api/jobs")
     async def add_job(request: Request):
-        """Manual enqueue: {"path": "/downloads/...mkv", "title": "...", "series": "northwind", "langs": ["de"]}"""
+        """Manual enqueue: {"path": "/downloads/...mkv", "title": "...", "series": "show", "langs": ["de"]}"""
         require_key(request)
         b = await request.json()
         path = b.get("path")
