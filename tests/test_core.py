@@ -44,16 +44,16 @@ def test_load_marks_tag_only(srt):
 
 def test_render_keeps_timing_and_drops_empty(srt):
     doc = cuesmod.load(srt)
-    out = cuesmod.render(doc, {2: "Куда ты\nсобралась, Марк?", 3: "<i>♪ Вниз по реке плывём ♪</i>", 4: ""})
+    out = cuesmod.render(doc, {2: "Куда ты\nсобрался, Марк?", 3: "<i>♪ Вниз по реке плывём ♪</i>", 4: ""})
     assert "00:00:03,500 --> 00:00:06,000" in out
     assert "Shut" not in out and "[ DOOR" not in out
     assert "{\\an8}" in out
 
 
 def test_parse_response_tolerates_noise():
-    text = "Here you go:\n2|Куда ты / собралась?\n3|2.5|<i>♪ Песня ♪</i>\n4|\n99|bogus\n2|duplicate"
+    text = "Here you go:\n2|Куда ты / собрался?\n3|2.5|<i>♪ Песня ♪</i>\n4|\n99|bogus\n2|duplicate"
     got = parse_response(text, {2, 3, 4})
-    assert got == {2: "Куда ты\nсобралась?", 3: "<i>♪ Песня ♪</i>", 4: ""}
+    assert got == {2: "Куда ты\nсобрался?", 3: "<i>♪ Песня ♪</i>", 4: ""}
 
 
 def test_validate_flags(srt):
@@ -76,7 +76,7 @@ class FakeProvider:
     def complete(self, system, context, work):
         self.calls.append(work)
         if len(self.calls) == 1:   # first pass forgets cue 4
-            text = "2|Куда ты / собралась, Марк?\n3|<i>♪ Вниз по реке плывём ♪</i>"
+            text = "2|Куда ты / собрался, Марк?\n3|<i>♪ Вниз по реке плывём ♪</i>"
         else:
             text = "4|Заткнись."
         return ProviderResult(text, Usage(1000, 500, 0, 0), self.model, "end_turn")

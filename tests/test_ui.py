@@ -69,7 +69,7 @@ def test_settings_save_and_validate(ui):
 def test_series_settings_and_notes(ui):
     app, c, _ = ui
     r = c.post("/library/series/40/settings", data={"title": "Northwind", "enabled": "", "langs": "uk", "tone": "family",
-               "context": "# Northwind\nLou = Анна"}, headers=SAME, follow_redirects=False)
+               "context": "# Northwind\nAnna = Анна"}, headers=SAME, follow_redirects=False)
     assert r.status_code == 303
     ser = app.state.store.series("northwind")
     assert ser == {"key": "northwind", "title": "Northwind", "enabled": False, "langs": ["uk"], "tone": "family"}
