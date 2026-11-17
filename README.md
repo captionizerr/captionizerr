@@ -13,7 +13,7 @@ Captionizerr watches Sonarr and Radarr. When an episode or film is imported, it 
 
 Because it translates the file's own track, the timing is exact for that release. Downloaded subtitles are often from another cut and drift. Because the model sees the whole episode at once, it knows who is speaking to whom. That gives correct grammatical gender and formal/informal address, jokes that land, swearing as strong as the original (or softened, your choice), and songs translated as rhymed verse.
 
-> **Status: 0.2, early but in daily use** on a real library. Expect rough edges. Issues and PRs are welcome.
+> **Status: early but in daily use** on a real library; see [Releases](https://github.com/captionizerr/captionizerr/releases) for the current version and changes. Expect rough edges. Issues and PRs are welcome.
 
 **Website:** [captionizerr.github.io/captionizerr](https://captionizerr.github.io/captionizerr/) · **Docs:** [Setup guide](docs/setup-guide.md) · [How it works](docs/architecture.md) (diagrams) · [Configuration](docs/configuration.md) · [Security](SECURITY.md)
 
