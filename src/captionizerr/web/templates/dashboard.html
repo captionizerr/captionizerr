@@ -39,13 +39,13 @@
   {% if hidden_replaced %}<p class="small muted">{{ hidden_replaced }} older translation{{ 's' if hidden_replaced != 1 }} of re-translated files {{ 'are' if hidden_replaced != 1 else 'is' }} hidden. <a href="/?{{ {'state': view, 'replaced': 1}|urlencode }}">Show them</a></p>
   {% elif show_replaced and replaced %}<p class="small muted"><a href="/{{ '?state=' ~ view if view }}">Hide older translations that were translated again</a></p>{% endif %}
   <table class="jobs">
-    <thead><tr><th>When</th><th>Title</th><th>Lang</th><th>Model</th><th>State</th><th class="num">Cost</th><th></th></tr></thead>
+    <thead><tr><th>When</th><th>Title</th><th>Language</th><th>Model</th><th>State</th><th class="num">Cost</th><th></th></tr></thead>
     <tbody>
     {% for j in jobs %}
       <tr>
-        <td class="small muted c-when" style="white-space:nowrap">{{ fmt_time(j.updated) }}<span class="m-only"> · {{ j.lang }} · {{ (j.model|replace('claude-', '')) or '–' }}</span></td>
+        <td class="small muted c-when" style="white-space:nowrap">{{ fmt_time(j.updated) }}<span class="m-only"> · {{ j.lang|upper }} · {{ (j.model|replace('claude-', '')) or '–' }}</span></td>
         <td class="c-title"><a href="/jobs/{{ j.id }}">{{ j.title }}</a><div class="small muted clamp" title="{{ j.detail|human }}">{% if j.id in deleted %}<span class="pill deleted">Video deleted</span> {% elif j.id in replaced %}Replaced by a newer translation. {% endif %}{{ j.detail|human }}</div></td>
-        <td class="mono c-lang">{{ j.lang }}</td>
+        <td class="mono c-lang">{{ j.lang|upper }}</td>
         <td class="mono small nowrap c-model" title="{{ j.model }}">{{ (j.model|replace('claude-', '')) or '–' }}</td>
         <td class="c-state"><span class="pill {{ j.state }}">{{ state_label.get(j.state, j.state) }}</span></td>
         <td class="num c-cost">{{ j.cost_usd|money }}</td>

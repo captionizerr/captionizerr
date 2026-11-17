@@ -5,7 +5,7 @@
 <p class="sub">Read and correct a translation line by line next to the original, re-translate single lines, and save. Pick a file below, or open any episode or film from the <a href="/library">Library</a>.</p>
 {% macro row(j, label) %}
   <tr data-t="{{ (j.title ~ ' ' ~ j.lang)|lower }}">
-    <td><b>{{ j.title }}</b> <span class="mono muted">{{ j.lang }}</span><div class="small muted clamp">{{ j.detail|human }}</div></td>
+    <td><b>{{ j.title }}</b> <span class="mono muted">{{ j.lang|upper }}</span><div class="small muted clamp">{{ j.detail|human }}</div></td>
     <td class="small muted nowrap c-hide">{{ fmt_time(j.updated) }}</td>
     <td class="nowrap"><a class="btn small {{ 'primary' if label == 'Review' }}" href="/edit?{{ {'path': j.video_path, 'lang': j.lang, 'key': j.series_key or '', 'back': '/editor', 'view': 'flag' if label == 'Review' else ''}|urlencode }}">{{ label }}</a></td>
   </tr>

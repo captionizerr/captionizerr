@@ -31,7 +31,7 @@ STEPS = [("welcome", "Welcome"), ("ai", "AI provider"), ("languages", "Languages
 def _iso_list(raw: str, what: str) -> list[str]:
     vals = [x for x in str(raw or "").replace(" ", "").split(",") if x]
     if any(not x.replace("-", "").isalpha() or len(x.split("-")[0]) not in (2, 3) for x in vals):
-        raise ValueError(f"{what} must be ISO codes such as ru, uk, de")
+        raise ValueError(f"{what} must be ISO codes such as de, es, fr")
     return vals
 
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Language-neutral interface:** series and film tables have one **Translation** column with an entry per target language ("DE · Edit", "IT · Not translated", "ES · Review") instead of a column headed with a language code; language codes are shown in capitals as values everywhere (dashboard *Language* column, editor list, film page with the language's name). Examples in the setup wizard, error messages and docs no longer suggest Russian (`de`, or `es, fr`); the internal fallback target language is no longer Russian. No language is preset: the setup wizard asks.
+
 ## 0.3.2 — 2026-11-17
 
 - **Library films read like episode rows:** a column per language with **Edit** / **Review** or *Not translated* (instead of "ru not yet"); every film can be selected, with the same "already translated, will be replaced" warning as episodes. Series pages say *Not translated* instead of a dash. The film estimate shows the price of a film (about twice an episode).

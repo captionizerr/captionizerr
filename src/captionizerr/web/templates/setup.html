@@ -65,7 +65,7 @@ f.addEventListener('change', e => { if (e.target.name === 'provider') show(); })
   <input type="hidden" name="next" value="{{ nxt }}">
   <h1>Languages and budget</h1>
   <div class="fields">
-    <label class="f">Translate into <input type="text" name="languages" value="{{ v.languages|join(', ') }}" required placeholder="e.g. de or ru, uk"><span class="h">ISO codes, comma-separated.</span></label>
+    <label class="f">Translate into <input type="text" name="languages" value="{{ v.languages|join(', ') }}" required placeholder="e.g. de, or es, fr"><span class="h">ISO codes, comma-separated.</span></label>
     <label class="f">Translate from <input type="text" name="source_langs" value="{{ v.source_langs|join(', ') }}" placeholder="en"><span class="h">Usually en.</span></label>
     <input type="hidden" name="any_source" value="{{ '1' if v.any_source }}">
     <label class="f">Monthly cap, USD <input type="number" name="monthly_cap_usd" min="0" step="0.5" value="{{ v.monthly_cap_usd }}"><span class="h">Translations pause at the cap; you get a notification at 80 %.</span></label>

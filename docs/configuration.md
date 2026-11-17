@@ -22,7 +22,7 @@ Secrets from 1 or 2 show as "Set on the server" and can't be changed in the UI. 
 | `DATA_DIR` | `/config` | Database, notes, cache, history |
 | `LIBRARY_ROOTS` | `/downloads` | `;`-separated; only videos under these are processed |
 | `PATH_MAP` | | `arrprefix=ourprefix;…` when the *arr paths differ from ours |
-| `LANGUAGES` | | Target languages (ISO 639-1), e.g. `de` or `ru,uk` |
+| `LANGUAGES` | | Target languages (ISO 639-1), e.g. `de`, or `es,fr` |
 | `SOURCE_LANGS` | `en` | Translate from these, in order |
 | `ANY_SOURCE` | `1` | Otherwise use any other text subtitle |
 | `PROVIDER` | `anthropic` | `anthropic`, `ollama` or `openai` |

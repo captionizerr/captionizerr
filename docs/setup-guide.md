@@ -49,7 +49,7 @@ flowchart TD
 |---|---|---|
 | Welcome | A password, if anyone else can reach the page | Your choice; at least 8 characters |
 | AI provider | **Anthropic:** the API key, then **Test key** (free). **Ollama:** the address, then **Find models**. **OpenAI-compatible:** base URL, key and model. | [console.anthropic.com](https://console.anthropic.com/) → API keys |
-| Languages | The languages to translate into, e.g. `de` or `ru, uk`, and a monthly budget | Translations pause at the cap |
+| Languages | The languages to translate into, e.g. `de`, or `es, fr`, and a monthly budget | Translations pause at the cap |
 | Sonarr / Radarr | Address and API key → **Save** → **Test** → **Set up webhook** | In each app: Settings → General → API Key |
 | Media server | Jellyfin/Emby address + API key, or Plex address + token; Bazarr (optional) | Jellyfin: Dashboard → API Keys. Plex: [token guide](https://support.plex.tv/articles/204059436). Bazarr: Settings → General |
 

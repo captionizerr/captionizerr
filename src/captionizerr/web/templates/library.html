@@ -34,8 +34,8 @@
   <input type="hidden" name="back" value="/library">
   {% if not configured.radarr %}<p class="muted">Connect Radarr in <a href="/settings/connections">Settings → Connections</a> to see your films here.</p>{% else %}
   <table class="eps">
-    <colgroup><col style="width:40px"><col>{% for l in film_langs %}<col style="width:120px">{% endfor %}</colgroup>
-    <thead><tr><th><span class="sr-only">Select</span></th><th>Title</th>{% for l in film_langs %}<th>{{ l }}</th>{% endfor %}</tr></thead>
+    <colgroup><col style="width:40px"><col><col style="width:{{ 150 * film_langs|length }}px"></colgroup>
+    <thead><tr><th><span class="sr-only">Select</span></th><th>Title</th><th>Translation</th></tr></thead>
     <tbody>
     {% for m in movies %}
       {% set missing = not (m.status.values()|list|min if m.status else false) %}
@@ -43,9 +43,9 @@
         <td><input type="checkbox" name="path" value="{{ m.path }}" id="m{{ m.id }}" {% if not missing %}data-done="1"{% endif %} aria-label="Select {{ m.title }}">
           <input type="hidden" name="label:{{ m.path }}" value="{{ m.title }} ({{ m.year }})"><input type="hidden" name="key:{{ m.path }}" value="{{ m.key }}"></td>
         <td><a href="/library/film/{{ m.id }}"><b>{{ m.title }}</b></a> <span class="muted small">{{ m.year or '' }}</span></td>
-        {% for l in film_langs %}<td>{% if l not in m.status %}{% elif m.status[l] %}{% set rv = (m.review or {}).get(l) %}<a class="btn small {{ 'primary' if rv }}" href="/edit?{{ {'path': m.path, 'lang': l, 'key': m.key, 'back': '/library', 'view': 'flag' if rv else ''}|urlencode }}" title="Open the {{ l }} translation in the editor">{{ 'Review' if rv else 'Edit' }}</a>{% else %}<span class="muted small">Not translated</span>{% endif %}</td>{% endfor %}
+        <td class="langs">{% for l in film_langs if l in m.status %}{% if m.status[l] %}{% set rv = (m.review or {}).get(l) %}<a class="btn small {{ 'primary' if rv }}" href="/edit?{{ {'path': m.path, 'lang': l, 'key': m.key, 'back': '/library', 'view': 'flag' if rv else ''}|urlencode }}" title="Open the {{ lang_names.get(l, l) }} translation in the editor">{{ l|upper }} · {{ 'Review' if rv else 'Edit' }}</a>{% else %}<span class="muted small" title="{{ lang_names.get(l, l) }}">{{ l|upper }} · Not translated</span>{% endif %} {% endfor %}</td>
       </tr>
-    {% else %}<tr><td colspan="{{ 2 + film_langs|length }}" class="muted">No films with files in Radarr.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="3" class="muted">No films with files in Radarr.</td></tr>{% endfor %}
     </tbody>
   </table>
   {% if movies %}<div class="actions"><button class="primary">Translate selected</button><button name="mode" value="batch" title="Half price through the Batch API; results within 24 hours">Add to backlog (½ price)</button><span class="small muted" id="fest">About {{ (avg * 2)|money }} per film and language (a 2-hour film costs about twice an episode).</span></div>{% endif %}

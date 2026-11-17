@@ -50,7 +50,7 @@ SONG_RULES = {
 
 @dataclass
 class Profile:
-    target_lang: str = "ru"
+    target_lang: str = "en"           # always set by the caller; no language is assumed
     source_lang: str = "en"
     tone: str = "faithful"           # faithful | softened | family
     songs: str = "verse"             # verse | literal | original | skip

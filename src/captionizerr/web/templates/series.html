@@ -13,8 +13,8 @@
   <h2 style="margin-top:{{ '0' if loop.first else '18px' }}">Season {{ season }}
     <button type="button" class="small" data-season="{{ season }}">Select untranslated</button></h2>
   <table class="eps">
-    <colgroup><col style="width:40px"><col style="width:56px"><col>{% for l in langs %}<col style="width:120px">{% endfor %}<col style="width:56px"></colgroup>
-    <thead><tr><th></th><th>Ep</th><th>Title</th>{% for l in langs %}<th>{{ l }}</th>{% endfor %}<th></th></tr></thead>
+    <colgroup><col style="width:40px"><col style="width:56px"><col><col style="width:{{ 150 * langs|length }}px"><col style="width:56px"></colgroup>
+    <thead><tr><th></th><th>Ep</th><th>Title</th><th>Translation</th><th></th></tr></thead>
     <tbody>
     {% for e in eps %}
       <tr>
@@ -22,7 +22,7 @@
             <input type="hidden" name="label:{{ e.path }}" value="S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }}">{% endif %}</td>
         <td class="mono"><label for="e{{ season }}-{{ e.episode }}">{{ '%02d'|format(e.episode) }}</label></td>
         <td>{{ e.title }}{% for m, c in e.marks %} <span class="pill {{ c }}">{{ m }}</span>{% endfor %}</td>
-        {% for l in langs %}<td>{% if e.status[l] %}<a class="btn small {{ 'primary' if e.review[l] }}" href="/edit?{{ {'path': e.path, 'lang': l, 'key': key, 'back': '/library/series/' ~ ser.id, 'view': 'flag' if e.review[l] else ''}|urlencode }}" title="Open the {{ l }} translation of S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }} in the editor">{{ 'Review' if e.review[l] else 'Edit' }}</a>{% else %}<span class="muted small">Not translated</span>{% endif %}</td>{% endfor %}
+        <td class="langs">{% for l in langs %}{% if e.status[l] %}<a class="btn small {{ 'primary' if e.review[l] }}" href="/edit?{{ {'path': e.path, 'lang': l, 'key': key, 'back': '/library/series/' ~ ser.id, 'view': 'flag' if e.review[l] else ''}|urlencode }}" title="Open the {{ lang_names.get(l, l) }} translation of S{{ '%02d'|format(season) }}E{{ '%02d'|format(e.episode) }} in the editor">{{ l|upper }} · {{ 'Review' if e.review[l] else 'Edit' }}</a>{% else %}<span class="muted small" title="{{ lang_names.get(l, l) }}">{{ l|upper }} · Not translated</span>{% endif %} {% endfor %}</td>
         <td class="small">{% if e.job %}<a href="/jobs/{{ e.job }}" title="Job and history of this episode">job</a>{% endif %}</td>
       </tr>
     {% endfor %}

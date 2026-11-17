@@ -113,7 +113,8 @@ def test_library_films_read_like_episodes_and_keep_their_own_settings(tmp_path, 
     monkeypatch.setattr(uimod.Arr, "get", lambda self, path, **kw: films if path == "/movie" else [])
     st.save_series("heat", "Heat", True, ["ru", "de"], "")
     page = c.get("/library").text
-    assert "not yet" not in page and "Not translated" in page and ">Edit<" in page and page.count('name="path"') == 2
+    assert "not yet" not in page and "RU · Not translated" in page and "RU · Edit<" in page and page.count('name="path"') == 2
+    assert "DE · Not translated" in page and "<th>Translation</th>" in page and "<th>ru</th>" not in page
     paths = [f["movieFile"]["path"] for f in films]
     form = {"back": "/library", "path": paths[1], f"key:{paths[1]}": "heat", f"label:{paths[1]}": "Heat (2021)"}
     c.post("/library/translate", data=form, headers=SAME)
