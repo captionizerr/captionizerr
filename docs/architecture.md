@@ -141,15 +141,18 @@ stateDiagram-v2
     running --> failed
     running --> skipped: already translated
     running --> no_source
-    running --> waiting_source: asked Bazarr
-    waiting_source --> queued: subtitle arrived
+    running --> waiting_source: asked Bazarr / source cut short / video busy
+    waiting_source --> queued: subtitle arrived / 30 min later / 3 h passed
     running --> paused_budget
     paused_budget --> queued: cap raised / new month
     queued --> batched: backlog (Batch API)
     batched --> running: results ready
     needs_review --> queued: Retry
+    needs_review --> done: fixed in the editor / Mark as reviewed
     failed --> queued: Retry
 ```
+
+"Waiting" has three reasons: no source yet (Bazarr was asked), a source that stops early (Bazarr was asked for a complete one; after 3 hours the job uses what there is), and a video that can't be read right now (for example still being seeded over a network share; retried every 30 minutes for a day). A review closes when a save in the editor leaves only soft notes, or with **Mark as reviewed**.
 
 "In progress" on the dashboard covers queued, running, batched and waiting for a source. "Needs attention" covers needs review, failed, no source and paused.
 
