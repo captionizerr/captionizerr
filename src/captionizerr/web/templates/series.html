@@ -3,7 +3,7 @@
 {% block content %}
 <p class="small"><a href="/library">← Library</a></p>
 <h1>{{ ser.title }}</h1>
-<p class="sub">{{ ser.files }} episodes on disk · languages {{ langs|join(', ') }} · {{ 'automatic on import' if override.enabled else 'automatic translation off' }}</p>
+<p class="sub">{{ ser.files }} episodes on disk · languages {{ langs|join(', ')|upper }} · {{ 'automatic on import' if override.enabled else 'automatic translation off' }}</p>
 
 <form method="post" action="/library/translate" class="card tw" id="eps">
   <input type="hidden" name="back" value="/library/series/{{ ser.id }}">

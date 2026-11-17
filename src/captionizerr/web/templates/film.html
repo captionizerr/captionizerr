@@ -3,7 +3,7 @@
 {% block content %}
 <p class="small"><a href="/library">← Library</a></p>
 <h1>{{ m.title }} {% if m.year %}<span class="muted" style="font-weight:400">{{ m.year }}</span>{% endif %}</h1>
-<p class="sub">{% if on_disk %}<span class="mono">{{ m.path.rsplit('/', 1)[-1] }}</span>{% else %}Not on disk yet{% endif %} · languages {{ langs|join(', ') }} · {{ 'automatic on import' if override.enabled else 'automatic translation off' }}</p>
+<p class="sub">{% if on_disk %}<span class="mono">{{ m.path.rsplit('/', 1)[-1] }}</span>{% else %}Not on disk yet{% endif %} · languages {{ langs|join(', ')|upper }} · {{ 'automatic on import' if override.enabled else 'automatic translation off' }}</p>
 
 <section class="card tw">
   <h2>Translations</h2>
