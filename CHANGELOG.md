@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Subtitles from the audio when a video has none** (Whisper): the last resort after the video's own text tracks, subtitle files next to it and Bazarr (which still gets its 3-hour wait first). Whisper writes down what is said in the source-language audio; the words become readable subtitle lines (pauses, sentence ends, two lines, about 6 s on screen; repeated phrases over silence removed); then it is translated as usual and goes to review, labelled *from the English audio (speech recognition)*. Typical case: Blu-ray remuxes whose only subtitles are images (PGS). Settings → Connections → Whisper → *Make a subtitle from the audio when a video has none* (`SPEECH_SOURCE`, on by default). No AI cost; a few minutes of the Whisper machine per episode.
+- README status line no longer names a version; the GitHub description mentions OpenAI-compatible models and Whisper.
+
 ## 0.3.5 — 2026-11-17
 
 - **Renames keep everything with the file:** when Sonarr or Radarr renames a video, our subtitle files already followed it; now the job history, the editor's previous versions, the stored source copy, the record of deliberately skipped lines and the OpenSubtitles share record follow too. Before, a renamed episode showed as *Video deleted* on the dashboard with no Edit button, and the editor and re-sync lost the stored source. Verified live with a Sonarr rename of Some Show S01E01.

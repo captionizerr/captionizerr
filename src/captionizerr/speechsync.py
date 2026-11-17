@@ -44,12 +44,12 @@ class Word:
 
 
 # ------------------------------------------------------------------ the service
-def _post(url: str, wav: bytes, lang: str, timeout: float) -> dict:
+def _post(url: str, wav: bytes, lang: str, timeout: float, vad: bool = True) -> dict:
     b = uuid.uuid4().hex
     body = (f"--{b}\r\nContent-Disposition: form-data; name=\"audio_file\"; filename=\"a.wav\"\r\n"
             f"Content-Type: audio/wav\r\n\r\n").encode() + wav + f"\r\n--{b}--\r\n".encode()
     q = f"language={lang}&" if lang else ""
-    req = urllib.request.Request(f"{url.rstrip('/')}/asr?{q}output=json&word_timestamps=true&vad_filter=true&encode=true",
+    req = urllib.request.Request(f"{url.rstrip('/')}/asr?{q}output=json&word_timestamps=true&vad_filter={'true' if vad else 'false'}&encode=true",
                                  data=body, headers={"Content-Type": f"multipart/form-data; boundary={b}"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -87,7 +87,8 @@ def _pan(ch: int) -> str:
     return "pan=mono|c0=FC" if ch >= 3 else "pan=mono|c0=0.5*c0+0.5*c1" if ch == 2 else "pan=mono|c0=c0"
 
 
-def _pieces(url: str, video: Path, idx: int, ch: int, lang: str, start_ms: int, end_ms: int, timeout: float):
+def _pieces(url: str, video: Path, idx: int, ch: int, lang: str, start_ms: int, end_ms: int, timeout: float,
+            vad: bool = True):
     """(offset ms, Whisper JSON) for each CHUNK_MS piece of one audio stream."""
     t = max(0, start_ms)
     while t < end_ms:
@@ -98,7 +99,7 @@ def _pieces(url: str, video: Path, idx: int, ch: int, lang: str, start_ms: int, 
         if r.returncode:
             raise SpeechError(f"can't read the audio: {r.stderr.decode(errors='replace').strip()[-160:]}")
         if len(r.stdout) > 32_000:
-            yield t, _post(url, r.stdout, lang, timeout)
+            yield t, _post(url, r.stdout, lang, timeout, vad)
         t += n
 
 
@@ -151,7 +152,9 @@ def transcript(url: str, video: Path, prefer: list[str], duration_s: float, time
     words: list[Spoken] = []
     heard: dict[str, int] = {}
     end = int(duration_s * 1000)
-    for t, d in _pieces(url, video, pick, ch, hint, 0, end, timeout):
+    # no voice-activity filter: it drops quiet lines (measured: "You gotta help me out. I've done something
+    # bad." vanished with it); words_to_cues removes what Whisper invents over silence instead
+    for t, d in _pieces(url, video, pick, ch, hint, 0, end, timeout, vad=False):
         lang = L.norm(d.get("language") or "") or ""
         if lang:
             heard[lang] = heard.get(lang, 0) + 1
@@ -168,18 +171,39 @@ def transcript(url: str, video: Path, prefer: list[str], duration_s: float, time
 
 
 _SENTENCE_END = re.compile(r"[.!?…]['\"»”)]*$")
+# what Whisper writes over silence, music or credits (from its training subtitles)
+_INVENTED = re.compile(r"thanks? (you )?for watching|subtitles? (by|created)|amara\.org|please subscribe|"
+                       r"transcri(bed|ption) by|captions? by|www\.|\.com\b|♪", re.I)
+
+
+_WEAK_END = {"a", "an", "the", "to", "of", "and", "or", "but", "let", "my", "your", "his", "her", "our", "their",
+             "in", "on", "at", "for", "with", "from", "i", "you", "we", "he", "she", "it", "they", "is", "was"}
 
 
 def _two_lines(text: str, max_line: int) -> str:
+    """Break into two lines that both fit, preferring a break after punctuation, never after a
+    word that leans on the next one ("let / me"), then the most even split."""
     if len(text) <= max_line:
         return text
     best = None
     for i, ch in enumerate(text):
-        if ch == " ":
-            score = max(i, len(text) - i - 1)
-            if best is None or score < best[0]:
-                best = (score, i)
-    return text if best is None else text[:best[1]] + "\n" + text[best[1] + 1:]
+        if ch != " ":
+            continue
+        left, right = text[:i], text[i + 1:]
+        if len(left) > max_line or len(right) > max_line:
+            continue
+        last = left.rsplit(" ", 1)[-1]
+        score = (0 if left[-1] in ",.;:!?…" else 1 if last.lower().strip("'\"") not in _WEAK_END else 2,
+                 abs(len(left) - len(right)))
+        if best is None or score < best[0]:
+            best = (score, i)
+    if best is None:                      # can't fit two lines: the most even split
+        cands = [i for i, ch in enumerate(text) if ch == " "]
+        if not cands:
+            return text
+        i = min(cands, key=lambda i: abs(i - len(text) / 2))
+        return text[:i] + "\n" + text[i + 1:]
+    return text[:best[1]] + "\n" + text[best[1] + 1:]
 
 
 def words_to_cues(words: list[Spoken], max_line: int = 42, max_lines: int = 2, max_ms: int = 6000,
@@ -195,7 +219,7 @@ def words_to_cues(words: list[Spoken], max_line: int = 42, max_lines: int = 2, m
             return
         text = " ".join(w.text for w in cur).strip()
         conf = sum(w.prob for w in cur) / len(cur)
-        if text and conf >= 0.25 and re.search(r"\w", text):
+        if text and conf >= 0.25 and re.search(r"\w", text) and not _INVENTED.search(text):
             cues.append((cur[0].start_ms, cur[-1].end_ms, text))
         cur.clear()
 
@@ -211,7 +235,7 @@ def words_to_cues(words: list[Spoken], max_line: int = 42, max_lines: int = 2, m
             joined = " ".join(x.text for x in cur)
             if (w.start_ms - cur[-1].end_ms > gap_ms or not fits(joined + " " + w.text)
                     or w.end_ms - cur[0].start_ms > max_ms
-                    or (_SENTENCE_END.search(cur[-1].text) and len(joined) >= 18)):
+                    or (_SENTENCE_END.search(cur[-1].text) and len(joined) >= 8)):
                 flush()
         cur.append(w)
     flush()
@@ -232,7 +256,7 @@ def transcript_file(url: str, video: Path, prefer: list[str], cache_dir: Path, d
     import os
     from .cues import _ts
     st = video.stat()
-    key = hashlib.sha1(f"{video}|{st.st_size}|{int(st.st_mtime)}|transcript1".encode()).hexdigest()[:20]
+    key = hashlib.sha1(f"{video}|{st.st_size}|{int(st.st_mtime)}|transcript2".encode()).hexdigest()[:20]
     cache_dir.mkdir(parents=True, exist_ok=True)
     for hit in cache_dir.glob(f"{key}.*.heard.srt"):
         os.utime(hit)

@@ -65,6 +65,8 @@ flowchart TD
     C -->|None| G[Ask Bazarr]
     G --> H[[Waiting for source]]
     H -->|file arrives| C
+    H -->|nothing in 3 h| T[Subtitle from<br/>the audio, Whisper]
+    T --> I
     E --> X{Track stops early?}
     X -->|No| I{Budget OK?}
     X -->|Yes| Y[Ending from a<br/>complete file]
@@ -82,6 +84,10 @@ flowchart TD
 ```
 
 "Sync to speech" runs only with a Whisper service connected; without one, those sources are used with their own timing.
+
+### No subtitle anywhere: one is made from the audio
+
+When a video has no text subtitle (image-only Blu-ray subtitles count as none), nothing next to it, and Bazarr finds nothing within 3 hours (or isn't set up), Whisper writes down what is said in the source-language audio track (the first preferred source language's track; otherwise the first track, with the language detected). The words become subtitle lines: a new line after a pause or a sentence end, at most two lines of the configured width and about 6 seconds on screen. Whisper's habit of repeating a phrase over silence or music is cut back, and near-silent guesses are dropped. The result is translated as usual and the job goes to **Needs review**, because speech recognition can miss names and overlapping voices. If the audio is already in the target language, there is nothing to translate. Switch: *Make a subtitle from the audio when a video has none* (Settings → Connections → Whisper, `SPEECH_SOURCE`).
 
 ### Source tracks that stop early
 

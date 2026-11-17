@@ -81,7 +81,7 @@ Subtitles from the video or from Bazarr are sometimes off: a downloaded file mad
 1. Run a Whisper server on a machine with a few CPU cores (it doesn't need a GPU). The small one in [`deploy/whisper`](../deploy/whisper/README.md) installs on Debian with one script; any [whisper-asr-webservice](https://github.com/ahmetoner/whisper-asr-webservice) server works too.
 2. In **Settings → Connections → Whisper**, enter its address (e.g. `http://192.0.2.30:9000`) and press **Test**.
 
-From then on, downloaded subtitles and endings taken from another file are moved onto the speech before translating, and each translation gets **Re-sync to speech**. *Use it automatically for* on the same card can widen that to every translation (built-in tracks too) or narrow it to the button only. An episode takes a few minutes of the Whisper machine's time.
+From then on, downloaded subtitles and endings taken from another file are moved onto the speech before translating, and each translation gets **Re-sync to speech**. *Use it automatically for* on the same card can widen that to every translation (built-in tracks too) or narrow it to the button only. With *Make a subtitle from the audio when a video has none* (on by default), a video with no subtitle anywhere, after Bazarr has had its chance, gets one written down from its audio and translated; such jobs go to review. An episode takes a few minutes of the Whisper machine's time.
 
 ## Optional: keep secrets out of the app
 
