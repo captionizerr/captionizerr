@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.3 — 2026-11-17
+
 - **Language-neutral interface:** series and film tables have one **Translation** column with an entry per target language ("DE · Edit", "IT · Not translated", "ES · Review") instead of a column headed with a language code; language codes are shown in capitals as values everywhere (dashboard *Language* column, editor list, film page with the language's name). Examples in the setup wizard, error messages and docs no longer suggest Russian (`de`, or `es, fr`); the internal fallback target language is no longer Russian. No language is preset: the setup wizard asks.
 
 ## 0.3.2 — 2026-11-17
