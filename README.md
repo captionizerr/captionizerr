@@ -19,10 +19,11 @@ Because it translates the file's own track, the timing is exact for that release
 
 ## Features
 
-- **Automatic:** Sonarr/Radarr webhooks queue every import, and renames are followed.
+- **Automatic:** Sonarr/Radarr webhooks queue every import, and renames are followed: the subtitle files, job history, editor history and share records move with the video.
 - **Upgrades are re-timed, not re-translated:** when a better release replaces a file, the previous translation (including your edits) is matched line by line onto the new release. Only new or changed lines go to the model, usually at $0.
 - **Any source language:** embedded text tracks first (exact timing), then subtitle files next to the video, then **Bazarr**. If a video has no usable subtitle, Captionizerr asks Bazarr to download and sync one, then translates it. An embedded track that stops early (some WEB-DL releases cut their CC track minutes before the end) is caught too: a complete subtitle file is used instead, fetched through Bazarr if needed, and if none turns up the job goes to review saying where the source stops.
 - **Sync to speech (optional, Whisper):** with a [Whisper](deploy/whisper/README.md) speech-to-text service connected, subtitle timing is checked against what is actually said. Downloaded subtitles and endings taken from another release are moved onto the speech before translating, and every translation gets **Re-sync to speech**, which fixes the timing of an existing file for free (nothing is re-translated).
+- **Large files and existing subtitles:** a 4K remux is read once for all its subtitle tracks (with a status while it happens); a video that already has subtitles in your language is noted on the job, and can be skipped on import if you prefer. A file that can't be read right now (still seeding over a network share) is retried for a day instead of failing.
 - **SRT and ASS:** for anime, styles, signs, drawings and karaoke survive.
 - **Forced subtitles:** foreign-language scenes and signs (a forced track in the source) get their own `….<lang>.forced.srt`, which players show automatically.
 - **Quality checks:** every line is checked for reading speed, line length, untranslated leftovers, merged or shifted lines and lost positioning tags. Only flagged lines are sent back for a fix.

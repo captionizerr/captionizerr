@@ -24,6 +24,8 @@ flowchart TD
     WH[[Whisper<br/>optional]]
     M[Jellyfin / Emby / Plex]
     N[[ntfy]]
+    OS[[OpenSubtitles<br/>opt-in]]
+    PR[Prometheus]
 
     S -->|webhook| W
     R -->|webhook| W
@@ -36,6 +38,8 @@ flowchart TD
     P -->|writes .captionizerr.lang.srt| L
     P -->|rescan| M
     P -->|spot-check| N
+    W -->|Share, on request| OS
+    PR -->|/metrics| W
     Q --- D
 
     style P fill:#FF9900,color:#fff
@@ -47,6 +51,8 @@ flowchart TD
 - **Whisper** (optional) turns the audio into words with timestamps, so subtitle timing can be checked against what is actually said.
 - **The only thing written into your library** is `<video>.captionizerr.<lang>.srt|ass` (plus `.forced.` for forced tracks), next to the video.
 - **Media servers** are told to rescan that one folder, so the track appears within seconds.
+- **Renames** from Sonarr/Radarr move our subtitle files with the video, and the job history, editor history, stored source and share record follow the new name.
+- **You** work in the web UI: the dashboard, the Library (series and film pages), the **Editor** (reviews first) and Settings. Sharing to **OpenSubtitles** happens only when you press Share. **Prometheus** can scrape `/metrics` for jobs and spend.
 
 ## One job, start to finish
 
