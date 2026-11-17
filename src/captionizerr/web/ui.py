@@ -736,7 +736,8 @@ def register(app: FastAPI) -> None:
         if m:
             rest = stem[m.end():].strip(" -")
             ep_title = re.sub(r"\s*(WEBDL|WEBRip|Bluray|HDTV|DVD|Remux|\d{3,4}p).*$", "", rest, flags=re.I).strip(" -")
-        heading = (f"{series} · Season {int(m.group(1))}, Episode {int(m.group(2))}" if m else stem)
+        heading = (f"{series} · Season {int(m.group(1))}, Episode {int(m.group(2))}" if m else
+                   re.sub(r"[\s._-]+(Remux|Bluray|BDRip|WEB-?DL|WEBRip|HDTV|DVD|\d{3,4}p)\b.*$", "", stem, flags=re.I) or stem)
         review = store.review_job(path, lang) or store.review_job(str(video), lang)
         hist = store.jobs_for(path, lang) or store.jobs_for(str(video), lang)
         job = next((j for j in reversed(hist) if j.source not in ("edit", "notes", "forced", "sync")
