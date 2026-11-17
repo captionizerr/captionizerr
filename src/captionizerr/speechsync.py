@@ -83,31 +83,172 @@ def audio_stream(video: Path, lang: str) -> tuple[int, int] | None:
     return pick, int(streams[pick].get("channels") or 2)
 
 
+def _pan(ch: int) -> str:
+    return "pan=mono|c0=FC" if ch >= 3 else "pan=mono|c0=0.5*c0+0.5*c1" if ch == 2 else "pan=mono|c0=c0"
+
+
+def _pieces(url: str, video: Path, idx: int, ch: int, lang: str, start_ms: int, end_ms: int, timeout: float):
+    """(offset ms, Whisper JSON) for each CHUNK_MS piece of one audio stream."""
+    t = max(0, start_ms)
+    while t < end_ms:
+        n = min(CHUNK_MS, end_ms - t)
+        r = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{t / 1000:.3f}", "-t", f"{n / 1000:.3f}",
+                            "-i", str(video), "-map", f"0:a:{idx}", "-af", _pan(ch), "-ar", "16000", "-ac", "1",
+                            "-f", "wav", "-"], capture_output=True, stdin=subprocess.DEVNULL)
+        if r.returncode:
+            raise SpeechError(f"can't read the audio: {r.stderr.decode(errors='replace').strip()[-160:]}")
+        if len(r.stdout) > 32_000:
+            yield t, _post(url, r.stdout, lang, timeout)
+        t += n
+
+
 def transcribe(url: str, video: Path, lang: str, start_ms: int, end_ms: int, timeout: float = 900) -> list[Word]:
     """Spoken words from `start_ms` to `end_ms` of the `lang` audio track, with absolute times
     (the centre channel of a surround track: that's where the dialogue is)."""
     st = audio_stream(video, lang)
     if st is None:
         raise SpeechError("the video has no audio track")
-    idx, ch = st
-    pan = "pan=mono|c0=FC" if ch >= 3 else "pan=mono|c0=0.5*c0+0.5*c1" if ch == 2 else "pan=mono|c0=c0"
     words: list[Word] = []
-    t = max(0, start_ms)
-    while t < end_ms:
-        n = min(CHUNK_MS, end_ms - t)
-        r = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{t / 1000:.3f}", "-t", f"{n / 1000:.3f}",
-                            "-i", str(video), "-map", f"0:a:{idx}", "-af", pan, "-ar", "16000", "-ac", "1", "-f", "wav", "-"],
-                           capture_output=True, stdin=subprocess.DEVNULL)
-        if r.returncode:
-            raise SpeechError(f"can't read the audio: {r.stderr.decode(errors='replace').strip()[-160:]}")
-        if len(r.stdout) > 32_000:
-            d = _post(url, r.stdout, lang, timeout)
-            for seg in d.get("segments", []):
-                for w in seg.get("words") or []:
-                    for tok in _tokens(w.get("word", "")):
-                        words.append(Word(t + round(w["start"] * 1000), t + round(w["end"] * 1000), tok))
-        t += n
+    for t, d in _pieces(url, video, st[0], st[1], lang, start_ms, end_ms, timeout):
+        for seg in d.get("segments", []):
+            for w in seg.get("words") or []:
+                for tok in _tokens(w.get("word", "")):
+                    words.append(Word(t + round(w["start"] * 1000), t + round(w["end"] * 1000), tok))
     return words
+
+
+# ------------------------------------------------------------------ a subtitle made from the audio
+@dataclass
+class Spoken:
+    start_ms: int
+    end_ms: int
+    text: str
+    prob: float = 1.0
+
+
+def transcript(url: str, video: Path, prefer: list[str], duration_s: float, timeout: float = 900,
+               on_progress=None) -> tuple[list[Spoken], str]:
+    """Every spoken word of the video with its time, and the language heard. The audio track in
+    the first preferred source language is used; with none, the first track, language detected."""
+    from . import langs as L
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries",
+                          "stream=channels:stream_tags=language", "-of", "json", str(video)],
+                         capture_output=True, text=True)
+    try:
+        streams = json.loads(out.stdout).get("streams", [])
+    except ValueError:
+        streams = []
+    if not streams:
+        raise SpeechError("the video has no audio track" if out.returncode == 0 else
+                          f"can't read the audio: {out.stderr.strip()[-160:]}")
+    pick, hint = 0, ""
+    for lang in prefer:
+        i = next((i for i, s in enumerate(streams) if L.same((s.get("tags") or {}).get("language"), lang)), None)
+        if i is not None:
+            pick, hint = i, L.norm(lang) or ""
+            break
+    ch = int(streams[pick].get("channels") or 2)
+    words: list[Spoken] = []
+    heard: dict[str, int] = {}
+    end = int(duration_s * 1000)
+    for t, d in _pieces(url, video, pick, ch, hint, 0, end, timeout):
+        lang = L.norm(d.get("language") or "") or ""
+        if lang:
+            heard[lang] = heard.get(lang, 0) + 1
+        for seg in d.get("segments", []):
+            for w in seg.get("words") or []:
+                text = (w.get("word") or "").strip()
+                if text:
+                    words.append(Spoken(t + round(w["start"] * 1000), t + round(w["end"] * 1000), text,
+                                        float(w.get("probability", 1.0))))
+        if on_progress:
+            on_progress(min(t + CHUNK_MS, end), end)
+    lang = hint or (max(heard, key=heard.get) if heard else "")
+    return words, lang
+
+
+_SENTENCE_END = re.compile(r"[.!?…]['\"»”)]*$")
+
+
+def _two_lines(text: str, max_line: int) -> str:
+    if len(text) <= max_line:
+        return text
+    best = None
+    for i, ch in enumerate(text):
+        if ch == " ":
+            score = max(i, len(text) - i - 1)
+            if best is None or score < best[0]:
+                best = (score, i)
+    return text if best is None else text[:best[1]] + "\n" + text[best[1] + 1:]
+
+
+def words_to_cues(words: list[Spoken], max_line: int = 42, max_lines: int = 2, max_ms: int = 6000,
+                  gap_ms: int = 700) -> list[tuple[int, int, str]]:
+    """Group spoken words into subtitle lines: a new line after a pause, a sentence end, or when the
+    text would no longer fit two lines or stay on screen too long. Whisper's habit of repeating a
+    phrase over silence or music ("Thank you." x 5) is cut back to one, and near-silent guesses dropped."""
+    cues: list[tuple[int, int, str]] = []
+    cur: list[Spoken] = []
+
+    def flush():
+        if not cur:
+            return
+        text = " ".join(w.text for w in cur).strip()
+        conf = sum(w.prob for w in cur) / len(cur)
+        if text and conf >= 0.25 and re.search(r"\w", text):
+            cues.append((cur[0].start_ms, cur[-1].end_ms, text))
+        cur.clear()
+
+    def fits(text: str) -> bool:
+        if len(text) <= max_line:
+            return True
+        if max_lines < 2:
+            return False
+        return all(len(x) <= max_line for x in _two_lines(text, max_line).split("\n"))
+
+    for w in words:
+        if cur:
+            joined = " ".join(x.text for x in cur)
+            if (w.start_ms - cur[-1].end_ms > gap_ms or not fits(joined + " " + w.text)
+                    or w.end_ms - cur[0].start_ms > max_ms
+                    or (_SENTENCE_END.search(cur[-1].text) and len(joined) >= 18)):
+                flush()
+        cur.append(w)
+    flush()
+    out: list[tuple[int, int, str]] = []
+    for i, (a, b, text) in enumerate(cues):
+        if out and len(text) <= 40 and text.lower() == out[-1][2].replace("\n", " ").lower():
+            continue
+        nxt = cues[i + 1][0] if i + 1 < len(cues) else b + 2000
+        end = max(min(b + 400, nxt - 80), min(a + 900, nxt - 80), a + 300)
+        out.append((a, end, _two_lines(text, max_line)))
+    return out
+
+
+def transcript_file(url: str, video: Path, prefer: list[str], cache_dir: Path, duration_s: float,
+                    max_line: int = 42, on_progress=None) -> tuple[Path, str, int]:
+    """A subtitle file made from the audio (cached per video). Returns (file, language heard, lines)."""
+    import hashlib
+    import os
+    from .cues import _ts
+    st = video.stat()
+    key = hashlib.sha1(f"{video}|{st.st_size}|{int(st.st_mtime)}|transcript1".encode()).hexdigest()[:20]
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    for hit in cache_dir.glob(f"{key}.*.heard.srt"):
+        os.utime(hit)
+        return hit, hit.name.split(".")[1], sum(1 for line in hit.read_text(encoding="utf-8").splitlines() if " --> " in line)
+    words, lang = transcript(url, video, prefer, duration_s, on_progress=on_progress)
+    if not lang:
+        raise SpeechError("couldn't tell which language is spoken")
+    cues = words_to_cues(words, max_line=max_line)
+    if len(cues) < 5:
+        raise SpeechError("hardly any speech was recognised in the audio")
+    out = cache_dir / f"{key}.{lang}.heard.srt"
+    tmp = out.with_name(out.name + ".tmp")
+    tmp.write_text("\n".join(f"{i}\n{_ts(a)} --> {_ts(b)}\n{x}\n" for i, (a, b, x) in enumerate(cues, 1)),
+                   encoding="utf-8")
+    os.replace(tmp, out)
+    return out, lang, len(cues)
 
 
 # ------------------------------------------------------------------ matching lines to words

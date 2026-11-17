@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import bible, cues as cuesmod
-from . import maintenance, media, reuse, speechsync
+from . import langs, maintenance, media, reuse, speechsync
 from .arr import Arr, radarr_id_for_path, sonarr_ids_for_path
 from .bazarr import Bazarr
 from .config import Settings
@@ -195,6 +195,10 @@ class Worker:
         if src and src.origin == "sidecar" and time.time() - src.path.stat().st_mtime < SIDECAR_SETTLE:
             store.set_waiting(job.id, f"{src.path.name} is brand new; waiting for Bazarr's sync to finish")
             return None
+        if not src and self.may_transcribe(job):
+            src = self.heard_source(job, video)
+            if src is None:
+                return None
         if not src:
             self.ask_bazarr(job, video)
             return None
@@ -226,6 +230,9 @@ class Worker:
             warning = (f"incomplete source: the {src.lang} subtitle ({src.origin}) stops at {where}, so the rest of "
                        f"the video has no subtitles. Put a complete {src.lang} subtitle next to the video "
                        f"(e.g. from Bazarr) and press Re-translate")
+        if src.origin == "speech" and not warning:
+            warning = (f"made from the {src.lang.upper()} audio with speech recognition (the video had no subtitle "
+                       "anywhere); names, overlapping voices and songs may be wrong, so give it a read")
         inside = media.stretched_inside(doc.cues, last_cut)
         if inside and not warning:
             c = inside[0]
@@ -542,6 +549,40 @@ class Worker:
                          cost_usd=price_of(result.model, result.usage, True) or 0)
 
     # ------------------------------------------------------------ Bazarr fallback
+    def may_transcribe(self, job: Job) -> bool:
+        """Last resort, after Bazarr (when there is one) has had its chance."""
+        s = self.s
+        if not (s.whisper_url and s.speech_source):
+            return False
+        if not Bazarr(s.bazarr_url, s.bazarr_key).configured:
+            return True
+        return bool(job.wait_since) and time.time() - job.wait_since > s.bazarr_wait_hours * 3600
+
+    def heard_source(self, job: Job, video: Path) -> "media.Source | None":
+        """A subtitle made from the audio with Whisper. None: the job was finished or parked here."""
+        s, store = self.s, self.store
+        store.set_state(job.id, "running", "no subtitle anywhere: making one from the audio with Whisper "
+                                           "(a few minutes per episode, longer for a film)")
+        try:
+            dur = media.probe(video)[1] or 0.0
+            path, lang, n = speechsync.transcript_file(
+                s.whisper_url, video, s.source_langs, s.cache_dir, dur, max_line=s.max_line,
+                on_progress=lambda done, total: store.set_state(
+                    job.id, "running", f"making a subtitle from the audio with Whisper: {100 * done // max(1, total)}%"))
+        except speechsync.SpeechError as e:
+            if busy_read(str(e)) and self.wait_busy(job, str(e)[-160:]):
+                return None
+            store.finish(job.id, "no_source", f"no subtitle anywhere, and making one from the audio failed: {e}")
+            return None
+        except subprocess.CalledProcessError as e:
+            store.finish(job.id, "no_source", f"no subtitle anywhere, and the audio can't be read: {str(e)[-160:]}")
+            return None
+        if langs.same(lang, job.lang):
+            store.finish(job.id, "no_source", f"no subtitle anywhere, and the audio is already in {job.lang.upper()}")
+            return None
+        log.info("job %s: %d lines made from the %s audio", job.id, n, lang)
+        return media.Source(path, lang, "speech")
+
     def ask_bazarr(self, job: Job, video: Path):
         s, store = self.s, self.store
         want = ", ".join(s.source_langs)
@@ -622,9 +663,12 @@ class Worker:
                 self.store.claim(job.id, "waiting_source", "queued", f"source arrived: {settled[0].name}")
                 self.wake()
             elif job.wait_since and time.time() - job.wait_since > s.bazarr_wait_hours * 3600:
-                if job.detail.startswith(CUT_PREFIX):     # it has a source, just an incomplete one: use it
-                    self.store.claim(job.id, "waiting_source", "queued", "no complete subtitle arrived; "
-                                                                        "translating the incomplete one")
+                if job.detail.startswith(CUT_PREFIX) or (s.whisper_url and s.speech_source):
+                    # an incomplete source is used as it is; no source at all is made from the audio
+                    self.store.claim(job.id, "waiting_source", "queued",
+                                     "no complete subtitle arrived; translating the incomplete one"
+                                     if job.detail.startswith(CUT_PREFIX) else
+                                     "Bazarr found nothing; making a subtitle from the audio")
                     self.wake()
                     continue
                 self.store.finish(job.id, "no_source",

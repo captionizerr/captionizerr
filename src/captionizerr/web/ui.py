@@ -42,7 +42,8 @@ from ..store import STATES
 _ORIGIN = {"embedded": "the built-in {L} track",
            "embedded + sidecar ending": "the built-in {L} track, its missing ending from a downloaded subtitle",
            "sidecar": "a downloaded {L} subtitle", "sidecar, re-timed": "a downloaded {L} subtitle (re-timed)",
-           "bazarr": "a {L} subtitle from Bazarr"}
+           "bazarr": "a {L} subtitle from Bazarr",
+           "speech": "the {L} audio (speech recognition)"}
 
 
 def human_detail(detail: str) -> str:

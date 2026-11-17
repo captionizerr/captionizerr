@@ -63,6 +63,8 @@
       <label class="f">Use it automatically for <select name="speech_sync">
         {% for k, label in (('auto', 'Downloaded subtitles and completed endings (recommended)'), ('all', 'Every translation, built-in tracks too'), ('off', 'Nothing: only the Re-sync button')) %}<option value="{{ k }}" {{ 'selected' if v.speech_sync == k }}>{{ label }}</option>{% endfor %}</select>
         <span class="h">A built-in track is timed to its own file, so checking it rarely changes anything; it costs a few minutes of the Whisper machine per episode.</span></label>
+      <label class="f check"><input type="checkbox" name="speech_source" value="1" {{ 'checked' if v.speech_source }}>
+        <span>Make a subtitle from the audio when a video has none<span class="h">The last resort, after the video's own tracks, subtitle files next to it and Bazarr. Whisper writes down what is said, then it is translated as usual; such jobs go to review, since speech recognition can miss names and overlapping voices.</span></span></label>
     </div>
     <div class="actions">{{ test('whisper') }}</div>
   </section>

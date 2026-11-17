@@ -71,7 +71,8 @@ class Settings:
     bazarr_wait_hours: float = 3.0
     whisper_url: str = ""         # speech-to-text service (whisper-asr-webservice API) for syncing to speech
     existing_subs: str = "translate"   # the video already has subtitles in the target language: translate | skip (imports)
-    speech_sync: str = "auto"     # auto: downloaded subtitles + completed endings · all: also built-in tracks · off: only Re-sync
+    speech_sync: str = "auto"
+    speech_source: bool = True    # with Whisper: make a subtitle from the audio when a video has none at all     # auto: downloaded subtitles + completed endings · all: also built-in tracks · off: only Re-sync
     # AI provider
     provider: str = "anthropic"   # anthropic | ollama (local) | openai (any OpenAI-compatible endpoint)
     ollama_url: str = "http://localhost:11434"
@@ -144,6 +145,7 @@ class Settings:
             whisper_url=_env("WHISPER_URL"),
             speech_sync=(_env("SPEECH_SYNC", "auto") or "auto").lower(),
             existing_subs=(_env("EXISTING_SUBS", "translate") or "translate").lower(),
+            speech_source=_env("SPEECH_SOURCE", "1").lower() not in ("0", "false", "no", "off"),
             provider=_env("PROVIDER", "anthropic"),
             ollama_url=_env("OLLAMA_URL", "http://localhost:11434"),
             ollama_model=_env("OLLAMA_MODEL"),
@@ -177,7 +179,7 @@ class Settings:
         "tone": "str", "songs": "str", "max_line": "int", "target_cps": "float",
         "ntfy_url": "str", "ntfy_topic": "str", "public_url": "str", "jellyfin_url": "str",
         "jellyfin_path_map": "pairs", "plex_url": "str", "plex_path_map": "pairs", "sonarr_url": "str", "radarr_url": "str",
-        "ui_user": "str", "opensubtitles_user": "str", "source_langs": "list", "any_source": "bool", "bazarr_url": "str", "auto_notes": "bool", "whisper_url": "str", "speech_sync": "str", "existing_subs": "str",
+        "ui_user": "str", "opensubtitles_user": "str", "source_langs": "list", "any_source": "bool", "bazarr_url": "str", "auto_notes": "bool", "whisper_url": "str", "speech_sync": "str", "existing_subs": "str", "speech_source": "bool",
         "provider": "str", "ollama_url": "str", "ollama_model": "str", "ollama_num_ctx": "int", "ollama_effort": "str", "openai_effort": "str",
         "ollama_max_output": "int", "openai_base_url": "str", "openai_model": "str", "openai_price_in": "float",
         "openai_price_out": "float", "openai_price_source": "str", "openai_max_output": "int",
