@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.2 — 2026-11-17
+
 - **Library films read like episode rows:** a column per language with **Edit** / **Review** or *Not translated* (instead of "ru not yet"); every film can be selected, with the same "already translated, will be replaced" warning as episodes. Series pages say *Not translated* instead of a dash. The film estimate shows the price of a film (about twice an episode).
 - **Translating several films at once** now uses each film's own languages and notes (they were ignored when films were selected together on the Library page).
 

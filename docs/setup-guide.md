@@ -59,7 +59,7 @@ Everything here can be changed later under **Settings**.
 
 ## 4. Translate one episode
 
-**Library** → open a series → tick an episode → **Translate selected** (or open a film → **Translate**). The dashboard shows it under *In progress*. A 45-minute episode takes 2–5 minutes with Anthropic and about $0.30 with Opus.
+**Library** → open a series → tick an episode → **Translate selected**. Films are ticked right in the Library's *Films* list (or open a film → **Translate**). A language column shows *Not translated* until it is done, then an **Edit** button. The dashboard shows it under *In progress*. A 45-minute episode takes 2–5 minutes with Anthropic and about $0.30 with Opus.
 
 Untranslated back catalogue: tick many episodes and choose **Add to backlog (½ price)**. They go out as one Batch API request, and results usually arrive within the hour (always within 24 h).
 
