@@ -254,13 +254,19 @@ class Worker:
         """An upgrade left our old translation behind: carry it over if the dialogue matches."""
         try:
             old = reuse.predecessor(prep.video, job.lang, self.s.VIDEO_EXT)
+            src_key = old
+            if not old:
+                # our file for this very video was deleted (an *arr upgrade or upgrade loop): use our own copy
+                src_key = target_path(prep.video, job.lang, prep.doc.fmt)
+                old = None if src_key.exists() else reuse.kept(self.s.data_dir / "kept", src_key)
             if not old:
                 return
-            old_src = reuse.stored_source(self.s.data_dir / "sources", old)
+            old_src = reuse.stored_source(self.s.data_dir / "sources", src_key)
             r = reuse.align(prep.doc, cuesmod.load(old), cuesmod.load(old_src[0]) if old_src else None)
             log.info("job %s: previous release %s matches %.0f%% (%s)", job.id, old.name, 100 * r.coverage, r.method)
             if r.coverage >= reuse.MIN_COVERAGE:
-                prep.reuse, prep.previous = r, old
+                prep.reuse = r
+                prep.previous = old if src_key == old else None   # a kept copy isn't in the library: nothing to clear
         except Exception as e:
             log.warning("job %s: reuse check failed: %s", job.id, e)
 
@@ -362,6 +368,7 @@ class Worker:
                 moved += 1
         text = cuesmod.render(doc, {c.index: c.text for c in doc.cues})
         replace_own(out, text, s.history_dir)            # the previous timing stays in the editor's history
+        reuse.keep(s.data_dir / "kept", out)
         try:
             import tempfile
             with tempfile.TemporaryDirectory() as d:
@@ -406,6 +413,7 @@ class Worker:
         if unpriced:   # never pretend it was free: say so where the owner will see it
             detail += f"; cost unknown: no price for {used_model} (set it in Settings → AI provider)"
             log.warning("job %s: no price known for %s; cost recorded as $0", job.id, used_model)
+        reuse.keep(s.data_dir / "kept", out)
         try:
             reuse.store_source(s.data_dir / "sources", out, prep.source.path, prep.source.lang)
             still_open = {i.index for i in res.issues_final}

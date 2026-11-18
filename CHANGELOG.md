@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.8 — 2026-11-18
+
+- **Re-imports never pay twice:** CaptionizeRR now keeps its own copy of every translation it writes or you save in the editor (`config/kept/`, outside the library). When Sonarr or Radarr deletes our subtitle together with the old file (an upgrade, or an upgrade loop re-importing the same release) and the same video comes back, the kept copy is lined up with it like any previous release: matching lines are reused, only changed ones are translated. For an identical re-import that's $0. Copies follow renames; translations made before 0.3.8 get a copy at the first start.
+
 ## 0.3.7 — 2026-11-18
 
 - **One dashboard row per repeat import:** when Sonarr or Radarr imports a video we already translated again (an upgrade loop, a manual re-import), the earlier *translation already exists* rows are folded into the newest one, with a count (*imported 19 times*). Existing repeats are folded once at start-up. A repeat-import loop usually means the *arr scores the release name higher than the saved file (a custom format that matches the release title only), so it keeps "upgrading"; check its history.

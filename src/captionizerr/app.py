@@ -49,6 +49,30 @@ class Throttle:
         self.fails.pop(who, None)
 
 
+def _keep_existing(s: Settings, store: Store) -> None:
+    """Once: a kept copy of every translation made before kept copies existed (0.3.8)."""
+    from . import reuse
+    marker = s.data_dir / "kept" / ".backfilled"
+    if marker.exists():
+        return
+    rows = store._q("SELECT DISTINCT output_path FROM jobs WHERE state IN ('done','needs_review') "
+                    "AND output_path != '' AND source != 'notes'").fetchall()
+    seen = 0
+    for path, in rows:
+        p = Path(path)
+        try:
+            if p.is_file():
+                seen += 1
+                if not reuse.kept(s.data_dir / "kept", p):
+                    reuse.keep(s.data_dir / "kept", p)
+        except OSError:
+            continue
+    if rows and not seen:          # library not mounted yet: try again at the next start
+        return
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.touch()
+
+
 def create_app(settings: Settings | None = None, provider_factory=None, start_worker: bool = True) -> FastAPI:
     s = settings or Settings.from_env()
     (s.data_dir / "tmp").mkdir(parents=True, exist_ok=True)
@@ -59,6 +83,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
     import copy
     env_defaults = copy.deepcopy(s)          # what the environment says, before UI overrides
     s.apply(store.load_settings())          # UI-saved settings override environment defaults
+    _keep_existing(s, store)
     from . import secret_store
     secrets = secret_store.SecretStore(s.data_dir / "secrets.json")
     secret_store.apply(s, secrets)          # UI-entered secrets, where the server sets none
@@ -157,6 +182,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
                 from .writer import follow_rename_history
                 for old_sub, new_sub in pairs:
                     reuse.follow_rename(s.data_dir / "sources", old_sub, new_sub)
+                    reuse.follow_rename_kept(s.data_dir / "kept", old_sub, new_sub)
                     follow_rename_history(old_sub, new_sub, s.history_dir)
                 store.follow_rename(r.old_path, r.new_path, [(str(a), str(b)) for a, b in pairs])
                 if r.old_path != str(s.map_path(r.old_path)):

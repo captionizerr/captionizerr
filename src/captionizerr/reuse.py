@@ -52,6 +52,35 @@ def follow_rename(sources_dir: Path, old_output: Path, new_output: Path) -> None
         meta.write_text(str(new_output), encoding="utf-8")
 
 
+def kept_path(kept_dir: Path, output: Path) -> Path:
+    return Path(kept_dir) / (hashlib.sha1(str(output).encode()).hexdigest()[:20] + Path(output).suffix)
+
+
+def keep(kept_dir: Path, output: Path) -> None:
+    """A copy of our translation outside the library, keyed by its path. If the *arr deletes the
+    file (an upgrade, an upgrade loop) and the same video comes back, it is re-aligned from here
+    instead of paid for again. Never raises: losing the copy only costs a re-translation."""
+    try:
+        dst = kept_path(kept_dir, output)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_name(dst.name + ".tmp")
+        shutil.copyfile(output, tmp)
+        tmp.replace(dst)
+    except OSError:
+        pass
+
+
+def kept(kept_dir: Path, output: Path) -> Path | None:
+    p = kept_path(kept_dir, output)
+    return p if p.is_file() else None
+
+
+def follow_rename_kept(kept_dir: Path, old_output: Path, new_output: Path) -> None:
+    old, new = kept_path(kept_dir, old_output), kept_path(kept_dir, new_output)
+    if old.is_file():
+        old.replace(new)
+
+
 def store_drops(sources_dir: Path, output: Path, starts: list[int]) -> None:
     """Start times (ms) of source lines the translation leaves out on purpose (TV promos, adverts the
     model confirmed): the editor shows them as skipped instead of as errors. `<key>.drops`."""

@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from captionizerr import cues as cuesmod, speechsync
+from captionizerr import cues as cuesmod, reuse, speechsync
 from captionizerr.app import create_app
 from captionizerr.config import Settings
 from captionizerr.speechsync import Spoken, words_to_cues
@@ -131,3 +131,26 @@ def test_repeat_imports_of_a_translated_video_keep_one_skipped_row(tmp_path):
     other = st.enqueue("radarr", "Other", str(v).replace("Film", "Other"), "ru", None)
     st.finish(other.id, "skipped", st.EXISTS)
     assert st.fold_all_repeat_skips() == 0
+
+
+@ffmpeg
+def test_upgrade_loop_that_deletes_our_file_costs_nothing_the_second_time(tmp_path):
+    """An *arr re-imports the same video and deletes our subtitle with the old file: the kept copy
+    is re-aligned instead of translated again (no model call, $0)."""
+    from test_service import make_video
+    app = _app(tmp_path)
+    st, w = app.state.store, app.state.worker
+    v = make_video(tmp_path / "lib/Film (2026)", "Film (2026) WEBDL-2160p.mkv")
+    first = st.enqueue("radarr", "Film (2026)", str(v), "ru", None)
+    w.process(st.next_queued())
+    assert st.get(first.id).state == "done" and st.get(first.id).cost_usd > 0
+    out = v.with_name("Film (2026) WEBDL-2160p.captionizerr.ru.srt")
+    text = out.read_text(encoding="utf-8")
+    out.unlink()                                      # the re-import deletes it
+    again = st.enqueue("radarr", "Film (2026)", str(v), "ru", None)
+    w.process(st.next_queued())
+    j2 = st.get(again.id)
+    assert j2.state == "done", j2.detail
+    assert (j2.cost_usd or 0) == 0 and "reused" in j2.detail, j2.detail
+    assert out.read_text(encoding="utf-8") == text
+    assert reuse.kept(tmp_path / "config/kept", out)          # the copy stays for the next time

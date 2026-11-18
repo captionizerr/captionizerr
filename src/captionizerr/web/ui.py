@@ -784,6 +784,7 @@ def register(app: FastAPI) -> None:
             return {"saved": 0, "token": token}
         try:
             replace_own(target, editor.save_text(tdoc, rows), s.history_dir)
+            reuse.keep(s.data_dir / "kept", target)
         except WriteRefused as e:
             raise HTTPException(400, str(e))
         bible.log_corrections(s.feedback_dir, key or "", changed)
