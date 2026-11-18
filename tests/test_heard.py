@@ -112,3 +112,22 @@ def test_text_whisper_invents_over_silence_is_dropped():
     for phrase in ("Thanks for watching!", "Subtitles by the Amara.org community", "♪ ♪"):
         ws = [Spoken(1000 + i * 300, 1250 + i * 300, w) for i, w in enumerate(phrase.split())]
         assert words_to_cues(ws) == [], phrase
+
+
+def test_repeat_imports_of_a_translated_video_keep_one_skipped_row(tmp_path):
+    app = _app(tmp_path)
+    st, w = app.state.store, app.state.worker
+    from test_m4 import video_without_subs
+    lib = tmp_path / "lib/Film (2026)"
+    v = video_without_subs(lib, "Film (2026) WEBDL-2160p.mkv") if HAS_FFMPEG else None
+    if v is None:
+        pytest.skip("ffmpeg needed")
+    v.with_name("Film (2026) WEBDL-2160p.captionizerr.ru.srt").write_text("1\n00:00:01,000 --> 00:00:02,000\nПривет\n")
+    for _ in range(4):
+        st.enqueue("radarr", "Film (2026)", str(v), "ru", None)
+        w.process(st.next_queued())
+    rows = [j for j in st.list(50) if j.video_path == str(v)]
+    assert len(rows) == 1 and rows[0].state == "skipped" and "imported 4 times" in rows[0].detail
+    other = st.enqueue("radarr", "Other", str(v).replace("Film", "Other"), "ru", None)
+    st.finish(other.id, "skipped", st.EXISTS)
+    assert st.fold_all_repeat_skips() == 0

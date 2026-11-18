@@ -166,7 +166,8 @@ class Worker:
             store.finish(job.id, "failed", f"video not found: {video}")
             return None
         if not job.redo and (target_path(video, job.lang, "srt").exists() or target_path(video, job.lang, "ass").exists()):
-            store.finish(job.id, "skipped", "translation already exists")
+            store.finish(job.id, "skipped", store.EXISTS)
+            store.fold_repeat_skip(job.id)
             return None
         already = ""
         try:

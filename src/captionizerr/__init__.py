@@ -1,3 +1,3 @@
 """Captionizerr: LLM subtitle translation for the *arr stack."""
 
-__version__ = "0.3.6"
+__version__ = "0.3.7"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -99,6 +100,34 @@ class Store:
         """A crash or restart mid-job leaves it 'running': requeue it. Only the service calls this,
         at its own start; a CLI or script opening the same database must not touch a live job."""
         return self._q("UPDATE jobs SET state='queued', updated=? WHERE state='running'", (time.time(),)).rowcount
+
+    EXISTS = "translation already exists"
+
+    def fold_repeat_skip(self, job_id: int) -> int:
+        """An *arr re-importing a video we already translated (an upgrade loop, a manual re-import)
+        would add a 'skipped' row each time: keep only the newest, with a count. Returns the count."""
+        j = self.get(job_id)
+        if not j or j.state != "skipped" or not j.detail.startswith(self.EXISTS):
+            return 1
+        with self._lock:
+            old = self.db.execute("SELECT id, detail FROM jobs WHERE video_path=? AND lang=? AND state='skipped' "
+                                  "AND detail LIKE ? AND id<?", (j.video_path, j.lang, self.EXISTS + "%", j.id)).fetchall()
+            if not old:
+                return 1
+            n = 1 + sum(int(m.group(1)) if (m := re.search(r"imported (\d+) times", r["detail"])) else 1 for r in old)
+            self.db.execute(f"DELETE FROM jobs WHERE id IN ({','.join('?' * len(old))})", [r["id"] for r in old])
+            self.db.execute("UPDATE jobs SET detail=? WHERE id=?",
+                            (f"{self.EXISTS} (imported {n} times; the newest is kept)", j.id))
+        return n
+
+    def fold_all_repeat_skips(self) -> int:
+        """Startup: fold repeats recorded before this existed. Returns rows removed."""
+        last = self._q("SELECT MAX(id) AS id FROM jobs WHERE state='skipped' AND detail LIKE ? "
+                       "GROUP BY video_path, lang HAVING COUNT(*) > 1", (self.EXISTS + "%",)).fetchall()
+        before = self._q("SELECT COUNT(*) FROM jobs").fetchone()[0]
+        for r in last:
+            self.fold_repeat_skip(r["id"])
+        return before - self._q("SELECT COUNT(*) FROM jobs").fetchone()[0]
 
     def _q(self, sql, args=()):
         with self._lock:

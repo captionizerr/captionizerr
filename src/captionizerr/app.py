@@ -55,6 +55,7 @@ def create_app(settings: Settings | None = None, provider_factory=None, start_wo
     s.context_dir.mkdir(parents=True, exist_ok=True)
     store = Store(s.data_dir / "captionizerr.db")
     store.requeue_interrupted()
+    store.fold_all_repeat_skips()
     import copy
     env_defaults = copy.deepcopy(s)          # what the environment says, before UI overrides
     s.apply(store.load_settings())          # UI-saved settings override environment defaults
